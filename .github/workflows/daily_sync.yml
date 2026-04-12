@@ -1,0 +1,33 @@
+name: AI Morning Brief
+
+on:
+  schedule:
+    # 台灣時間 07:30 = UTC 23:30 (前一天)
+    - cron: '30 23 * * *'
+  workflow_dispatch: # 手動觸發用於測試
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Run AI Morning Brief
+        run: npm run start
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

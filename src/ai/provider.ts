@@ -1,0 +1,93 @@
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export type Bucket = 'HARD_TECH_AI' | 'IMPORTANT_AI_SIGNALS' | 'DROP';
+export type RenderLevel = 'FULL' | 'LIGHT' | 'OMIT';
+export type Recommendation = 'READ_NOW' | 'SKIM' | 'SKIP';
+export type Category =
+  | 'model-release'
+  | 'api-platform'
+  | 'infra-inference'
+  | 'tooling-open-source'
+  | 'benchmark-eval'
+  | 'agent-systems'
+  | 'policy-regulation'
+  | 'company-market'
+  | 'social-opinion'
+  | 'event-promo'
+  | 'research-adjacent';
+
+// ── Raw RSS article ────────────────────────────────────────────────────────────
+
+export interface ArticleSummary {
+  title: string;
+  link: string;
+  pubDate: string;
+  contentSnippet: string;
+  source: string;
+  sourceTier: 'broad' | 'technical';
+  score: number;
+}
+
+// ── Classifier output ─────────────────────────────────────────────────────────
+
+export interface ArticleClassification {
+  category: Category;
+  bucket: Bucket;
+  renderLevel: RenderLevel;
+  recommendation: Recommendation;
+  score: number;
+  summary: string;
+  engineeringImpact: string;
+  reason: string;
+}
+
+export interface ClassifiedArticle extends ArticleSummary {
+  classification: ArticleClassification;
+}
+
+// ── Brief generator output ────────────────────────────────────────────────────
+
+export interface BriefItem {
+  index: number;
+  renderLevel: RenderLevel;
+  title: string;
+  summary: string;
+  engineeringImpact: string;   // used in FULL
+  recommendation: Recommendation;
+  reason: string;              // used in FULL
+  shortJudgment: string | null; // used in LIGHT
+  categoryTag: string;
+  url: string;
+}
+
+export interface BriefSection {
+  name: string;
+  items: BriefItem[];
+}
+
+export interface BriefResult {
+  title: string;
+  sections: BriefSection[];
+  skippedToday: string[];
+  actionLinks: Array<{ label: string; url: string }>;
+}
+
+// ── Provider interface ────────────────────────────────────────────────────────
+
+export interface AIProvider {
+  name: string; // "GPT" or "Claude"
+  call(systemPrompt: string, userPrompt: string): Promise<string>;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+export function extractJson(raw: string): string {
+  let s = raw.trim();
+  const fence = s.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (fence?.[1]) s = fence[1].trim();
+  if (!s.startsWith('{') && !s.startsWith('[')) {
+    const obj = s.match(/[{[][^]*[}\]]/);
+    if (obj) s = obj[0];
+  }
+  return s;
+}
