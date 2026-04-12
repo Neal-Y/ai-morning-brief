@@ -228,15 +228,44 @@ const FALLBACK_CLASSIFICATION: ArticleClassification = {
   score: 40,
 };
 
+/** Run at most `limit` concurrent promises at a time. */
+async function withConcurrency<T>(
+  items: ArticleSummary[],
+  limit: number,
+  fn: (item: ArticleSummary) => Promise<T>
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = new Array(items.length);
+  let next = 0;
+
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = { status: 'fulfilled', value: await fn(items[i]!) };
+      } catch (reason) {
+        results[i] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+// Anthropic free tier allows ~5 concurrent connections; OpenAI is more generous.
+// Keep at 5 to stay safe across both providers.
+const CLASSIFIER_CONCURRENCY = 5;
+
 export async function classifyArticles(
   provider: AIProvider,
   articles: ArticleSummary[]
 ): Promise<ArticleClassification[]> {
   if (articles.length === 0) return [];
 
-  // Run per-article in parallel; failures fall back gracefully
-  const results = await Promise.allSettled(
-    articles.map((a) => classifyOne(provider, a))
+  const results = await withConcurrency(
+    articles,
+    CLASSIFIER_CONCURRENCY,
+    (a) => classifyOne(provider, a)
   );
 
   return results.map((r, i) => {
