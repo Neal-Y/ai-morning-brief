@@ -1,4 +1,4 @@
-import { loadConfig, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
+import { loadConfig, CLASSIFIER_CAP, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
 import { getTodaysArticles } from './rss/feed.js';
 import { OpenAIProvider } from './ai/openai.js';
 import { AnthropicProvider } from './ai/anthropic.js';
@@ -115,9 +115,15 @@ async function main(): Promise<void> {
   console.log(`[main] Provider: ${provider.name}`);
 
   // ── Stage 2: Per-article LLM classifier (parallel) ───────────────────────
-  const classifications = await classifyArticles(provider, prefiltered);
+  // Sort by keyword score desc and cap before sending to LLM — saves ~50% classifier tokens.
+  const toClassify = [...prefiltered]
+    .sort((a, b) => b.score - a.score)
+    .slice(0, CLASSIFIER_CAP);
+  console.log(`[main] Sending top ${toClassify.length}/${prefiltered.length} articles to classifier`);
 
-  const classified: ClassifiedArticle[] = prefiltered
+  const classifications = await classifyArticles(provider, toClassify);
+
+  const classified: ClassifiedArticle[] = toClassify
     .map((article, i) => ({
       ...article,
       classification: classifications[i] ?? {
@@ -134,7 +140,7 @@ async function main(): Promise<void> {
     .filter((a) => a.classification.bucket !== 'DROP');
 
   const bucketSummary = `${classified.filter((a) => a.classification.bucket === 'HARD_TECH_AI').length} HARD_TECH + ${classified.filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS').length} SIGNALS`;
-  console.log(`[classifier] Kept ${classified.length}/${prefiltered.length} articles — ${bucketSummary}`);
+  console.log(`[classifier] Kept ${classified.length}/${toClassify.length} articles — ${bucketSummary}`);
 
   if (classified.length === 0) {
     console.log('[main] All articles dropped by classifier');

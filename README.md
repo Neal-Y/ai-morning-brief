@@ -40,12 +40,27 @@ npm run dev
 
 手動測試：Actions → AI Morning Brief → Run workflow
 
+## Cost
+
+每天執行一次，估計年費：
+
+| Model | Input /M | Output /M | Cache Read /M |
+| ----- | -------- | --------- | ------------- |
+| gpt-4o | $2.50 | $10.00 | $1.25（自動，50% off）|
+| claude-sonnet-4-6 | $3.00 | $15.00 | $0.30（opt-in，90% off）|
+
+兩個 provider 均啟用 prompt caching（OpenAI 自動、Anthropic 透過 `cache_control`），classifier system prompt 重複發送的成本大幅降低。
+
+**估計 ~$20–25/年**（`alternate` 模式，每天送 top 12 篇文章給 classifier）。
+
+調整 `config.ts` 的 `CLASSIFIER_CAP`（預設 12）可進一步控制成本。
+
 ## Architecture
 
 ```
 RSS Sources (7 feeds)
   └─ 24h filter + keyword scoring
-       └─ LLM Classifier (per-article, parallel)
+       └─ top 12 by score → LLM Classifier (parallel, cap 3 concurrent)
             └─ Bucket: HARD_TECH_AI / IMPORTANT_AI_SIGNALS / DROP
                  └─ Rank + select (cap 3)
                       └─ LLM Brief Generator

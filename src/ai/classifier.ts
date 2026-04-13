@@ -141,22 +141,11 @@ ${article.title}
 SOURCE:
 ${article.source}
 
-PUBLISHED_AT:
-${article.pubDate}
-
 URL:
 ${article.link}
 
 CONTENT:
-${article.contentSnippet.slice(0, 600)}
-
-Forbidden style — do not produce:
-- 值得關注
-- 有潛在影響
-- 對業界有啟發
-- 有助於了解趨勢
-- 對未來發展有幫助
-Unless followed by a specific engineering consequence.`;
+${article.contentSnippet.slice(0, 500)}`;
 }
 
 const VALID_CATEGORIES = new Set<string>([
@@ -252,9 +241,9 @@ async function withConcurrency<T>(
   return results;
 }
 
-// Anthropic free tier allows ~5 concurrent connections; OpenAI is more generous.
-// Keep at 5 to stay safe across both providers.
-const CLASSIFIER_CONCURRENCY = 5;
+// Both OpenAI and Anthropic free-tier TPM limit is ~30k tokens/min.
+// Concurrency 5 hits the limit consistently — 3 stays safely under.
+const CLASSIFIER_CONCURRENCY = 3;
 
 export async function classifyArticles(
   provider: AIProvider,

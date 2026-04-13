@@ -31,28 +31,17 @@ export function formatBriefText(brief: BriefResult, providerName: string): strin
     for (const item of visibleItems) {
       const numIcon = NUM_EMOJIS[item.index - 1] ?? `${item.index}.`;
 
-      if (item.renderLevel === 'LIGHT') {
-        // Compact two-line format: title, then tag + judgment
-        const judgment = item.shortJudgment ?? '工程直接價值低';
-        parts.push(
-          [
-            `${numIcon} ${item.title}`,
-            `${item.categoryTag}  ${judgment}`,
-          ].join('\n')
-        );
-      } else {
-        // FULL format: title, summary, impact, recommendation+reason, tag
-        const recIcon = RECOMMENDATION_ICON[item.recommendation] ?? item.recommendation;
-        parts.push(
-          [
-            `${numIcon} ${item.title}`,
-            `📌 ${item.summary}`,
-            `🔍 ${item.engineeringImpact}`,
-            `${recIcon} — ${item.reason}`,
-            `${item.categoryTag}`,
-          ].join('\n')
-        );
-      }
+      // Both FULL and LIGHT render all four content fields.
+      // LIGHT additionally shows shortJudgment as a priority badge.
+      // Structure: title → blank → content fields → blank → tag
+      const lines = [`${numIcon} ${item.title}`, ''];
+      if (item.summary)           lines.push(`📌 ${item.summary}`, '');
+      if (item.context)           lines.push(`🧩 ${item.context}`, '');
+      if (item.engineeringImpact) lines.push(`🔎 ${item.engineeringImpact}`, '');
+      if (item.reason)            lines.push(`✅ ${item.reason}`);
+      if (item.shortJudgment)     lines.push(`💡 ${item.shortJudgment}`);
+      lines.push('', item.categoryTag);
+      parts.push(lines.join('\n'));
     }
   }
 

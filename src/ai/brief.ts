@@ -5,6 +5,8 @@ import { RETRY_DELAY_MS } from '../config.js';
 
 const BRIEF_SYSTEM = `You are generating the final mobile-friendly AI morning brief for engineers.
 
+CRITICAL: Write ALL content field values (summary, context, engineeringImpact, reason, shortJudgment) in Traditional Chinese (繁體中文). The JSON keys remain in English. Only the field values must be in Traditional Chinese.
+
 Your audience:
 - backend engineers
 - infra/platform engineers
@@ -41,29 +43,33 @@ The final brief has two sections:
 
 ## Display rules
 
-Each article has a renderLevel from the classifier. Use it as a starting point, but apply these overrides:
+Display ALL articles that are passed to you. Do not drop, merge, or skip any article unless its renderLevel is OMIT.
+If two articles are both excellent, both appear. If only one article is passed, only one appears. Do not invent a minimum or maximum count.
 
-- renderLevel FULL: Display in full (title, summary, engineeringImpact, recommendation+reason). Set shortJudgment to null.
-- renderLevel LIGHT: Display in compact single-line format only. Set shortJudgment to a ≤15 Chinese character judgment. Leave engineeringImpact and reason as empty strings "".
-- renderLevel OMIT: Do NOT include in sections. Put a brief one-line note in skippedToday at most.
+Each article has a renderLevel from the classifier:
 
-Additional overrides:
-- A SKIM article whose engineeringImpact contains "工程直接價值低" must be LIGHT or OMIT, never FULL.
-- social-opinion articles must be OMIT regardless of renderLevel.
-- company-market articles may be FULL only if there is a concrete engineering consequence (API/platform/supply-chain impact). Otherwise LIGHT or OMIT.
-- If there are no HARD_TECH_AI articles, set "Hard Tech AI" items to [].
-- Never pad the brief with weak articles just to reach a count target.
-- Prefer an honest short brief over a bloated low-value brief.
-- If there are no strong articles in either section, output a brief with empty sections and set skippedToday to ["今日無重大 AI 工程更新"].
+- renderLevel FULL: Fill all four content fields (summary, context, engineeringImpact, reason). Set shortJudgment to null.
+- renderLevel LIGHT: Fill all four content fields exactly like FULL. Additionally fill shortJudgment (≤20 Chinese characters, signal-type format). shortJudgment is a priority label — it does NOT replace the content fields.
+- renderLevel OMIT: Do NOT include in sections. Put a one-line note in skippedToday at most.
 
-## Writing rules
+renderLevel overrides:
+- social-opinion articles → OMIT regardless of classifier renderLevel.
+- company-market articles → FULL only if there is a concrete API/platform/supply-chain engineering consequence; otherwise LIGHT.
+- If there are no HARD_TECH_AI articles to display, set "Hard Tech AI" items to [].
+- If all articles end up OMIT, output empty sections and set skippedToday to ["今日無重大 AI 工程更新"].
 
-- Output in Traditional Chinese
-- Be concise
-- No fluff, no vague wording, no empty praise
-- No "值得關注" unless you explain exactly why
-- No "有潛在影響" unless you say what layer is affected
-- If engineering value is low, say so directly
+## Content field writing rules (applies to FULL and LIGHT equally)
+
+Every non-OMIT article must have all four content fields filled. Do not leave them empty.
+
+- **summary**：One concrete sentence stating what happened — the announcement, release, change, or event itself. No background, no interpretation.
+- **context**：One to five sentences of background. What existed before, what changed, what the broader shift is. Make it informative, not padding.
+- **engineeringImpact**：One concrete sentence on what engineers need to do differently, or what specifically changes in systems, APIs, latency, cost, or tooling. If engineering impact is genuinely low, say so directly.
+- **reason**：One sentence. Why read now vs. later. What specific decision this informs. Be direct.
+
+Write at a depth suitable for a senior engineer who has 30 seconds. Each field adds information the previous one did not. Do not collapse fields together.
+
+Forbidden in any field: 值得關注、有潛在影響、對業界有啟發、有助於了解趨勢、對未來發展有幫助 — unless followed by a specific engineering consequence.
 
 ## LIGHT item shortJudgment style guide
 
@@ -143,11 +149,12 @@ Return JSON only (no markdown fence):
           "index": 1,
           "renderLevel": "FULL",
           "title": "article title",
-          "summary": "一句摘要",
-          "categoryTag": "#infra-inference",
-          "engineeringImpact": "一句具體工程影響",
+          "summary": "一句具體描述事件本身，不含背景或詮釋",
+          "context": "一到五句背景說明，說明變化脈絡或前因",
+          "categoryTag": "#infra",
+          "engineeringImpact": "一句具體工程影響，說明哪一層受影響、如何受影響",
           "recommendation": "READ_NOW",
-          "reason": "一句原因",
+          "reason": "一句建議，說明為何現在值得讀或採取行動",
           "shortJudgment": null,
           "url": "https://..."
         },
@@ -155,12 +162,13 @@ Return JSON only (no markdown fence):
           "index": 2,
           "renderLevel": "LIGHT",
           "title": "article title",
-          "summary": "一句摘要",
+          "summary": "一句具體描述事件本身",
+          "context": "一到五句背景說明",
           "categoryTag": "#tooling",
-          "engineeringImpact": "",
+          "engineeringImpact": "一句具體工程影響，或明確說工程直接價值低",
           "recommendation": "SKIM",
-          "reason": "",
-          "shortJudgment": "新工具，低優先",
+          "reason": "一句建議",
+          "shortJudgment": "生態訊號：具體事實一句",
           "url": "https://..."
         }
       ]
@@ -172,12 +180,13 @@ Return JSON only (no markdown fence):
           "index": 3,
           "renderLevel": "LIGHT",
           "title": "article title",
-          "summary": "一句摘要",
+          "summary": "一句具體描述事件本身",
+          "context": "一到五句背景說明",
           "categoryTag": "#policy",
-          "engineeringImpact": "",
+          "engineeringImpact": "一句具體工程影響，或明確說工程直接價值低",
           "recommendation": "SKIM",
-          "reason": "",
-          "shortJudgment": "政策轉向，持續追蹤",
+          "reason": "一句建議",
+          "shortJudgment": "監管訊號：具體事實一句",
           "url": "https://..."
         }
       ]
@@ -202,10 +211,16 @@ function buildBriefUserPrompt(articles: ClassifiedArticle[], date: string): stri
     title: a.title,
     url: a.link,
     source: a.source,
-    sourceTier: a.sourceTier,
-    publishedAt: a.pubDate,
     contentSnippet: a.contentSnippet.slice(0, 400),
-    classification: a.classification,
+    classification: {
+      category: a.classification.category,
+      bucket: a.classification.bucket,
+      renderLevel: a.classification.renderLevel,
+      recommendation: a.classification.recommendation,
+      summary: a.classification.summary,
+      engineeringImpact: a.classification.engineeringImpact,
+      reason: a.classification.reason,
+    },
   }));
   return (
     `Date: ${date}\n\n` +
@@ -243,6 +258,7 @@ function parseBriefResult(raw: string): BriefResult {
             renderLevel: (VALID_RENDER_LEVELS.has(rl) ? rl : 'FULL') as RenderLevel,
             title: String(it['title'] ?? ''),
             summary: String(it['summary'] ?? ''),
+            context: String(it['context'] ?? ''),
             categoryTag: String(it['categoryTag'] ?? '#company-market'),
             engineeringImpact: String(it['engineeringImpact'] ?? ''),
             recommendation: (VALID_RECOMMENDATIONS.has(rec) ? rec : 'SKIM') as Recommendation,
@@ -299,6 +315,7 @@ export function buildDegradedBrief(articles: ClassifiedArticle[], date: string):
     renderLevel: a.classification.renderLevel,
     title: a.title,
     summary: a.classification.summary || a.contentSnippet.slice(0, 50),
+    context: '',
     categoryTag: `#${a.classification.category}`,
     engineeringImpact: a.classification.engineeringImpact,
     recommendation: a.classification.recommendation,

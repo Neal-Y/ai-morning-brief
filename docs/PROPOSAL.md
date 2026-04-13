@@ -1,151 +1,270 @@
 # AI Morning Brief — Full Specification
 
+> **Status: reflects current implementation as of 2026-04-13.**
+> This document supersedes the original MVP proposal. Code is the ground truth; update this file when the implementation diverges.
+
 ## 1. 專案願景
 
-建構一個每日自動執行的技術情報系統。固定從權威科技媒體 (RSS) 抓取 AI 相關新聞，篩選過去 24 小時內最值得看的 2-3 篇，交給 LLM 以「資深後端架構師」視角做分析，最後透過 ntfy 推播到手機。
+建構一個每日自動執行的技術情報系統。固定從權威科技媒體 (RSS) 抓取 AI 相關新聞，篩選過去 24 小時內最值得看的文章，交給 LLM 以資深工程師視角做分類與分析，最後透過 ntfy 推播到手機。
+
+核心受眾：
+- 後端工程師
+- Infra / Platform 工程師
+- 分散式系統工程師
+- AI 應用開發者
 
 核心價值不是轉貼新聞，而是回答：
-
 - 這則新聞對後端系統設計有沒有影響
-- 對分散式架構、併發模型、資料庫設計有沒有啟發
-- 對 Golang 生態、infra 選型、服務拆分有沒有實際意義
+- 對分散式架構、inference 堆疊、API 整合有沒有實際意義
 - 值不值得今天花時間深入讀原文
 
 ---
 
 ## 2. 技術堆疊
 
-| Layer        | Choice                          | Reason                         |
-| ------------ | ------------------------------- | ------------------------------ |
-| Language     | TypeScript (strict)             | 型別安全 + GitHub Actions 原生 |
-| Runtime      | Node.js 20+                     | LTS + Actions 預裝             |
-| RSS Parser   | `rss-parser`                    | 穩定、零依賴                   |
-| Notification | ntfy (HTTP POST)                | 零成本、Markdown、Actions      |
-| AI Engine    | Provider Pattern (見 §4)       | 免費額度切換                   |
-| CI/CD        | GitHub Actions cron             | 免費、免 infra                 |
+| Layer        | Choice                          | Reason                                    |
+| ------------ | ------------------------------- | ----------------------------------------- |
+| Language     | TypeScript (strict)             | 型別安全 + GitHub Actions 原生             |
+| Runtime      | Node.js 20+                     | LTS + Actions 預裝                        |
+| RSS Parser   | `rss-parser`                    | 穩定、加 User-Agent 解決部分 406 問題      |
+| Notification | ntfy (HTTP POST)                | 零成本、action buttons、自託管友善         |
+| AI Engine    | OpenAI (GPT) / Anthropic (Claude) | 每日輪替，互為備援                       |
+| CI/CD        | GitHub Actions cron             | 免費、免 infra                            |
 
 ---
 
-## 3. Execution Flow
+## 3. Execution Flow (五階段)
 
 ```
-┌─────────────┐     ┌──────────┐     ┌─────────────┐     ┌──────────┐
-│  RSS Ingest │ ──▶ │  Filter  │ ──▶ │ LLM Analyze │ ──▶ │   ntfy   │
-│ (3 sources) │     │ (24h+rank)│     │ (architect) │     │  (push)  │
-└─────────────┘     └──────────┘     └─────────────┘     └──────────┘
+┌──────────────┐   ┌─────────────────┐   ┌────────────────────┐   ┌────────────────┐   ┌────────┐
+│  1. RSS Fetch │──▶│  2. Classifier  │──▶│  3. Rank + Select  │──▶│  4. Brief Gen  │──▶│ 5.ntfy │
+│  + Prefilter  │   │  (per-article,  │   │  HARD_TECH_MAX=2   │   │  (single call) │   │  push  │
+│  (7 sources)  │   │  parallel ≤5)   │   │  SIGNALS_MAX=1     │   │                │   │        │
+└──────────────┘   └─────────────────┘   │  BRIEF_MAX=3       │   └────────────────┘   └────────┘
+                                          └────────────────────┘
 ```
 
-### 3.1 Ingestion
+---
 
-RSS 來源（固定三個，未來可擴充）：
+## 4. RSS Sources (7 feeds)
 
-1. **TechCrunch AI** — `https://techcrunch.com/category/artificial-intelligence/feed/`
-2. **The Verge AI** — `https://www.theverge.com/rss/ai-artificial-intelligence/index.xml`
-3. **MIT Technology Review** — `https://www.technologyreview.com/feed/`
+### Broad Sources — 業界信號、主流 AI 新聞
 
-要求：
-- 每個來源獨立 try/catch，一個掛掉不影響其他。
-- 解析出 title、link、pubDate、contentSnippet。
+| Source            | URL                                                          |
+| ----------------- | ------------------------------------------------------------ |
+| TechCrunch AI     | `https://techcrunch.com/category/artificial-intelligence/feed/` |
+| The Verge AI      | `https://www.theverge.com/rss/ai-artificial-intelligence/index.xml` |
+| MIT Technology Review | `https://www.technologyreview.com/feed/`                |
 
-### 3.2 Filter
+### Technical Sources — 工程級 AI / Infra 資訊
 
-1. 過濾條件：`pubDate` 在過去 24 小時內。
-2. 排序邏輯：簡單 keyword scoring（權重：AI, LLM, GPU, infrastructure, database, distributed, cloud > 一般關鍵字）。
-3. 取 top 2-3 篇。
-4. 若 24h 內無文章，推播「今日無重大 AI 新聞」並正常結束。
+| Source            | URL                                                          | Why                                      |
+| ----------------- | ------------------------------------------------------------ | ---------------------------------------- |
+| Hugging Face Blog | `https://huggingface.co/blog/feed.xml`                       | 高品質 AI 工程文章，模型/API/tooling    |
+| The New Stack     | `https://thenewstack.io/feed/`                               | Infra/cloud/K8s/distributed systems     |
+| Hacker News       | `https://hnrss.org/frontpage?points=100`                     | 社群精選，高門檻 (100+ points)          |
+| Simon Willison    | `https://simonwillison.net/atom/everything/`                 | AI 分析與 tooling，高信噪比             |
 
-### 3.3 LLM Analysis
+**要求：**
+- 每個來源獨立 try/catch，一個掛掉不影響其他
+- rss-parser 加 browser-like User-Agent（解決部分來源 datacenter IP 封鎖）
+- 解析出 title、link、pubDate、contentSnippet、source、sourceTier
 
-#### Provider Interface
+---
+
+## 5. Stage 1 — Fetch + Prefilter
+
+1. 過濾條件：`pubDate` 在過去 24 小時內
+2. Keyword scoring：正向關鍵字 (llm/gpu/inference/distributed/…) 加分，負向關鍵字 (event/conference/survey/funding/…) 扣分
+3. `PREFILTER_MIN_SCORE = -2`：低於此分數直接丟棄，不送 LLM
+4. 若 24h 內無文章，推播「今日無重大 AI 新聞」並正常結束
+
+---
+
+## 6. Stage 2 — LLM Classifier (per-article)
+
+### 並發控制
+
+- 每篇文章獨立呼叫 LLM（parallel）
+- 並發上限 `CLASSIFIER_CONCURRENCY = 5`，避免 Anthropic free tier 429
+- 單篇失敗 → fallback 分類（LIGHT/SKIM，不中斷整體流程）
+
+### 分類維度
+
+每篇文章輸出：
 
 ```typescript
-interface AIProvider {
-  name: string;
-  generateInsight(articles: ArticleSummary[]): Promise<AnalysisResult>;
+interface ArticleClassification {
+  category: Category;         // 11 個類別（見下表）
+  bucket: Bucket;             // HARD_TECH_AI | IMPORTANT_AI_SIGNALS | DROP
+  renderLevel: RenderLevel;   // FULL | LIGHT | OMIT
+  recommendation: Recommendation; // READ_NOW | SKIM | SKIP
+  score: number;              // 0-100
+  summary: string;            // ≤25 Chinese chars
+  engineeringImpact: string;  // 一句具體工程影響
+  reason: string;             // 一句分類理由
 }
+```
 
-interface ArticleSummary {
+### Category 分類表
+
+| Category            | 說明                                                        |
+| ------------------- | ----------------------------------------------------------- |
+| `model-release`     | 新模型、能力升級、benchmark、reasoning/tool/multimodal 變化  |
+| `api-platform`      | API/SDK 異動、structured output、pricing/rate limit         |
+| `infra-inference`   | Inference stack、serving、GPU infra、latency/throughput     |
+| `tooling-open-source` | 開源 AI tooling、agent framework、eval 工具、observability  |
+| `benchmark-eval`    | Eval 方法論、benchmark 本身、比較框架                       |
+| `agent-systems`     | 自主 agent 架構、multi-agent、tool-use、planning/memory     |
+| `policy-regulation` | 法規、chip export control、geopolitics 影響 AI 供應鏈       |
+| `company-market`    | 融資、收購、組織變動、策略轉向                               |
+| `social-opinion`    | 調查、公眾情緒、媒體評論、文化反應                           |
+| `event-promo`       | 研討會、startup event、promo 文章                           |
+| `research-adjacent` | 學術/硬體/材料研究，非直接 AI 系統工程                       |
+
+### Bucket 規則
+
+- **HARD_TECH_AI**：直接與 AI 系統、API、inference、eval、部署、tooling 工程相關
+- **IMPORTANT_AI_SIGNALS**：重要的業界/政策/公司信號，不是直接的工程更新
+- **DROP**：低價值雜訊、event/promo、弱社會評論、模糊市場資訊
+
+### RenderLevel 規則
+
+| Bucket + Recommendation           | RenderLevel |
+| --------------------------------- | ----------- |
+| HARD_TECH_AI + READ_NOW           | FULL        |
+| HARD_TECH_AI + SKIM (有具體工程影響) | FULL     |
+| HARD_TECH_AI + SKIM (無具體影響)   | LIGHT       |
+| IMPORTANT_AI_SIGNALS + SKIM       | LIGHT       |
+| IMPORTANT_AI_SIGNALS + SKIP       | OMIT        |
+| DROP                              | OMIT        |
+
+---
+
+## 7. Stage 3 — Rank + Select
+
+```
+hardTech = HARD_TECH_AI articles, sorted by score desc, take ≤ HARD_TECH_MAX (2)
+signals  = IMPORTANT_AI_SIGNALS articles, sorted by score desc, take ≤ max(SIGNALS_MAX, BRIEF_MAX - len(hardTech))
+selected = (hardTech + signals)[:BRIEF_MAX]   // hard cap = 3
+```
+
+Constants in `config.ts`:
+- `HARD_TECH_MAX = 2`
+- `SIGNALS_MAX = 1`
+- `BRIEF_MAX = 3`
+
+---
+
+## 8. Stage 4 — Brief Generator LLM
+
+Single LLM call for all selected articles.
+
+### Output Types
+
+```typescript
+interface BriefItem {
+  index: number;
+  renderLevel: RenderLevel;
   title: string;
-  link: string;
-  snippet: string;
-  source: string;
+  summary: string;             // 一句具體描述事件本身
+  context: string;             // 一到五句背景說明
+  categoryTag: string;         // e.g. "#infra", "#model-release"
+  engineeringImpact: string;   // 一句具體工程影響
+  recommendation: Recommendation;
+  reason: string;              // 一句為何現在值得讀
+  shortJudgment: string | null; // LIGHT only — priority badge ≤20 chars
+  url: string;
 }
 
-interface AnalysisResult {
-  briefings: ArticleBriefing[];
-}
-
-interface ArticleBriefing {
+interface BriefResult {
   title: string;
-  link: string;
-  summary: string;        // ≤30 字極簡摘要
-  insight: string;         // 技術洞察（分散式/Go/infra 角度）
-  worthReading: boolean;   // 值不值得花時間讀原文
-  relevanceTag: string;    // e.g. "分散式架構", "LLM Infra", "Golang"
+  sections: BriefSection[];   // ["Hard Tech AI", "Important AI Signals"]
+  skippedToday: string[];
+  actionLinks: Array<{ label: string; url: string }>;
 }
 ```
 
-#### System Prompt（所有 Provider 共用）
+### Rendering Rules
 
-```
-你是一位有 10 年經驗的後端架構師，專精分散式系統、Golang、資料庫設計。
-你的任務是幫另一位後端工程師做每日技術情報摘要。
+- **FULL**：4 content fields filled (summary / context / engineeringImpact / reason). `shortJudgment = null`
+- **LIGHT**：Same 4 content fields filled (not empty). Additionally `shortJudgment` (≤20 Chinese chars, `[訊號類型]：[具體事實]` format) as additive priority badge
+- **OMIT**：Not in sections. One-line note in `skippedToday` at most
 
-對於每篇文章，請提供：
-1. 極簡摘要（30字以內，用繁體中文）
-2. 技術洞察（這對後端/分散式/Go生態有什麼影響？具體一點。若無直接關聯，說明為何工程師仍該關注）
-3. 是否值得花時間讀原文（true/false + 一句話理由）
-4. 關聯標籤（分散式架構 / LLM Infra / Golang / 資料庫 / DevOps / 通用）
+LIGHT items fill all content fields — `shortJudgment` is an additive label, not a replacement.
 
-輸出格式：JSON，符合 AnalysisResult schema。不要輸出 markdown code fence。
-```
+### Category Tag 對照表
 
-#### Provider 優先級
+| Category            | Display Tag       |
+| ------------------- | ----------------- |
+| model-release       | `#model-release`  |
+| api-platform        | `#api-platform`   |
+| infra-inference     | `#infra`          |
+| tooling-open-source | `#tooling`        |
+| benchmark-eval      | `#eval`           |
+| agent-systems       | `#agent`          |
+| policy-regulation   | `#policy`         |
+| company-market      | `#market`         |
+| social-opinion      | `#opinion`        |
+| research-adjacent   | `#research`       |
 
-1. **Gemini** (`gemini-2.0-flash`) — 預設，免費層級足夠日用量。
-2. **OpenAI** (`gpt-4o-mini`) — 備選。
-3. **Anthropic** (`claude-sonnet-4-20250514`) — 備選。
+### Fallback
 
-透過 `AI_PROVIDER` env var 切換。
+若 Brief Generator 失敗，`buildDegradedBrief()` 直接從 classifier 輸出組裝 BriefResult，不再呼叫 LLM。
 
-### 3.4 Delivery (ntfy)
+---
+
+## 9. Stage 5 — ntfy Delivery
 
 HTTP POST to `https://ntfy.sh/{NTFY_TOPIC}`
 
-Headers:
+**Headers:**
 ```
-Title: 🤖 AI 晨報 — {date}
-Tags: robot,brain
-Markdown: yes
-Click: {first_article_link}
-```
-
-Body 格式（Markdown）：
-
-```markdown
-## 📰 AI 晨報 {YYYY-MM-DD}
-
----
-
-### 1. {article_title}
-📌 {summary}
-🔍 **洞察**: {insight}
-📖 值得讀: {worthReading ? "✅ 值得" : "⏭️ 跳過"} — {reason}
-🏷️ #{relevanceTag}
-🔗 [原文]({link})
-
----
-
-### 2. ...
-
----
-
-> 🛠️ Powered by AI Morning Brief | Provider: {provider_name}
+Title: AI Morning Brief YYYY-MM-DD
+Tags: newspaper,robot
+Content-Type: text/plain; charset=utf-8
+Click: {article_1_url}           (optional, first displayed item)
+Actions: view, 原文 1, {url1}; view, 原文 2, {url2}; ...  (max 3 buttons, ASCII labels)
 ```
 
+**Body 格式（plain text，emoji 由 renderer 添加）:**
+```
+─────────────────
+🔧 Hard Tech AI
+─────────────────
+
+1️⃣ Article Title
+📌 Summary sentence
+🧩 Context (1-5 sentences)
+🔎 Engineering impact
+✅ Reason to read now
+💡 shortJudgment (LIGHT only)
+#categoryTag
+
+─────────────────
+📡 Important AI Signals
+─────────────────
+
+...
+
+─────────────────
+⏭️ 今日略過
+
+• skipped item
+
+─────────────────
+🛠️ Provider: GPT
+```
+
+**規則：**
+- Title 由 ntfy `Title` header 送出，body **不重複**
+- 文章連結由 action buttons 處理，body **不含裸 URL**
+- ntfy 最多 3 個 action buttons；label 必須為 ASCII
+- Emoji 由 `formatBriefText()` renderer 添加，LLM 輸出純文字欄位
+
 ---
 
-## 4. 程式碼結構
+## 10. 程式碼結構
 
 ```
 ai-morning-brief/
@@ -154,27 +273,52 @@ ai-morning-brief/
 ├── package.json
 ├── tsconfig.json
 ├── docs/
-│   └── PROPOSAL.md          ← this file
+│   └── PROPOSAL.md              ← this file (current implementation spec)
 ├── src/
-│   ├── index.ts              # main orchestrator
-│   ├── config.ts             # env loading, RSS sources, constants
+│   ├── index.ts                 # main orchestrator (5-stage pipeline)
+│   ├── config.ts                # env loading, RSS sources, keyword weights, constants
 │   ├── rss/
-│   │   └── feed.ts           # fetch + parse + 24h filter
+│   │   └── feed.ts              # fetch + parse + 24h filter + keyword score
 │   ├── ai/
-│   │   ├── provider.ts       # AIProvider interface + types
-│   │   ├── gemini.ts         # Gemini implementation
-│   │   ├── openai.ts         # OpenAI implementation
-│   │   └── anthropic.ts      # Anthropic implementation
+│   │   ├── provider.ts          # AIProvider interface + all shared types
+│   │   ├── classifier.ts        # per-article LLM classifier, withConcurrency semaphore
+│   │   ├── brief.ts             # brief generator LLM + degraded fallback
+│   │   ├── retry.ts             # withRetry helper
+│   │   ├── openai.ts            # OpenAI (GPT) implementation
+│   │   └── anthropic.ts         # Anthropic (Claude) implementation
 │   └── notify/
-│       └── ntfy.ts           # format message + POST
+│       └── ntfy.ts              # formatBriefText + ntfy HTTP push
 └── .github/
     └── workflows/
-        └── daily_sync.yml    # cron: 台灣 07:30 = UTC 23:30 前一天
+        └── daily_sync.yml       # cron: 台灣 07:30 = UTC 23:30
 ```
 
 ---
 
-## 5. GitHub Actions Workflow
+## 11. Provider & Alternation
+
+### Provider interface
+
+```typescript
+interface AIProvider {
+  name: string;   // "GPT" | "Claude"
+  call(systemPrompt: string, userPrompt: string): Promise<string>;
+}
+```
+
+### Supported providers
+
+| AI_PROVIDER   | Behavior                                                  |
+| ------------- | --------------------------------------------------------- |
+| `openai`      | 固定使用 GPT (`gpt-4o-mini`)                              |
+| `anthropic`   | 固定使用 Claude (`claude-sonnet-4-6`)                     |
+| `alternate`   | 每日輪替：台北時區年內天數，偶數 → GPT，奇數 → Claude     |
+
+`alternate` 模式兩個 API key 都必須設定。
+
+---
+
+## 12. GitHub Actions Workflow
 
 ```yaml
 name: AI Morning Brief
@@ -183,7 +327,7 @@ on:
   schedule:
     # 台灣時間 07:30 = UTC 23:30 (前一天)
     - cron: '30 23 * * *'
-  workflow_dispatch: # 手動觸發用於測試
+  workflow_dispatch:
 
 jobs:
   brief:
@@ -200,29 +344,31 @@ jobs:
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
 ---
 
-## 6. Error Handling 規範
+## 13. Error Handling 規範
 
-| Scenario                  | Behavior                                     |
-| ------------------------- | -------------------------------------------- |
-| 單一 RSS 來源 timeout     | log warning, 繼續處理其他來源               |
-| 全部 RSS 來源失敗         | 推播錯誤通知到 ntfy，exit 0（不讓 Actions 紅）|
-| AI API rate limit / error | retry 1 次 (delay 5s)，仍失敗則推播原始摘要 |
-| ntfy 推播失敗             | log error, exit 1（這是最終輸出，需要被注意）|
-| 24h 內無文章              | 推播「今日無重大 AI 新聞」，exit 0          |
+| Scenario                        | Behavior                                                         |
+| ------------------------------- | ---------------------------------------------------------------- |
+| 單一 RSS 來源 timeout / 406      | log warning，繼續處理其他來源                                    |
+| 全部 RSS 來源失敗                | 推播錯誤通知到 ntfy，exit 0                                      |
+| 24h 內無文章 (prefilter 後)      | 推播「今日無重大 AI 新聞」，exit 0                               |
+| 全部文章被 classifier DROP       | 推播「今日無重大 AI 新聞」，exit 0                               |
+| Classifier 單篇失敗              | fallback 分類 (LIGHT/SKIM)，繼續流程                             |
+| AI API rate limit / error       | retry 1 次 (delay 5s)，仍失敗 → brief generator fallback         |
+| Brief Generator 失敗            | buildDegradedBrief()，直接從 classifier 輸出組裝                 |
+| ntfy 推播失敗                   | log error，exit 1（最終輸出失敗，需被 Actions 捕捉）             |
 
 ---
 
-## 7. Future Enhancements（不在 MVP 範圍）
+## 14. Future Enhancements（不在目前範圍）
 
-- [ ] 增加 RSS 來源（Hacker News, ArXiv, InfoQ）
+- [ ] URL 去重機制：同一篇文章連續兩天出現（RSS feed 保留多天），需要 URL hash 去重，存到 Actions artifact 或小檔案
+- [ ] Deduplication across runs
 - [ ] 歷史記錄存 GitHub Gist 或 SQLite
-- [ ] 使用者偏好設定（關注領域權重）
-- [ ] 多語言支援
+- [ ] 使用者偏好設定（關注領域權重調整）
 - [ ] Web dashboard 查看歷史晨報

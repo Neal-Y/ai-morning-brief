@@ -51,11 +51,12 @@ export interface BriefItem {
   index: number;
   renderLevel: RenderLevel;
   title: string;
-  summary: string;
-  engineeringImpact: string;   // used in FULL
+  summary: string;             // FULL: 發生了什麼
+  context: string;             // FULL: 背景 / 變了什麼
+  engineeringImpact: string;   // FULL: 工程影響
   recommendation: Recommendation;
-  reason: string;              // used in FULL
-  shortJudgment: string | null; // used in LIGHT
+  reason: string;              // FULL: 建議 / 為何值得看
+  shortJudgment: string | null; // LIGHT only
   categoryTag: string;
   url: string;
 }

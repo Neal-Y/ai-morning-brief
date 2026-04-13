@@ -68,8 +68,7 @@ export const RSS_SOURCES: ReadonlyArray<RssSource> = Object.freeze([
 ]);
 
 export const WINDOW_HOURS = 24;
-export const MAX_ARTICLES = 4;         // total cap across both buckets
-export const MIN_ARTICLES = 1;
+export const CLASSIFIER_CAP = 12;      // top-N by keyword score sent to LLM classifier
 export const HARD_TECH_MAX = 2;        // max articles from HARD_TECH_AI bucket
 export const SIGNALS_MAX = 1;          // max articles from IMPORTANT_AI_SIGNALS bucket
 export const BRIEF_MAX = 3;            // hard cap: ntfy Click(1) + buttons(2) = 3 entries
@@ -135,7 +134,7 @@ export const NEGATIVE_KEYWORD_WEIGHTS: Readonly<Record<string, number>> = Object
 });
 
 export const MODEL_IDS: Readonly<Record<string, string>> = Object.freeze({
-  openai: 'gpt-4o-mini',
+  openai: 'gpt-4o',
   anthropic: 'claude-sonnet-4-6',
 });
 
