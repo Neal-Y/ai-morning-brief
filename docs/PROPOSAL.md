@@ -144,9 +144,11 @@ interface ArticleClassification {
 ## 7. Stage 3 — Rank + Select
 
 ```
-hardTech = HARD_TECH_AI articles, sorted by score desc, take ≤ HARD_TECH_MAX (2)
-signals  = IMPORTANT_AI_SIGNALS articles, sorted by score desc, take ≤ max(SIGNALS_MAX, BRIEF_MAX - len(hardTech))
-fillers  = top-scoring DROP articles (if hardTech + signals < BRIEF_MAX), bucket overridden to IMPORTANT_AI_SIGNALS, renderLevel=LIGHT
+nonDrop  = articles where bucket != DROP AND renderLevel != OMIT  // exclude hidden articles from occupying slots
+hardTech = nonDrop HARD_TECH_AI articles, sorted by score desc, take ≤ HARD_TECH_MAX (2)
+signals  = nonDrop IMPORTANT_AI_SIGNALS articles, sorted by score desc, take ≤ max(SIGNALS_MAX, BRIEF_MAX - len(hardTech))
+fillers  = top-scoring DROP articles (if hardTech + signals < BRIEF_MAX),
+           overridden: bucket→IMPORTANT_AI_SIGNALS, renderLevel→LIGHT, recommendation→SKIM
 selected = (hardTech + signals + fillers)[:BRIEF_MAX]   // always fills to BRIEF_MAX = 3
 ```
 
@@ -359,7 +361,7 @@ jobs:
 | 單一 RSS 來源 timeout / 406      | log warning，繼續處理其他來源                                    |
 | 全部 RSS 來源失敗                | 推播錯誤通知到 ntfy，exit 0                                      |
 | 24h 內無文章 (prefilter 後)      | 推播「今日無重大 AI 新聞」，exit 0                               |
-| 全部文章被 classifier DROP       | 推播「今日無重大 AI 新聞」，exit 0                               |
+| 全部文章被 classifier DROP       | filler 邏輯從 DROP 補齊至 BRIEF_MAX，仍正常推播                 |
 | Classifier 單篇失敗              | fallback 分類 (LIGHT/SKIM)，繼續流程                             |
 | AI API rate limit / error       | retry 1 次 (delay 5s)，仍失敗 → brief generator fallback         |
 | Brief Generator 失敗            | buildDegradedBrief()，直接從 classifier 輸出組裝                 |

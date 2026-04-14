@@ -38,7 +38,7 @@ docs/
 - Two-stage pipeline: Classifier (per-article, parallel) → Brief Generator (one call).
 - Classifier concurrency capped at 3 — both OpenAI and Anthropic free-tier TPM limit is ~30k tokens/min.
 - Selection caps: `HARD_TECH_MAX=2`, `SIGNALS_MAX=1`, `BRIEF_MAX=3` (ntfy: 3 action buttons, no Click header).
-- Filler logic: if HARD_TECH + SIGNALS < 3, top-scoring DROP articles fill remaining slots (bucket overridden to IMPORTANT_AI_SIGNALS, renderLevel=LIGHT).
+- Filler logic: if HARD_TECH + SIGNALS < 3, top-scoring DROP articles fill remaining slots (bucket→IMPORTANT_AI_SIGNALS, renderLevel→LIGHT, recommendation→SKIM). Primary selection excludes renderLevel=OMIT articles to prevent hidden articles occupying slots.
 
 ## Commands
 

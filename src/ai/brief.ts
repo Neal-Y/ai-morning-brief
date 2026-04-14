@@ -120,6 +120,7 @@ Map each category to its display tag. Use exactly these tags — no others:
 | policy-regulation   | #policy           |
 | company-market      | #market           |
 | social-opinion      | #opinion          |
+| event-promo         | #market           |
 | research-adjacent   | #research         |
 
 Do NOT use: #通用, #一般, #科技, #重要AI信號, #infra-inference, #company-market, #benchmark, #benchmark-eval

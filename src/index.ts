@@ -137,7 +137,9 @@ async function main(): Promise<void> {
     },
   }));
 
-  const nonDrop = allClassified.filter((a) => a.classification.bucket !== 'DROP');
+  const nonDrop = allClassified.filter(
+    (a) => a.classification.bucket !== 'DROP' && a.classification.renderLevel !== 'OMIT'
+  );
   const bucketSummary = `${nonDrop.filter((a) => a.classification.bucket === 'HARD_TECH_AI').length} HARD_TECH + ${nonDrop.filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS').length} SIGNALS`;
   console.log(`[classifier] Kept ${nonDrop.length}/${toClassify.length} articles — ${bucketSummary}`);
 
@@ -165,7 +167,7 @@ async function main(): Promise<void> {
         .filter((a) => a.classification.bucket === 'DROP')
         .sort(byScore)
         .slice(0, fillerCount)
-        .map((a) => ({ ...a, classification: { ...a.classification, bucket: 'IMPORTANT_AI_SIGNALS' as const, renderLevel: 'LIGHT' as const } }))
+        .map((a) => ({ ...a, classification: { ...a.classification, bucket: 'IMPORTANT_AI_SIGNALS' as const, renderLevel: 'LIGHT' as const, recommendation: 'SKIM' as const } }))
     : [];
 
   const selected = [...hardTech, ...signals, ...fillers].slice(0, BRIEF_MAX);
