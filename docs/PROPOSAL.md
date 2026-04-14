@@ -86,7 +86,7 @@
 ### 並發控制
 
 - 每篇文章獨立呼叫 LLM（parallel）
-- 並發上限 `CLASSIFIER_CONCURRENCY = 5`，避免 Anthropic free tier 429
+- 並發上限 `CLASSIFIER_CONCURRENCY = 3`，避免 OpenAI / Anthropic free tier 429（兩者均 ~30k TPM/min）
 - 單篇失敗 → fallback 分類（LIGHT/SKIM，不中斷整體流程）
 
 ### 分類維度
@@ -146,7 +146,8 @@ interface ArticleClassification {
 ```
 hardTech = HARD_TECH_AI articles, sorted by score desc, take ≤ HARD_TECH_MAX (2)
 signals  = IMPORTANT_AI_SIGNALS articles, sorted by score desc, take ≤ max(SIGNALS_MAX, BRIEF_MAX - len(hardTech))
-selected = (hardTech + signals)[:BRIEF_MAX]   // hard cap = 3
+fillers  = top-scoring DROP articles (if hardTech + signals < BRIEF_MAX), bucket overridden to IMPORTANT_AI_SIGNALS, renderLevel=LIGHT
+selected = (hardTech + signals + fillers)[:BRIEF_MAX]   // always fills to BRIEF_MAX = 3
 ```
 
 Constants in `config.ts`:
@@ -223,9 +224,10 @@ HTTP POST to `https://ntfy.sh/{NTFY_TOPIC}`
 Title: AI Morning Brief YYYY-MM-DD
 Tags: newspaper,robot
 Content-Type: text/plain; charset=utf-8
-Click: {article_1_url}           (optional, first displayed item)
-Actions: view, 原文 1, {url1}; view, 原文 2, {url2}; ...  (max 3 buttons, ASCII labels)
+Actions: view, 原文 1, {url1}; view, 原文 2, {url2}; view, 原文 3, {url3}  (max 3 buttons, ASCII labels)
 ```
+
+Note: No `Click` header — tap opens notification body, not a URL. Each displayed article gets its own action button.
 
 **Body 格式（plain text，emoji 由 renderer 添加）:**
 ```
@@ -310,7 +312,7 @@ interface AIProvider {
 
 | AI_PROVIDER   | Behavior                                                  |
 | ------------- | --------------------------------------------------------- |
-| `openai`      | 固定使用 GPT (`gpt-4o-mini`)                              |
+| `openai`      | 固定使用 GPT (`gpt-4o`)                                   |
 | `anthropic`   | 固定使用 Claude (`claude-sonnet-4-6`)                     |
 | `alternate`   | 每日輪替：台北時區年內天數，偶數 → GPT，奇數 → Claude     |
 

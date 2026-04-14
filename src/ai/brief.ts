@@ -46,15 +46,13 @@ The final brief has two sections:
 Display ALL articles that are passed to you. Do not drop, merge, or skip any article unless its renderLevel is OMIT.
 If two articles are both excellent, both appear. If only one article is passed, only one appears. Do not invent a minimum or maximum count.
 
-Each article has a renderLevel from the classifier:
+Each article has a renderLevel from the classifier. Treat it as authoritative — do not override it based on category or content judgment.
 
 - renderLevel FULL: Fill all four content fields (summary, context, engineeringImpact, reason). Set shortJudgment to null.
 - renderLevel LIGHT: Fill all four content fields exactly like FULL. Additionally fill shortJudgment (≤20 Chinese characters, signal-type format). shortJudgment is a priority label — it does NOT replace the content fields.
 - renderLevel OMIT: Do NOT include in sections. Put a one-line note in skippedToday at most.
 
-renderLevel overrides:
-- social-opinion articles → OMIT regardless of classifier renderLevel.
-- company-market articles → FULL only if there is a concrete API/platform/supply-chain engineering consequence; otherwise LIGHT.
+Section rules:
 - If there are no HARD_TECH_AI articles to display, set "Hard Tech AI" items to [].
 - If all articles end up OMIT, output empty sections and set skippedToday to ["今日無重大 AI 工程更新"].
 
@@ -126,15 +124,6 @@ Map each category to its display tag. Use exactly these tags — no others:
 
 Do NOT use: #通用, #一般, #科技, #重要AI信號, #infra-inference, #company-market, #benchmark, #benchmark-eval
 
-## Button / link rules
-
-- Only generate actionLinks for articles that appear in sections (FULL or LIGHT items).
-- actionLinks count must EXACTLY equal the total number of items across all sections (FULL + LIGHT combined).
-- OMIT articles and skippedToday items must NOT have action links.
-- Use short labels only: "原文 1", "原文 2", "原文 3" — never full article titles.
-- Prefer FULL items first in the actionLinks ordering, then LIGHT items.
-- If no articles are displayed in sections, output actionLinks as [].
-
 ## Output format
 
 Return JSON only (no markdown fence):
@@ -157,19 +146,6 @@ Return JSON only (no markdown fence):
           "reason": "一句建議，說明為何現在值得讀或採取行動",
           "shortJudgment": null,
           "url": "https://..."
-        },
-        {
-          "index": 2,
-          "renderLevel": "LIGHT",
-          "title": "article title",
-          "summary": "一句具體描述事件本身",
-          "context": "一到五句背景說明",
-          "categoryTag": "#tooling",
-          "engineeringImpact": "一句具體工程影響，或明確說工程直接價值低",
-          "recommendation": "SKIM",
-          "reason": "一句建議",
-          "shortJudgment": "生態訊號：具體事實一句",
-          "url": "https://..."
         }
       ]
     },
@@ -177,7 +153,7 @@ Return JSON only (no markdown fence):
       "name": "Important AI Signals",
       "items": [
         {
-          "index": 3,
+          "index": 2,
           "renderLevel": "LIGHT",
           "title": "article title",
           "summary": "一句具體描述事件本身",
@@ -194,11 +170,6 @@ Return JSON only (no markdown fence):
   ],
   "skippedToday": [
     "可省略；若有必要，只放一行短描述"
-  ],
-  "actionLinks": [
-    { "label": "原文 1", "url": "https://..." },
-    { "label": "原文 2", "url": "https://..." },
-    { "label": "原文 3", "url": "https://..." }
   ]
 }
 

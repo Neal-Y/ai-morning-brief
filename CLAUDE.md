@@ -37,7 +37,8 @@ docs/
 - LLM output in Traditional Chinese.
 - Two-stage pipeline: Classifier (per-article, parallel) → Brief Generator (one call).
 - Classifier concurrency capped at 3 — both OpenAI and Anthropic free-tier TPM limit is ~30k tokens/min.
-- Selection caps: `HARD_TECH_MAX=2`, `SIGNALS_MAX=1`, `BRIEF_MAX=3` (ntfy: 1 Click + 2 action buttons).
+- Selection caps: `HARD_TECH_MAX=2`, `SIGNALS_MAX=1`, `BRIEF_MAX=3` (ntfy: 3 action buttons, no Click header).
+- Filler logic: if HARD_TECH + SIGNALS < 3, top-scoring DROP articles fill remaining slots (bucket overridden to IMPORTANT_AI_SIGNALS, renderLevel=LIGHT).
 
 ## Commands
 

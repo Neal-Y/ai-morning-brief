@@ -134,18 +134,23 @@ Return ONLY valid JSON (no markdown fence):
   "score": 0
 }`;
 
+/** Strip null bytes and non-printable control chars that break JSON serialization. */
+function sanitize(text: string): string {
+  return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
+}
+
 function buildClassifierUserPrompt(article: ArticleSummary): string {
   return `TITLE:
-${article.title}
+${sanitize(article.title)}
 
 SOURCE:
-${article.source}
+${sanitize(article.source)}
 
 URL:
-${article.link}
+${sanitize(article.link)}
 
 CONTENT:
-${article.contentSnippet.slice(0, 500)}`;
+${sanitize(article.contentSnippet).slice(0, 500)}`;
 }
 
 const VALID_CATEGORIES = new Set<string>([

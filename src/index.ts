@@ -123,54 +123,54 @@ async function main(): Promise<void> {
 
   const classifications = await classifyArticles(provider, toClassify);
 
-  const classified: ClassifiedArticle[] = toClassify
-    .map((article, i) => ({
-      ...article,
-      classification: classifications[i] ?? {
-        category: 'company-market' as const,
-        bucket: 'DROP' as const,
-        renderLevel: 'OMIT' as const,
-        recommendation: 'SKIP' as const,
-        summary: '',
-        engineeringImpact: '工程直接價值低',
-        reason: 'No classification',
-        score: 0,
-      },
-    }))
-    .filter((a) => a.classification.bucket !== 'DROP');
+  const allClassified: ClassifiedArticle[] = toClassify.map((article, i) => ({
+    ...article,
+    classification: classifications[i] ?? {
+      category: 'company-market' as const,
+      bucket: 'DROP' as const,
+      renderLevel: 'OMIT' as const,
+      recommendation: 'SKIP' as const,
+      summary: '',
+      engineeringImpact: '工程直接價值低',
+      reason: 'No classification',
+      score: 0,
+    },
+  }));
 
-  const bucketSummary = `${classified.filter((a) => a.classification.bucket === 'HARD_TECH_AI').length} HARD_TECH + ${classified.filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS').length} SIGNALS`;
-  console.log(`[classifier] Kept ${classified.length}/${toClassify.length} articles — ${bucketSummary}`);
-
-  if (classified.length === 0) {
-    console.log('[main] All articles dropped by classifier');
-    try {
-      await sendEmptyNotice(config.ntfyTopic, date);
-    } catch (ntfyErr) {
-      console.error('[ntfy]', ntfyErr);
-      process.exit(1);
-    }
-    process.exit(0);
-  }
+  const nonDrop = allClassified.filter((a) => a.classification.bucket !== 'DROP');
+  const bucketSummary = `${nonDrop.filter((a) => a.classification.bucket === 'HARD_TECH_AI').length} HARD_TECH + ${nonDrop.filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS').length} SIGNALS`;
+  console.log(`[classifier] Kept ${nonDrop.length}/${toClassify.length} articles — ${bucketSummary}`);
 
   // ── Stage 3: Rank within each bucket, compose selection ──────────────────
   const byScore = (a: ClassifiedArticle, b: ClassifiedArticle) =>
     b.classification.score - a.classification.score;
 
-  const hardTech = classified
+  const hardTech = nonDrop
     .filter((a) => a.classification.bucket === 'HARD_TECH_AI')
     .sort(byScore)
     .slice(0, HARD_TECH_MAX);
 
   // SIGNALS fills remaining slots up to BRIEF_MAX
   const signalsMax = Math.max(SIGNALS_MAX, BRIEF_MAX - hardTech.length);
-  const signals = classified
+  const signals = nonDrop
     .filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS')
     .sort(byScore)
     .slice(0, signalsMax);
 
-  const selected = [...hardTech, ...signals].slice(0, BRIEF_MAX);
-  console.log(`[main] Selected ${hardTech.length} HARD_TECH + ${signals.length} SIGNALS for brief (cap ${BRIEF_MAX})`);
+  // If still under BRIEF_MAX, fill remaining slots with best-scoring DROP articles (renderLevel forced to LIGHT).
+  const primaryCount = hardTech.length + signals.length;
+  const fillerCount = BRIEF_MAX - primaryCount;
+  const fillers: ClassifiedArticle[] = fillerCount > 0
+    ? allClassified
+        .filter((a) => a.classification.bucket === 'DROP')
+        .sort(byScore)
+        .slice(0, fillerCount)
+        .map((a) => ({ ...a, classification: { ...a.classification, bucket: 'IMPORTANT_AI_SIGNALS' as const, renderLevel: 'LIGHT' as const } }))
+    : [];
+
+  const selected = [...hardTech, ...signals, ...fillers].slice(0, BRIEF_MAX);
+  const fillerLabel = fillers.length > 0 ? ` + ${fillers.length} filler` : '';
+  console.log(`[main] Selected ${hardTech.length} HARD_TECH + ${signals.length} SIGNALS${fillerLabel} for brief (cap ${BRIEF_MAX})`);
 
   // ── Stage 4: Brief generator LLM ─────────────────────────────────────────
   const brief = await generateBrief(provider, selected, date).catch((err) => {
@@ -182,9 +182,8 @@ async function main(): Promise<void> {
   const body = formatBriefText(brief, provider.name);
 
   // Build action links from displayed items in sections (FULL + LIGHT, not OMIT).
-  // ntfy supports max 3 action buttons:
-  //   Click header  = article 1  (tap the notification)
-  //   Action buttons = articles 2-4 (up to 3 buttons)
+  // No Click header — tap opens the notification body, not a URL.
+  // ntfy supports max 3 action buttons → articles 1-3 each get a button.
   const displayedItems = brief.sections
     .flatMap((s) => s.items)
     .filter((item) => item.renderLevel !== 'OMIT');
@@ -193,14 +192,13 @@ async function main(): Promise<void> {
     label: `原文 ${i + 1}`,
     url: item.url,
   }));
-  const clickUrl = displayedItems[0]?.url;
 
   try {
     await sendNtfy(
       config.ntfyTopic,
       `AI Morning Brief ${date}`,
       body,
-      { clickUrl, actionLinks: buttonLinks }
+      { actionLinks: buttonLinks }
     );
     console.log('[main] Sent successfully');
   } catch (err) {
