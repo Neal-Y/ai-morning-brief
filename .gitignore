@@ -3,3 +3,8 @@ dist/
 .env
 .env.local
 *.js.map
+auth
+auth-wal
+web/dist/
+.DS_Store
+.idea/

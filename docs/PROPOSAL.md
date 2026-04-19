@@ -371,8 +371,10 @@ jobs:
 
 ## 14. Future Enhancements（不在目前範圍）
 
-- [ ] URL 去重機制：同一篇文章連續兩天出現（RSS feed 保留多天），需要 URL hash 去重，存到 Actions artifact 或小檔案
-- [ ] Deduplication across runs
-- [ ] 歷史記錄存 GitHub Gist 或 SQLite
-- [ ] 使用者偏好設定（關注領域權重調整）
-- [ ] Web dashboard 查看歷史晨報
+> **V2 規劃已獨立成文件**：詳見 [V2_DESIGN.md](./V2_DESIGN.md) —— 從 ntfy 推播進化為「後端工程師個人學習 OS」。
+> 下列項目多數已納入 V2 設計:
+
+- [x] 歷史記錄存儲 → V2 使用 Turso (libSQL)
+- [x] 使用者偏好設定（領域權重） → V2 的 👍👎 反饋回饋 classifier
+- [x] Web dashboard → V2 的 PWA 介面
+- [ ] URL 去重機制：同一篇文章連續兩天出現（RSS feed 保留多天），需要 URL hash 去重。V2 後可借用 Turso 做去重。

@@ -9,15 +9,27 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx --env-file=.env src/index.ts"
+    "dev:pipeline": "tsx src/index.ts",
+    "dev:api": "tsx src/api/server.ts",
+    "dev:web": "cd web && npm run dev",
+    "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
+    "db:push": "drizzle-kit push --config=drizzle.config.ts",
+    "db:seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
+    "@hono/node-server": "^1.19.14",
+    "@libsql/client": "^0.17.2",
+    "dotenv": "^17.4.2",
+    "drizzle-orm": "^0.45.2",
+    "hono": "^4.12.14",
     "openai": "^4.86.0",
     "rss-parser": "^3.13.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "drizzle-kit": "^0.31.10",
     "tsx": "^4.19.0",
     "typescript": "^5.8.0"
   }

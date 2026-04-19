@@ -1,0 +1,37 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #root {
+  height: 100%;
+  background: #14110D;
+  color: #F2EDE4;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body { overflow: hidden; }
+
+input, button { font-family: inherit; }
+button { cursor: pointer; }
+
+/* Progress dash wipe: left-to-right fill */
+@keyframes wipeIn {
+  from { clip-path: inset(0 100% 0 0); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+
+/* Bookmark stamp: scale + rotate like a rubber stamp */
+@keyframes stampIn {
+  0%   { transform: scale(1.7) rotate(-14deg); opacity: 0.4; }
+  55%  { transform: scale(0.82) rotate(5deg);  opacity: 1;   }
+  78%  { transform: scale(1.06) rotate(-1deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+/* Button press: scale down on active */
+.btn-press {
+  transform: scale(1);
+  will-change: transform;
+}
+.btn-press:active {
+  transform: scale(0.91) !important;
+}

@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { loadConfig, CLASSIFIER_CAP, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
 import { getTodaysArticles } from './rss/feed.js';
 import { OpenAIProvider } from './ai/openai.js';

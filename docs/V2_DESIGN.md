@@ -1,0 +1,293 @@
+# AI Morning Brief V2 — Product & Engineering Design
+
+> **Status**: Design spec, not yet implemented. Baseline is [PROPOSAL.md](./PROPOSAL.md) (V1, ntfy-based).
+> **Target**: 4 週內從「通知」進化為「每日學習 OS」。
+
+---
+
+## 1. 為什麼要 V2
+
+V1 (ntfy 推播) 完成了「每天送內容到你眼前」,但沒解決兩個真實問題:
+
+1. **讀完就忘** — 被動閱讀一週後記憶保留率僅 34%(研究數據)。ntfy 是通知介面,不是消費介面,大腦沒進入「瀏覽模式」。
+2. **沒有 compounding** — 每天看完就結束,產品不會變得更懂你,你的知識也沒累積成資產。
+
+V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從「收推播」變成「打開一個越用越懂我的技術學習 feed」。
+
+---
+
+## 2. 產品哲學
+
+### 核心定位
+> **後端工程師的個人學習 OS**。好玩的定義綁在「每讀一天,技術實力多一點」。
+
+### 設計支柱
+
+| 支柱 | 研究依據 | 對應設計 |
+|---|---|---|
+| **Hooked Model** (Nir Eyal) 的 Investment 環節 | 用戶投入資料 → 產品越來越懂你 → 遷移成本上升 | 👍👎 / 🔖 / 💬 追問,全部回饋進 classifier |
+| **Active Recall + Spaced Repetition** | 主動回想一週後保留率 80% vs 被動閱讀 34% | 晨間 recall quiz(3/7/14 天前的卡片) |
+| **自動結構化捕捉** | 「手動整理 Notion」是已知失敗模式,19 個 database 從不更新 | 🔖 按鈕直接寫入 Notion,使用者零維護 |
+| **Variable Reward** | 不確定性是心理鉤子 | 💬 追問回答不可預期、quiz 題目不可預期、內容本身每天變化 |
+
+### 明確不追求的東西
+- 多用戶 / 社交功能(你是唯一用戶)
+- 美到炸的視覺設計(夠用就好,時間花在 retention)
+- 即時性(每天一次就夠,不需要 real-time)
+
+---
+
+## 3. 功能清單 (Feature List)
+
+### F1 — PWA 卡片介面 (替代 ntfy)
+- 每張卡一篇文章,swipe 切換
+- View Transitions API 提供 native 感切換
+- Home screen icon 一鍵開啟(iOS Shortcuts + PWA)
+
+### F2 — 👍👎 反饋 → Classifier 學習
+- 每張卡兩顆鈕:`👍 要更多這種` / `👎 不要這種`
+- 反饋寫入 SQLite,次日 classifier prompt 帶入最近 N 筆偏好
+- **這是 Investment 環節的核心** — 「我的反饋真的改變明天的 brief」是黏著的主要來源
+
+### F3 — 💬 追問 (Active Recall 引擎)
+- 每張卡開 Claude 對話(SSE streaming)
+- 預設 Haiku 4.5(成本低),深度模式可切 Sonnet 4.6
+- Claude 主動拋 3 個後端工程師視角的追問:
+  - 「這個協定跟你熟的 X 比有什麼 trade-off?」
+  - 「production 導入,第一個要擔心什麼?」
+  - 「這個 API 設計解決了什麼原本 REST 做不到的事?」
+- 把「讀」變成「想」
+
+### F4 — 🔖 → Notion 自動存檔
+- 點收藏 → Notion API 自動建頁,結構化填:
+  - Summary / 你的 1-line note / 原文連結 / Claude 追問對話 / related articles
+- 使用者**零手動整理**。Notion 變成 cold storage + search,PWA 負責 hot consumption
+- 解決「想做筆記最後沒做」的痛點
+
+### F5 — 晨間 Recall Quiz
+- 每天打開 app,新 brief 之前先跳 1-2 張**3/7/14 天前**讀過的卡
+- 遮掉重點問「還記得這個做什麼嗎?」→ 點看答案 + 標「記得 / 忘了」
+- Quiz 題目由 Haiku 在收藏/分類時順便生成(cache 起來)
+- 直擊「讀完就忘」核心痛點
+
+### F6 — Skill-tag 雙軸分類
+- 現有的 `#model-release` 這類內容 tag 保留
+- **新增工程技能 tag**:`#rust #go #grpc #kafka #distributed-systems #postgres #observability #wasm`
+- Classifier 吃進用戶歷史反饋 → 自動加權你常點的 tag
+- 側欄 tag filter = 個人技術 feed
+
+### F7 — 週報 (Investment Payoff)
+- 週日 22:00 cron 生成
+- 內容:本週讀了 N 篇、最常出現的技術、哪些 tag 你點最多、tag 共現矩陣
+- 自動寫入 Notion 週報頁,累積成長軌跡
+
+### 明確不做 (Rejected)
+| 功能 | 理由 |
+|---|---|
+| DALL-E / Gemini Cover image | Variable reward 已由 F3/F5/F7 滿足,純裝飾、redundant |
+| iOS Native Widget | 3-7 天開發成本,Swift 跟後端技能樹零交集,PWA + Shortcuts 已達 90% 效果 |
+| Knowledge graph | embedding + vector search + graph render,深坑,3 週起跳,回報率低 |
+| Bun runtime | 生態相容性風險 > 學習報酬 |
+| Cloudflare Workers + D1 | 單人 app 不需要 edge,D1 的 SQL 限制反而綁手綁腳 |
+| Go 後端 | 你已熟 Go = 零學習報酬;LLM SDK 生態 TS 先行;現有 code 全是 TS |
+
+---
+
+## 4. 技術堆疊 (Decided)
+
+| 層 | 選擇 | 理由 |
+|---|---|---|
+| Language | TypeScript (strict) | 沿用 V1,LLM 官方 SDK 最完整 |
+| Runtime | Node.js 20+ | 穩、Vercel 原生支援 |
+| Backend framework | **Hono** | 新學、輕量、TS-native、edge-ready |
+| Frontend | **React + Vite + PWA** | 已會、快、iOS 加到主畫面就是 app |
+| Styling | Tailwind + View Transitions API | 卡片切換原生感 |
+| DB | **Turso (libSQL)** free tier | 9GB + 10 億讀/月免費,SQLite 語意,零運維 |
+| ORM | **Drizzle** | type-safe、零 abstraction、對 Go 背景的人友善 |
+| Streaming | **SSE** (Server-Sent Events) | 追問即時感,比 WebSocket 輕 |
+| LLM | Anthropic SDK (Haiku 主力 / Sonnet 擔當) | 官方 SDK、prompt caching |
+| 外部整合 | Notion API | 免費、個人用無限 |
+| Cron | **GitHub Actions** (沿用 V1) | 免費、已運作 |
+| Deploy | **Vercel** free tier (PWA + API) | 零成本、CI 整合 |
+
+**總月費:$0 infra + ~$7 LLM ≈ 210 TWD/月**
+**每日約 7 TWD,遠低於預算上限 80 TWD/day**
+
+---
+
+## 5. 架構圖
+
+```
+┌─────────────────────────────────┐
+│ GitHub Actions cron (每日 07:30)│
+│   scraper → classifier → brief  │ ──┐
+└─────────────────────────────────┘   │
+                                      ▼
+                            ┌────────────────┐
+                            │ Turso (libSQL) │
+                            │  articles      │
+                            │  feedback      │
+                            │  saves         │
+                            │  conversations │
+                            │  quizzes       │
+                            └────────────────┘
+                                      ▲
+                                      │
+     ┌────────────────────────────────┤
+     ▼                                │
+┌──────────────┐   SSE   ┌────────────┴───────────┐
+│ PWA (React)  │◄────────│ Hono API (Vercel Func) │
+│              │         │                        │
+│ - Card swipe │         │ - /api/feed            │
+│ - 👍👎      │────────►│ - /api/feedback        │
+│ - 💬 追問   │         │ - /api/ask (SSE)       │
+│ - 🔖 save    │         │ - /api/save → Notion   │
+│ - Quiz       │         │ - /api/quiz            │
+└──────────────┘         └────────────────────────┘
+```
+
+---
+
+## 6. DB Schema (Draft)
+
+```typescript
+// Drizzle schema (illustrative)
+articles = {
+  id: string (pk)
+  url: string (unique)
+  title: string
+  summary: string
+  context: string
+  engineeringImpact: string
+  categoryTag: string
+  skillTags: string[]          // NEW: #go #grpc etc
+  renderLevel: 'FULL' | 'LIGHT' | 'OMIT'
+  classifiedAt: timestamp
+  briefDate: date              // which day's brief it belongs to
+}
+
+feedback = {
+  id: pk
+  articleId: fk
+  signal: 'up' | 'down'
+  createdAt: timestamp
+}
+
+saves = {
+  id: pk
+  articleId: fk
+  userNote: string | null
+  notionPageId: string | null  // after Notion write
+  createdAt: timestamp
+}
+
+conversations = {
+  id: pk
+  articleId: fk
+  messages: json               // [{role, content, ts}]
+  model: 'haiku' | 'sonnet'
+  createdAt: timestamp
+}
+
+quizzes = {
+  id: pk
+  articleId: fk
+  question: string
+  answer: string
+  createdAt: timestamp
+  lastShownAt: timestamp | null
+  userRecall: 'remembered' | 'forgot' | null
+}
+```
+
+---
+
+## 7. Phased Rollout
+
+### Week 1 — Foundation
+- [ ] `pnpm` monorepo or single Hono + Vite app 骨架
+- [ ] Turso 建立 + Drizzle schema migrate
+- [ ] Port V1 scraper/classifier/brief gen → 寫入 Turso 而非 ntfy
+- [ ] PWA shell:卡片 swipe UI(先用假資料)
+- **Demo goal**: 手機打開能看到今天 3 張卡
+
+### Week 2 — Core Interaction
+- [ ] 👍👎 寫回 DB
+- [ ] 下次 classifier 吃進 prompt(最近 20 筆偏好)
+- [ ] 💬 追問:SSE streaming,Haiku 預設
+- [ ] Skill-tag 加到 classifier 輸出
+- **Demo goal**: 滑卡、點追問看 Claude 即時回、明天 brief 真的變了
+
+### Week 3 — Investment Layer
+- [ ] Notion API 整合:`🔖` → 自動建 page(設計好的 template)
+- [ ] 收藏時順手讓 Haiku 生成 quiz question + answer,存到 `quizzes`
+- [ ] 基本 dashboard:streak、本週讀了幾篇、最常點 tag
+- **Demo goal**: 每收藏一篇,Notion 就長一篇,完全不用手動整理
+
+### Week 4 — Retention Engine
+- [ ] 晨間 recall quiz flow(3/7/14 天前的卡,遮答案)
+- [ ] 週報 cron(週日 22:00,Sonnet 生成,同步 Notion)
+- **Demo goal**: 每天「先答 quiz → 再看新 brief」變成日常
+
+### Phase 2 (Optional,視黏著度決定)
+- [ ] TTS audio version(local [Piper](https://github.com/rhasspy/piper),$0)
+- [ ] 深度追問 toggle(Sonnet)
+- [ ] 自訂 skill tag 管理
+
+---
+
+## 8. 成本試算
+
+| 項目 | Model | 每日用量 | 每日成本 |
+|---|---|---|---|
+| Classifier | Haiku 4.5 | 20 篇 × ~500 tok | $0.02 |
+| Brief generator | Sonnet 4.6 | 1 call | $0.05 |
+| 💬 追問 | Haiku (90%) / Sonnet (10%) | 5 輪對話 | $0.05 |
+| Quiz 生成 | Haiku | 收藏時跑,~5 張 | $0.005 |
+| 週報 (攤平) | Sonnet / 週一次 | — | $0.015 |
+| Notion API | — | 無限 | $0 |
+| Turso | — | free tier | $0 |
+| Vercel | — | free tier | $0 |
+| GitHub Actions | — | free | $0 |
+| **Total** | | | **~$0.14 / day ≈ 4 TWD** |
+
+**預算使用率:4 TWD / 80 TWD = 5%**
+
+若 Phase 2 加 TTS(local Piper),仍為 $0 增量。
+
+---
+
+## 9. Working Rules (延續 V1)
+
+沿用 `CLAUDE.md` 規範:
+- 修改檔案後必須跑 `npm run build`
+- 超過 10 輪對話,編輯檔案前重新讀
+- 大任務拆獨立模組
+- Graceful degradation:Turso down 也不能讓 cron 掛
+
+**新增規則 (V2 專屬):**
+- DB migration 用 Drizzle Kit,每個 schema 改動都要有 migration file
+- Notion API 呼叫獨立成 `src/notion/` 模組,失敗 retry + log,但不阻斷 core flow
+- SSE endpoint 超時上限 30s,超過強制關閉 connection
+- Quiz 題目生成失敗不影響收藏功能(獨立 try/catch)
+
+---
+
+## 10. Open Questions (待討論,不 blocking)
+
+1. **反饋衰減** — 最近 20 筆偏好夠嗎?要不要加時間衰減權重?先做最簡單版,之後 tune。
+2. **Quiz 排程演算法** — 3/7/14 是固定間隔還是 SM-2 algorithm (Anki)?MVP 用固定間隔,Phase 2 考慮 SM-2。
+3. **Skill tag 詞彙表** — 開放任意 tag 還是 controlled vocabulary?先 controlled(預定義 ~20 個),避免 classifier 亂生。
+4. **Notion page template** — 要不要讓使用者自訂?MVP 硬編碼,之後再抽成設定。
+
+---
+
+## 11. Success Metrics (給自己看的)
+
+- **Daily open rate**: 目標連續 30 天每天開 app(streak ≥ 30)
+- **Quiz 答題率**: 收到 quiz 的那些早上,有多少比例實際答題(目標 > 80%)
+- **追問深度**: 平均每次互動追問幾輪(目標 ≥ 2)
+- **Notion 累積**: 一個月內 vault 累積 ≥ 30 篇、且自己回頭搜尋過 ≥ 3 次(證明 vault 真的有用)
+- **開發本身**: 四週內 ship 完 Week 1-4 全部項目(證明計畫可執行)
+
+如果一個月後上述指標 < 50%,就回頭檢視:是內容品質問題、還是 retention 設計沒戳到點。
