@@ -42,7 +42,7 @@ export function TopChrome({ theme, current, total, streak, lastReadAgo }: TopChr
               key={i === current ? `d-active-${current}` : i}
               style={{
                 flex: 1, height: 3,
-                background: i <= current ? theme.ink : theme.ruleSoft,
+                background: i <= current ? theme.accent : theme.ruleSoft,
                 clipPath: 'inset(0)',
                 animation: i === current ? 'wipeIn 0.4s cubic-bezier(0.4,0,0.2,1)' : 'none',
               }}
@@ -92,7 +92,7 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
         border: `1.5px solid ${theme.ink}`,
         borderRadius: 2,
         padding: '10px 0',
-        flex: 1.5,
+        flex: 1,
         fontFamily: theme.mono, fontSize: 12, fontWeight: 700,
         letterSpacing: 0.5,
         display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
@@ -104,7 +104,8 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
 
   const iconBtn = (
     onClick: () => void,
-    content: React.ReactNode,
+    icon: React.ReactNode,
+    label: string,
     active = false,
   ) => (
     <button
@@ -115,13 +116,16 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
         color: active ? theme.card : theme.ink,
         border: `1.5px solid ${theme.ink}`,
         borderRadius: 2,
-        padding: '10px 0',
-        flex: 0.8,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '8px 0',
+        flex: 1,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
         transition: 'all 0.15s',
         cursor: 'pointer',
       }}
-    >{content}</button>
+    >
+      {icon}
+      <span style={{ fontFamily: theme.mono, fontSize: 9, fontWeight: 600, letterSpacing: 0.5 }}>{label}</span>
+    </button>
   )
 
   return (
@@ -132,22 +136,36 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
       display: 'flex', gap: 6,
       flexShrink: 0,
     }}>
-      {primaryBtn(onDislike, <><IconThumbDown size={14} /> LESS</>, feedback === 'down', 'dislike')}
-      {iconBtn(onAsk, <IconChat size={15} />)}
+      {primaryBtn(onDislike, (
+        <>
+          <span
+            key={feedback === 'down' ? 'dislike-on' : 'dislike-off'}
+            style={{ display: 'inline-flex', animation: feedback === 'down' ? 'thumbDown 0.5s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none' }}
+          ><IconThumbDown size={14} /></span>
+          {' LESS'}
+        </>
+      ), feedback === 'down', 'dislike')}
+
+      {iconBtn(onAsk, <IconChat size={14} />, 'ASK')}
+
       {iconBtn(onSave, (
         <span
           key={saved ? 'bm-on' : 'bm-off'}
-          style={{
-            display: 'inline-flex',
-            animation: saved ? 'stampIn 0.38s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none',
-            color: saved ? theme.accent : theme.ink,
-          }}
-        >
-          <IconBookmark size={15} filled={saved} />
-        </span>
-      ), saved)}
-      {iconBtn(onOpen, <IconExternal size={15} />)}
-      {primaryBtn(onLike, <>MORE <IconThumbUp size={14} /></>, feedback === 'up', 'like')}
+          style={{ display: 'inline-flex', animation: saved ? 'stampIn 0.38s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none', color: saved ? theme.accent : theme.ink }}
+        ><IconBookmark size={14} filled={saved} /></span>
+      ), saved ? 'SAVED' : 'SAVE', saved)}
+
+      {iconBtn(onOpen, <IconExternal size={14} />, 'READ')}
+
+      {primaryBtn(onLike, (
+        <>
+          {'MORE '}
+          <span
+            key={feedback === 'up' ? 'like-on' : 'like-off'}
+            style={{ display: 'inline-flex', animation: feedback === 'up' ? 'thumbUp 0.5s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none' }}
+          ><IconThumbUp size={14} /></span>
+        </>
+      ), feedback === 'up', 'like')}
     </div>
   )
 }

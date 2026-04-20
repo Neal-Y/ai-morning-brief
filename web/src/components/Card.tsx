@@ -129,7 +129,7 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
           textTransform: 'uppercase', marginBottom: 6,
         }}>Context</div>
         <p style={{
-          fontFamily: theme.sans, fontSize: 14, lineHeight: 1.55,
+          fontFamily: theme.sans, fontSize: 15, lineHeight: 1.55,
           color: theme.ink, margin: 0,
         }}>{article.context}</p>
       </div>
@@ -139,14 +139,13 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
         <div style={{ padding: '4px 24px 14px', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <div style={{ width: 3, height: 12, background: theme.accent, flexShrink: 0 }} />
           <span style={{
-            fontFamily: theme.sans, fontSize: 12, fontStyle: 'italic',
+            fontFamily: theme.sans, fontSize: 13, fontStyle: 'italic',
             color: theme.accent, fontWeight: 500,
           }}>{article.reason}</span>
         </div>
       )}
 
-      {/* Spacer pushes impact to bottom */}
-      <div style={{ flex: 1 }} />
+      <div style={{ flex: 1, maxHeight: 40 }} />
 
       {/* Engineering Impact callout */}
       <div style={{
@@ -167,7 +166,7 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
           textTransform: 'uppercase',
         }}>▸ Engineering Impact</div>
         <p style={{
-          fontFamily: theme.sans, fontSize: 14, lineHeight: 1.5,
+          fontFamily: theme.sans, fontSize: 15, lineHeight: 1.5,
           color: theme.ink, margin: 0, fontWeight: 500,
         }}>{article.engineeringImpact}</p>
       </div>
