@@ -1,0 +1,42 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur1"/>
+      <feGaussianBlur stdDeviation="10" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="glow-dot" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="8" result="blur1"/>
+      <feGaussianBlur stdDeviation="18" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="#0F1923"/>
+
+  <g filter="url(#glow)">
+    <!-- Bar 1: widest, single gap offset slightly left of center (gap at ~235) -->
+    <rect x="96" y="158" width="122" height="24" rx="12" fill="#E8A020"/>
+    <rect x="244" y="158" width="172" height="24" rx="12" fill="#E8A020"/>
+
+    <!-- Bar 2: solid -->
+    <rect x="148" y="213" width="216" height="24" rx="12" fill="#E8A020"/>
+
+    <!-- Bar 3: solid -->
+    <rect x="192" y="264" width="128" height="24" rx="12" fill="#E8A020"/>
+
+    <!-- Bar 4: solid, narrowest -->
+    <rect x="222" y="318" width="68" height="22" rx="11" fill="#E8A020"/>
+  </g>
+
+  <!-- Convergence dot -->
+  <circle cx="256" cy="380" r="10" fill="#E8A020" filter="url(#glow-dot)"/>
+</svg>

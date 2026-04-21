@@ -1,0 +1,23 @@
+{
+  "name": "Morning Brief",
+  "short_name": "Brief",
+  "description": "每日 AI 技術情報",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#0F1923",
+  "background_color": "#0F1923",
+  "icons": [
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

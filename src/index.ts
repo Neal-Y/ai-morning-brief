@@ -7,6 +7,7 @@ import type { AIProvider, ClassifiedArticle } from './ai/provider.js';
 import { classifyArticles } from './ai/classifier.js';
 import { generateBrief, buildDegradedBrief } from './ai/brief.js';
 import { formatBriefText, sendNtfy, sendErrorNotice, sendEmptyNotice } from './notify/ntfy.js';
+import { writeArticlesToDB } from './notify/db-writer.js';
 
 function getTaipeiDate(): string {
   return new Intl.DateTimeFormat('zh-TW', {
@@ -207,6 +208,14 @@ async function main(): Promise<void> {
   } catch (err) {
     console.error('[ntfy] Failed to send:', err instanceof Error ? err.message : err);
     process.exit(1);
+  }
+
+  // ── Stage 6: Persist to Turso DB ─────────────────────────────────────────
+  try {
+    await writeArticlesToDB(brief, selected, date);
+  } catch (err) {
+    console.error('[db-writer] Failed to write articles:', err instanceof Error ? err.message : err);
+    // Non-fatal: ntfy already sent, don't exit(1)
   }
 }
 
