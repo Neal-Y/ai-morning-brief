@@ -135,9 +135,11 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
     <div style={{
       position: 'absolute',
       left: 0, right: 0, bottom: 0,
-      height: '78%',
+      height: '82%',
       background: theme.card,
+      borderTopLeftRadius: 16, borderTopRightRadius: 16,
       borderTop: `2px solid ${theme.ink}`,
+      overflow: 'hidden',
       transform: entered ? 'translateY(0)' : 'translateY(100%)',
       transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
       zIndex: 30,
@@ -165,7 +167,7 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
           }}>{article.title}</div>
         </div>
         <button onClick={onClose} style={{
-          background: 'transparent', border: `1px solid ${theme.ink}`, borderRadius: 2,
+          background: 'transparent', border: `1px solid ${theme.ink}`, borderRadius: 8,
           width: 26, height: 26, flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: theme.mono, fontSize: 12, color: theme.ink,
@@ -222,7 +224,7 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
                 textAlign: 'left',
                 background: theme.card,
                 border: `1px dashed ${theme.ink}`,
-                borderRadius: 2,
+                borderRadius: 8,
                 padding: '10px 12px',
                 fontFamily: theme.serif, fontSize: 13, fontStyle: 'italic',
                 color: theme.ink, cursor: 'pointer',
@@ -236,7 +238,8 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
 
       <div style={{
         borderTop: `1px solid ${theme.ruleSoft}`,
-        padding: '10px 14px 14px',
+        padding: '10px 14px',
+        paddingBottom: 'max(14px, env(safe-area-inset-bottom))',
         display: 'flex', gap: 8,
       }}>
         <input
@@ -247,7 +250,7 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
           disabled={loading}
           style={{
             flex: 1, background: theme.bg,
-            border: `1px solid ${theme.ruleSoft}`, borderRadius: 2,
+            border: `1px solid ${theme.ruleSoft}`, borderRadius: 8,
             padding: '10px 12px',
             fontFamily: theme.sans, fontSize: 14, color: theme.ink,
             outline: 'none', opacity: loading ? 0.6 : 1,
@@ -258,7 +261,7 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
           disabled={loading || !input.trim()}
           style={{
             background: theme.ink, color: theme.card,
-            border: 'none', borderRadius: 2,
+            border: 'none', borderRadius: 8,
             padding: '0 16px',
             fontFamily: theme.mono, fontSize: 11, fontWeight: 600,
             letterSpacing: 0.5, cursor: loading ? 'not-allowed' : 'pointer',
