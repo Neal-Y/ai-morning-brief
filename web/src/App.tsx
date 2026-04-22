@@ -5,7 +5,7 @@ import { ArticleCard } from './components/Card.tsx'
 import { TopChrome, FeedbackBar } from './components/Chrome.tsx'
 import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
-import { formatBriefDateLong, getTaipeiDateString, getViewportHeight } from './date.ts'
+import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
 import type { Article, FeedResponse } from './types.ts'
 
 function parsePublishedAgo(classifiedAt: number | string | null | undefined): string {
@@ -44,7 +44,6 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [briefDate, setBriefDate] = useState(() => getTaipeiDateString())
-  const [viewportHeight, setViewportHeight] = useState(() => getViewportHeight())
   const [springing, setSpringing] = useState(false)
   const [streak, setStreak] = useState(() => parseInt(localStorage.getItem('mb_streak') ?? '1'))
   const [accent, setAccentState] = useState<string>(
@@ -78,20 +77,6 @@ export default function App() {
         setError('無法載入今日 brief')
         setLoading(false)
       })
-  }, [])
-
-  useEffect(() => {
-    const updateViewportHeight = () => setViewportHeight(getViewportHeight())
-    const visualViewport = window.visualViewport
-
-    updateViewportHeight()
-    visualViewport?.addEventListener('resize', updateViewportHeight)
-    window.addEventListener('resize', updateViewportHeight)
-
-    return () => {
-      visualViewport?.removeEventListener('resize', updateViewportHeight)
-      window.removeEventListener('resize', updateViewportHeight)
-    }
   }, [])
 
   const atCelebration = idx >= articles.length && articles.length > 0
@@ -221,7 +206,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [curArticle, showAsk, swipeX])
 
-  const appHeight = viewportHeight > 0 ? `${viewportHeight}px` : '100dvh'
+  const appHeight = '100dvh'
   const dateLabel = formatBriefDateLong(briefDate)
 
   if (loading || error || (!loading && articles.length === 0)) {

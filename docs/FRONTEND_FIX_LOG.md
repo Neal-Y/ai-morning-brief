@@ -196,45 +196,43 @@ and render real values instead of hardcoded placeholders.
 - type/build validation
 - `cd web && npm run build` passed
 
-## Issue 6: App height relied too heavily on `100dvh`
+## Issue 6: App shell height differed between Safari and standalone PWA
 
 ### Symptom
 
-Mobile Safari / PWA / keyboard open scenarios can behave differently from desktop emulation. Pure `100dvh` layouts are often acceptable on desktop but still shift or clip on real devices.
+When comparing Safari and the installed PWA side by side, the bottom action bar sat at almost the same vertical position in both. In Safari, the browser toolbar filled the lower area. In standalone PWA, that same space appeared as an empty black gap.
 
 ### Root Cause
 
-The app root used `100dvh` as the main layout height source. That does not always track the real visible viewport when browser chrome or keyboards change.
+A follow-up stabilization attempt switched the root app shell to `visualViewport.height` / `innerHeight`. On iPhone, that made the shell behave like the shorter in-browser viewport, so standalone PWA exposed the "reserved" lower area as empty space.
 
 ### Risk / User Impact
 
-- keyboard-open jitter
-- clipped content
-- layout shifts in Safari/PWA standalone mode
+- bottom action bar looked detached from the real screen bottom
+- Safari and PWA behaved inconsistently
+- it created the false impression that content spacing was still broken
 
 ### Fix
 
-Implemented a low-risk stabilization pass:
+Rolled the root app shell back to CSS `100dvh`.
 
-- added a viewport height helper
-- read from `window.visualViewport?.height ?? window.innerHeight`
-- synced root app height on resize
-- used the computed height for loading state and main app shell
+Important decision:
 
-This is intentionally conservative. It improves the common case without introducing heavy keyboard-specific layout code yet.
+- do not use `visualViewport` to size the whole app shell
+- if keyboard-specific issues remain, handle them only at the Ask/input layer
 
 ### Changed Files
 
-- `web/src/date.ts`
 - `web/src/App.tsx`
 
 ### Validation
 
+- compared Safari vs standalone screenshots
 - build validation passed
 
 ### Remaining Risk
 
-If a real iPhone still shows keyboard-related vertical shaking while typing inside Ask, the next step is a deeper `visualViewport` + keyboard avoidance pass specifically for the sheet/input region.
+If a real iPhone still shows keyboard-related vertical shaking while typing inside Ask, the next step is a deeper `visualViewport` + keyboard avoidance pass specifically for the sheet/input region, not for the whole app shell.
 
 ## Issue 7: Header date should match the brief date, not device-local "now"
 

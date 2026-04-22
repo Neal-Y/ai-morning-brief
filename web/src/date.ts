@@ -51,8 +51,3 @@ export function formatBriefDateShort(dateString: string): string {
   if (!date) return dateString
   return briefDateShortFormatter.format(date).toUpperCase()
 }
-
-export function getViewportHeight(): number {
-  if (typeof window === 'undefined') return 0
-  return Math.round(window.visualViewport?.height ?? window.innerHeight)
-}

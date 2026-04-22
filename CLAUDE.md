@@ -38,7 +38,7 @@ Vercel 部署成功上線 ✅（ai-morning-brief.vercel.app）。
   - Card 底部大空白已修正（Engineering Impact 貼底）
   - feed / seed / API 日期改為 Taipei date，不再用 UTC `toISOString().slice(0, 10)`
   - Celebration `READ` 不再寫死 `3`
-  - App root 高度改吃 `visualViewport` / `innerHeight`，降低手機 viewport 抖動
+  - App root 已回退為 CSS `100dvh`；`visualViewport` 不再拿來決定整頁高度，避免 standalone PWA 底部留白
   - 詳細交接看 `docs/FRONTEND_FIX_LOG.md`
 
 ### 待確認
