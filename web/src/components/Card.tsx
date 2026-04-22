@@ -147,7 +147,7 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
 
       {/* Engineering Impact callout */}
       <div style={{
-        margin: 'auto 16px 16px',
+        margin: '12px 16px 16px',
         background: theme.bg,
         border: `1.5px solid ${theme.ink}`,
         borderRadius: 2,

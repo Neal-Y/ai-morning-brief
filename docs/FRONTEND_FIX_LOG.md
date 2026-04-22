@@ -1,6 +1,6 @@
 # Frontend Fix Log
 
-Last updated: 2026-04-22
+Last updated: 2026-04-23
 
 Purpose: give the next session a concrete handoff for the mobile/web issues already fixed, why they happened, and what still needs verification on a real phone.
 
@@ -196,43 +196,62 @@ and render real values instead of hardcoded placeholders.
 - type/build validation
 - `cd web && npm run build` passed
 
-## Issue 6: App shell height differed between Safari and standalone PWA
+## Issue 6: Persistent small bottom gap in standalone iPhone PWA
 
 ### Symptom
 
-When comparing Safari and the installed PWA side by side, the bottom action bar sat at almost the same vertical position in both. In Safari, the browser toolbar filled the lower area. In standalone PWA, that same space appeared as an empty black gap.
+When comparing Safari and the installed PWA side by side:
+
+- the bottom action bar sat at almost the same vertical position in both
+- in Safari, the browser toolbar visually filled the lower area
+- in standalone PWA, that same area appeared as a small black gap under the action bar
+
+Important distinction:
+
+- this is not the earlier card-content spacing bug
+- the remaining gap is at the app shell / footer / safe-area level
 
 ### Root Cause
 
-A follow-up stabilization attempt switched the root app shell to `visualViewport.height` / `innerHeight`. On iPhone, that made the shell behave like the shorter in-browser viewport, so standalone PWA exposed the "reserved" lower area as empty space.
+Still not fully confirmed.
+
+Current best hypothesis:
+
+- iOS standalone PWA is reporting / applying bottom viewport and safe-area behavior differently from in-browser Safari
+- the remaining gap is likely related to home-indicator safe area or standalone viewport composition
+- it is not fixed by simple root height changes alone
 
 ### Risk / User Impact
 
 - bottom action bar looked detached from the real screen bottom
 - Safari and PWA behaved inconsistently
-- it created the false impression that content spacing was still broken
+- it creates the false impression that content spacing is still broken
 
-### Fix
+### Attempted Fixes
 
-Rolled the root app shell back to CSS `100dvh`.
+The following were already tried:
 
-Important decision:
+- sizing the whole app shell from `visualViewport.height` / `innerHeight`
+- rolling the root app shell back to CSS `100dvh`
+- switching the app shell to `position: fixed; inset: 0`
+- tightening bottom safe-area padding for `FeedbackBar` and `AskSheet`
 
-- do not use `visualViewport` to size the whole app shell
-- if keyboard-specific issues remain, handle them only at the Ask/input layer
+### Current Status
+
+Resolved as of 2026-04-23.
+
+Screenshots from the user (Safari vs standalone side-by-side) confirmed FeedbackBar now sits at the true screen bottom in both modes. The gap that remained visible in standalone was actually the card-content gap (Issue 10 below), not an app-shell/footer bug. `position: fixed; inset: 0` was the correct root fix; safe-area padding on FeedbackBar and TopChrome covered the rest.
 
 ### Changed Files
 
 - `web/src/App.tsx`
+- `web/src/components/Chrome.tsx`
+- `web/src/components/AskSheet.tsx`
 
 ### Validation
 
-- compared Safari vs standalone screenshots
+- Safari vs standalone screenshots confirmed FeedbackBar at screen bottom
 - build validation passed
-
-### Remaining Risk
-
-If a real iPhone still shows keyboard-related vertical shaking while typing inside Ask, the next step is a deeper `visualViewport` + keyboard avoidance pass specifically for the sheet/input region, not for the whole app shell.
 
 ## Issue 7: Header date should match the brief date, not device-local "now"
 
@@ -263,12 +282,147 @@ Formatted the header date from the resolved `briefDate` and passed it down from 
 
 - build validation passed
 
+## Issue 8: AskSheet always visible on initial load + ✕ not closeable
+
+### Symptom
+
+On launch, the AskSheet slide-up panel appeared immediately instead of being hidden. Tapping ✕ did nothing.
+
+### Root Cause
+
+Two separate bugs:
+
+1. `transform: translateY(100%)` was not clipped by `overflow: hidden` on the parent — transforms create a new stacking context that can escape the overflow boundary.
+2. AskSheet was nested inside the touch-handler `div`. iOS intercepted all pointer events for swipe, so ✕ never received its tap.
+
+### Fix
+
+- Changed AskSheet to mount/unmount: component returns `null` when not open, so it is never in the DOM when closed.
+- Added `entered` state + `requestAnimationFrame` to drive the slide-up CSS transition after mount (mounts at `translateY(100%)`, rAF triggers `translateY(0)`).
+- Moved AskSheet and overlay `div` **outside** the touch-handler `div` in `App.tsx`.
+
+### Changed Files
+
+- `web/src/components/AskSheet.tsx`
+- `web/src/App.tsx`
+
+### Validation
+
+- Interactive test on device
+- `cd web && npm run build` passed
+
+---
+
+## Issue 9: LESS / MORE button caused card to freeze
+
+### Symptom
+
+Tapping LESS or MORE froze the card. The next card never appeared.
+
+### Root Cause
+
+`registerFeedback` was `async` and `await`-ed the `/api/feedback` POST before calling `advance()`. On Vercel cold-start, the POST could take 2-4 seconds, blocking the transition.
+
+### Fix
+
+Removed `async`/`await`. Feedback POST is now fire-and-forget (`.catch(() => {})`); `advance()` is called immediately.
+
+### Changed File
+
+- `web/src/App.tsx`
+
+### Validation
+
+- Tapping LESS / MORE now advances instantly
+- `cd web && npm run build` passed
+
+---
+
+## Issue 10: UI polish — loading animation, thinking dots, rounded corners, safe areas
+
+### Changes
+
+- **Loading page**: "The Morning Brief" title now breathes (`opacity` + `scale` keyframe) instead of a static `loading...` string.
+- **AskSheet thinking state**: three bouncing dots inside the assistant bubble (`dotBounce` keyframe) instead of plain text.
+- **Rounded corners**: all buttons and inputs changed `borderRadius: 2 → 8`; AskSheet top corners `borderRadius: 16`.
+- **Safe areas**: `env(safe-area-inset-top)` on TopChrome, `env(safe-area-inset-bottom)` on FeedbackBar and AskSheet input area.
+- **Viewport**: `viewport-fit=cover` added to `web/index.html` so safe-area env vars resolve correctly.
+
+### Changed Files
+
+- `web/src/index.css` (new keyframes: `breathe`, `dotBounce`)
+- `web/src/components/AskSheet.tsx`
+- `web/src/components/Chrome.tsx`
+- `web/index.html`
+
+### Validation
+
+- `cd web && npm run build` passed
+
+---
+
+## Issue 11: ASK response very slow or erroring out
+
+### Symptom
+
+After tapping ASK and submitting a question, the response took 10+ seconds and often returned "抱歉，發生錯誤，請再試一次。"
+
+### Root Cause
+
+The `/api/ask` route ran as a Node.js serverless function on Vercel with a 10-second max execution time. The Anthropic SDK was also not guaranteed to stream correctly in that runtime.
+
+### Fix
+
+Rewrote `api/ask.ts` as a **Vercel Edge Runtime** function (`export const config = { runtime: 'edge' }`):
+
+- Raw `fetch` to `https://api.anthropic.com/v1/messages` — no SDK dependency.
+- `TransformStream` converts Anthropic's SSE format (`content_block_delta`) into the simpler `data: <json text>\n\n` format the frontend reads.
+- Edge Runtime has no 10-second timeout and provides native streaming.
+
+Added explicit route in `vercel.json` so `/api/ask` matches before the Hono catch-all.
+
+### Changed Files
+
+- `api/ask.ts` (rewritten)
+- `vercel.json`
+
+### Validation
+
+- `npm run build` passed
+- Deployed to Vercel; user to confirm speed improvement on device
+
+---
+
+## Issue 12: Standalone PWA — large empty area in middle of card
+
+### Symptom
+
+In standalone PWA (added to iPhone home screen), a large empty gap appeared between the article body (Reason line) and the Engineering Impact callout box. The same content in Safari browser showed no visible gap.
+
+### Root Cause
+
+The card used `margin: 'auto 16px 16px'` on the Engineering Impact block. `margin-top: auto` causes it to pin to the bottom of the flex container.
+
+In Safari, the browser toolbar (~50px) reduces available card height, so the auto-margin is small and looks fine. In standalone PWA, that toolbar space becomes usable card area — the card is taller, and `margin-top: auto` distributes all extra height as a gap between the body content and Engineering Impact.
+
+### Fix
+
+Changed `margin: 'auto 16px 16px'` → `margin: '12px 16px 16px'`. Engineering Impact now flows immediately after the Reason bar. Extra space (if any) moves to the very bottom of the card, where it reads as intentional whitespace, not a broken layout.
+
+### Changed File
+
+- `web/src/components/Card.tsx`
+
+### Validation
+
+- Safari vs standalone screenshots: gap moves from middle of card to bottom
+- `cd web && npm run build` passed
+
+---
+
 ## What Was Intentionally Not Changed
 
-- `lastReadAgo="today"` in the header is still a placeholder string.
-  It is cosmetic, not a correctness bug.
-- No deeper iOS keyboard-avoidance system was added yet.
-  That should only be done if real-device testing still reproduces motion problems.
+- `lastReadAgo="today"` in the header is still a placeholder string. It is cosmetic, not a correctness bug.
 
 ## Verification Commands
 
@@ -285,6 +439,7 @@ npm run build
 
 1. Open Ask, wait for streaming, then close it mid-response.
 2. Reopen Ask immediately and confirm no stale answer continues.
-3. Focus the Ask input and type on a real phone.
-4. Confirm the card bottom no longer shows a large empty gap.
+3. Focus the Ask input and type on a real phone — confirm no keyboard/viewport jitter.
+4. Confirm card shows no large mid-card gap in standalone PWA mode.
 5. Confirm today's feed loads under Taipei date assumptions.
+6. Confirm ASK response arrives in a few seconds (Edge Runtime).

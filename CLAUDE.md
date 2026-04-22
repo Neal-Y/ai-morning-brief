@@ -38,17 +38,28 @@ Vercel 部署成功上線 ✅（ai-morning-brief.vercel.app）。
   - Card 底部大空白已修正（Engineering Impact 貼底）
   - feed / seed / API 日期改為 Taipei date，不再用 UTC `toISOString().slice(0, 10)`
   - Celebration `READ` 不再寫死 `3`
-  - App root 已回退為 CSS `100dvh`；`visualViewport` 不再拿來決定整頁高度，避免 standalone PWA 底部留白
   - 詳細交接看 `docs/FRONTEND_FIX_LOG.md`
+- ✅ 前端穩定化第二輪（2026-04-23）
+  - AskSheet 初始顯示 bug 修正（mount/unmount 取代 translateY clip）
+  - ✕ 按鈕無法關閉修正（移出 touch handler div）
+  - LESS/MORE 卡住修正（fire-and-forget feedback POST，不再 await）
+  - Loading 頁面改為呼吸燈動畫
+  - AskSheet thinking 狀態改為三個跳動點
+  - 所有按鈕 borderRadius 2 → 8，AskSheet 頂角 16px
+  - safe-area insets 加到 TopChrome / FeedbackBar / AskSheet
+  - `viewport-fit=cover` 加到 index.html
+  - `api/ask.ts` 改成 Edge Runtime raw fetch，不用 SDK，直接串流
+  - iPhone standalone PWA 底部 action bar 貼底確認 ✅（Issue 6 resolved）
+  - Card 中間大空白修正（Engineering Impact 改為自然排版，不再 margin-top: auto 貼底）
 
 ### 待確認
-- `/api/feed` 在 Vercel 上是否正常回傳（目前 App 卡 LOADING，可能是 DB 連線問題）
+- `/api/feed` 在 Vercel 上是否正常回傳
   - 直接開 `/api/feed?date=今日日期` 確認 JSON 回傳
   - 若 500 → 去 Vercel dashboard → Functions log 查原因
 - GitHub Actions secrets 是否已有 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`（daily_sync.yml 需要）
+- ASK 速度是否明顯改善（Edge Runtime 已部署，需真機確認）
 - 真機 iPhone 上 Ask 輸入時是否仍有 keyboard / viewport 抖動
   - 若仍抖 → 做更深的 `visualViewport` + keyboard avoidance
-  - 先看 `docs/FRONTEND_FIX_LOG.md` 的 Remaining Risk，再決定是否要追加修
 
 ### 下一步（按優先順序）
 1. **Classifier 吃進 feedback**：feedback 已寫 DB，但 classifier prompt 還沒帶入最近 N 筆偏好（V2 Investment 環節核心）
@@ -89,7 +100,7 @@ web/
     Chrome.tsx        # TopChrome header + FeedbackBar
     AskSheet.tsx      # ASK 底部 sheet（真實 SSE streaming，multi-turn）
     Celebration.tsx   # 讀完畫面
-  src/date.ts         # brief date formatting + viewport height helper
+  src/date.ts         # brief date formatting helpers
   src/theme.ts        # 顏色 tokens + ACCENT_PRESETS
   src/types.ts        # Article, FeedResponse types
   src/index.css       # keyframe 動畫
