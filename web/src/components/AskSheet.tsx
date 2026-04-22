@@ -1,10 +1,15 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import type { Theme } from '../theme.ts'
 import type { Article } from '../types.ts'
 
 interface Message {
   role: 'user' | 'assistant'
   text: string
+}
+
+interface ApiMessage {
+  role: 'user' | 'assistant'
+  content: string
 }
 
 interface AskSheetProps {
@@ -24,15 +29,90 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', text: '讀完這篇，有幾個後端工程師視角的追問想跟你聊：' },
   ])
+  const [apiHistory, setApiHistory] = useState<ApiMessage[]>([])
   const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
 
-  const sendMessage = (text: string) => {
-    setMessages(prev => [
-      ...prev,
-      { role: 'user', text },
-      { role: 'assistant', text: '（SSE streaming 追問功能 Week 2 上線，敬請期待）' },
-    ])
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  // Reset state when article changes
+  useEffect(() => {
+    setMessages([{ role: 'assistant', text: '讀完這篇，有幾個後端工程師視角的追問想跟你聊：' }])
+    setApiHistory([])
     setInput('')
+    setLoading(false)
+  }, [article.id])
+
+  const hasConversation = messages.some(m => m.role === 'user')
+
+  const sendMessage = async (text: string) => {
+    if (loading || !text.trim()) return
+
+    const newApiHistory: ApiMessage[] = [...apiHistory, { role: 'user', content: text }]
+    setApiHistory(newApiHistory)
+    setMessages(prev => [...prev, { role: 'user', text }])
+    setInput('')
+    setLoading(true)
+    setMessages(prev => [...prev, { role: 'assistant', text: '' }])
+
+    let assistantText = ''
+
+    try {
+      const response = await fetch('/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          articleTitle: article.title,
+          articleSummary: article.summary,
+          articleContext: article.context,
+          messages: newApiHistory,
+        }),
+      })
+
+      if (!response.ok || !response.body) {
+        throw new Error(`HTTP ${response.status}`)
+      }
+
+      const reader = response.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const raw = line.slice(6)
+          if (raw === '[DONE]') continue
+          try {
+            assistantText += JSON.parse(raw) as string
+            setMessages(prev => [
+              ...prev.slice(0, -1),
+              { role: 'assistant', text: assistantText },
+            ])
+          } catch {
+            // skip malformed chunk
+          }
+        }
+      }
+
+      setApiHistory(prev => [...prev, { role: 'assistant', content: assistantText }])
+    } catch {
+      setMessages(prev => [
+        ...prev.slice(0, -1),
+        { role: 'assistant', text: '抱歉，發生錯誤，請再試一次。' },
+      ])
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -91,22 +171,32 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
             borderRadius: 2,
             fontFamily: theme.sans, fontSize: 14, lineHeight: 1.5,
             border: m.role === 'user' ? 'none' : `1px solid ${theme.ruleSoft}`,
-          }}>{m.text}</div>
+            whiteSpace: 'pre-wrap',
+          }}>
+            {m.text}
+            {loading && i === messages.length - 1 && m.role === 'assistant' && m.text === '' && (
+              <span style={{ opacity: 0.5 }}>▋</span>
+            )}
+          </div>
         ))}
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-          {SUGGESTIONS.map((s, i) => (
-            <button key={i} onClick={() => sendMessage(s)} style={{
-              textAlign: 'left',
-              background: theme.card,
-              border: `1px dashed ${theme.ink}`,
-              borderRadius: 2,
-              padding: '10px 12px',
-              fontFamily: theme.serif, fontSize: 13, fontStyle: 'italic',
-              color: theme.ink, cursor: 'pointer',
-            }}>→ {s}</button>
-          ))}
-        </div>
+        {!hasConversation && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
+            {SUGGESTIONS.map((s, i) => (
+              <button key={i} onClick={() => sendMessage(s)} style={{
+                textAlign: 'left',
+                background: theme.card,
+                border: `1px dashed ${theme.ink}`,
+                borderRadius: 2,
+                padding: '10px 12px',
+                fontFamily: theme.serif, fontSize: 13, fontStyle: 'italic',
+                color: theme.ink, cursor: 'pointer',
+              }}>→ {s}</button>
+            ))}
+          </div>
+        )}
+
+        <div ref={bottomRef} />
       </div>
 
       <div style={{
@@ -117,24 +207,27 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && input.trim() && sendMessage(input.trim())}
-          placeholder="繼續追問…"
+          onKeyDown={e => e.key === 'Enter' && !loading && sendMessage(input.trim())}
+          placeholder={loading ? '思考中…' : '繼續追問…'}
+          disabled={loading}
           style={{
             flex: 1, background: theme.bg,
             border: `1px solid ${theme.ruleSoft}`, borderRadius: 2,
             padding: '10px 12px',
             fontFamily: theme.sans, fontSize: 14, color: theme.ink,
-            outline: 'none',
+            outline: 'none', opacity: loading ? 0.6 : 1,
           }}
         />
         <button
-          onClick={() => input.trim() && sendMessage(input.trim())}
+          onClick={() => sendMessage(input.trim())}
+          disabled={loading || !input.trim()}
           style={{
             background: theme.ink, color: theme.card,
             border: 'none', borderRadius: 2,
             padding: '0 16px',
             fontFamily: theme.mono, fontSize: 11, fontWeight: 600,
-            letterSpacing: 0.5, cursor: 'pointer',
+            letterSpacing: 0.5, cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading || !input.trim() ? 0.5 : 1,
           }}
         >SEND</button>
       </div>
