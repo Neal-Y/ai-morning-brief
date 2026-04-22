@@ -206,13 +206,12 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [curArticle, showAsk, swipeX])
 
-  const appHeight = '100dvh'
   const dateLabel = formatBriefDateLong(briefDate)
 
   if (loading || error || (!loading && articles.length === 0)) {
     return (
       <div style={{
-        height: appHeight, background: T.bg,
+        position: 'fixed', inset: 0, background: T.bg,
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 10,
       }}>
@@ -236,7 +235,12 @@ export default function App() {
   const showFeedbackBar = !!curArticle && !showAsk
 
   return (
-    <div style={{ height: appHeight, background: T.bgDeep, display: 'flex', justifyContent: 'center' }}>
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: T.bgDeep,
+      display: 'flex',
+      justifyContent: 'center',
+    }}>
       <div style={{
         width: '100%', maxWidth: 480, height: '100%',
         background: T.bg,
