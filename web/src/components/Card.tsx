@@ -74,7 +74,7 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
         </div>
       )}
 
-      {/* Meta bar */}
+      {/* Meta bar — fixed at top */}
       <div style={{
         padding: '14px 24px 10px',
         display: 'flex', alignItems: 'center', gap: 8,
@@ -97,57 +97,73 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
         )}
       </div>
 
-      {/* Title */}
-      <div style={{ padding: '18px 24px 8px', flexShrink: 0 }}>
-        <h1 style={{
-          fontFamily: theme.serif,
-          fontSize: 30, lineHeight: 1.12, fontWeight: 700,
-          color: theme.ink,
-          letterSpacing: -0.3,
-          margin: 0,
-        }}>{article.title}</h1>
-      </div>
-
-      {/* Summary — serif italic standfirst */}
-      <div style={{ padding: '0 24px 14px', flexShrink: 0 }}>
-        <p style={{
-          fontFamily: theme.serif,
-          fontSize: 17, lineHeight: 1.42, fontWeight: 400, fontStyle: 'italic',
-          color: theme.inkMuted,
-          margin: 0,
-        }}>{article.summary}</p>
-      </div>
-
-      {/* Hairline rule */}
-      <div style={{ height: 1, background: theme.rule, margin: '0 24px', opacity: 0.8, flexShrink: 0 }} />
-
-      {/* Context block */}
-      <div style={{ padding: '14px 24px 10px', flexShrink: 0 }}>
-        <div style={{
-          fontFamily: theme.mono, fontSize: 9, fontWeight: 600,
-          color: theme.inkFaint, letterSpacing: 1.5,
-          textTransform: 'uppercase', marginBottom: 6,
-        }}>Context</div>
-        <p style={{
-          fontFamily: theme.sans, fontSize: 15, lineHeight: 1.55,
-          color: theme.ink, margin: 0,
-        }}>{article.context}</p>
-      </div>
-
-      {/* Reason bar */}
-      {article.reason && (
-        <div style={{ padding: '4px 24px 14px', display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-          <div style={{ width: 3, height: 12, background: theme.accent, flexShrink: 0 }} />
-          <span style={{
-            fontFamily: theme.sans, fontSize: 13, fontStyle: 'italic',
-            color: theme.accent, fontWeight: 500,
-          }}>{article.reason}</span>
+      {/* Scrollable body */}
+      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+        {/* Title */}
+        <div style={{ padding: '18px 24px 8px' }}>
+          <h1 style={{
+            fontFamily: theme.serif,
+            fontSize: 30, lineHeight: 1.12, fontWeight: 700,
+            color: theme.ink,
+            letterSpacing: -0.3,
+            margin: 0,
+          }}>{article.title}</h1>
         </div>
-      )}
 
-      {/* Engineering Impact callout */}
+        {/* Summary */}
+        <div style={{ padding: '0 24px 14px' }}>
+          <p style={{
+            fontFamily: theme.serif,
+            fontSize: 17, lineHeight: 1.42, fontWeight: 400, fontStyle: 'italic',
+            color: theme.inkMuted,
+            margin: 0,
+          }}>{article.summary}</p>
+        </div>
+
+        {/* Hairline rule */}
+        <div style={{ height: 1, background: theme.rule, margin: '0 24px', opacity: 0.8 }} />
+
+        {/* Context block */}
+        <div style={{ padding: '14px 24px 10px' }}>
+          <div style={{
+            fontFamily: theme.mono, fontSize: 9, fontWeight: 600,
+            color: theme.inkFaint, letterSpacing: 1.5,
+            textTransform: 'uppercase', marginBottom: 6,
+          }}>Context</div>
+          <p style={{
+            fontFamily: theme.sans, fontSize: 15, lineHeight: 1.55,
+            color: theme.ink, margin: 0,
+          }}>{article.context}</p>
+        </div>
+
+        {/* Reason bar */}
+        {article.reason && (
+          <div style={{ padding: '4px 24px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 3, height: 12, background: theme.accent, flexShrink: 0 }} />
+            <span style={{
+              fontFamily: theme.sans, fontSize: 13, fontStyle: 'italic',
+              color: theme.accent, fontWeight: 500,
+            }}>{article.reason}</span>
+          </div>
+        )}
+
+        {/* Skill tags */}
+        {article.skillTags.length > 0 && (
+          <div style={{ padding: '0 24px 12px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {article.skillTags.map(t => (
+              <span key={t} style={{
+                fontFamily: theme.mono, fontSize: 10,
+                color: theme.inkMuted,
+                letterSpacing: 0.3,
+              }}>{t}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Engineering Impact — always pinned to card bottom */}
       <div style={{
-        margin: '12px 16px 16px',
+        margin: '0 16px 16px',
         background: theme.bg,
         border: `1.5px solid ${theme.ink}`,
         borderRadius: 2,
@@ -168,21 +184,6 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
           color: theme.ink, margin: 0, fontWeight: 500,
         }}>{article.engineeringImpact}</p>
       </div>
-
-      {/* Skill tags */}
-      {article.skillTags.length > 0 && (
-        <div style={{
-          padding: '0 24px 12px', display: 'flex', gap: 6, flexWrap: 'wrap', flexShrink: 0,
-        }}>
-          {article.skillTags.map(t => (
-            <span key={t} style={{
-              fontFamily: theme.mono, fontSize: 10,
-              color: theme.inkMuted,
-              letterSpacing: 0.3,
-            }}>{t}</span>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
