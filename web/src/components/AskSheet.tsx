@@ -331,7 +331,7 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
       <div style={{
         borderTop: `1px solid ${theme.ruleSoft}`,
         padding: '10px 14px',
-        paddingBottom: 'max(14px, env(safe-area-inset-bottom))',
+        paddingBottom: 'clamp(10px, env(safe-area-inset-bottom), 24px)',
         display: 'flex', gap: 8,
       }}>
         <input

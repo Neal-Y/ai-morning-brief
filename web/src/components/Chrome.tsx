@@ -131,7 +131,7 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
       background: theme.bg,
       borderTop: `1.5px solid ${theme.ink}`,
       padding: '10px 16px',
-      paddingBottom: 'max(14px, env(safe-area-inset-bottom))',
+      paddingBottom: 'clamp(10px, env(safe-area-inset-bottom), 24px)',
       display: 'flex', gap: 6,
       flexShrink: 0,
     }}>
