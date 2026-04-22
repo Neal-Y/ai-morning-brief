@@ -26,16 +26,26 @@ React PWA (web/)
 ## 目前狀態
 
 整條 pipeline 跑通（RSS → LLM → ntfy → Turso DB ✅）。
-Vercel 部署已設定並 push，等待確認線上可用。
+Vercel 部署成功上線 ✅（ai-morning-brief.vercel.app）。
 
 ### 已完成
 - ✅ Vercel 部署：`api/index.ts`（hono/vercel handle）+ `vercel.json`
 - ✅ `/api/ask` SSE streaming（Anthropic Haiku 4.5，multi-turn）
 - ✅ AskSheet 真實串流（fetch + ReadableStream，不再是 stub）
 
-### 待確認 / 下一步
-- 確認 Vercel deploy 成功，iPhone 加主畫面測試
-- GitHub Actions secrets 是否已有 TURSO_*（daily_sync.yml 需要）
+### 待確認
+- `/api/feed` 在 Vercel 上是否正常回傳（目前 App 卡 LOADING，可能是 DB 連線問題）
+  - 直接開 `/api/feed?date=今日日期` 確認 JSON 回傳
+  - 若 500 → 去 Vercel dashboard → Functions log 查原因
+- GitHub Actions secrets 是否已有 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`（daily_sync.yml 需要）
+
+### 下一步（按優先順序）
+1. **Classifier 吃進 feedback**：feedback 已寫 DB，但 classifier prompt 還沒帶入最近 N 筆偏好（V2 Investment 環節核心）
+   - `src/ai/classifier.ts` 在 prompt 加入 feedback 查詢
+   - `src/db/client.ts` 加 `getRecentFeedback()` helper
+2. **Notion 整合**（F4）：🔖 → 自動建 Notion page，zero 手動整理
+3. **收藏時生成 quiz 題目**，存入 `quizzes` table
+4. **晨間 recall quiz**（打開 app 先回答 3/7/14 天前的卡）
 
 ## Project Structure
 
@@ -65,7 +75,7 @@ web/
   src/components/
     Card.tsx          # 文章卡片（editorial 設計）
     Chrome.tsx        # TopChrome header + FeedbackBar
-    AskSheet.tsx      # ASK 底部 sheet（⚠️ 目前是 stub，回假字串）
+    AskSheet.tsx      # ASK 底部 sheet（真實 SSE streaming，multi-turn）
     Celebration.tsx   # 讀完畫面
   src/theme.ts        # 顏色 tokens + ACCENT_PRESETS
   src/types.ts        # Article, FeedResponse types
