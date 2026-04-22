@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { streamSSE } from 'hono/streaming'
 import Anthropic from '@anthropic-ai/sdk'
 import { db } from '../db/client.js'
+import { getTaipeiDateString } from '../date.js'
 import { articles, feedback, saves } from '../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
 
@@ -16,7 +17,7 @@ const app = new Hono()
 app.use('*', cors())
 
 app.get('/api/feed', async (c) => {
-  const date = c.req.query('date') ?? new Date().toISOString().slice(0, 10)
+  const date = c.req.query('date') ?? getTaipeiDateString()
   const rows = await db
     .select()
     .from(articles)

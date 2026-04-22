@@ -1,9 +1,10 @@
 import 'dotenv/config'
 import { db } from '../src/db/client.js'
+import { getTaipeiDateString } from '../src/date.js'
 import { articles } from '../src/db/schema.js'
 import { createHash } from 'crypto'
 
-const today = new Date().toISOString().slice(0, 10)
+const today = getTaipeiDateString()
 
 const fakeArticles = [
   {

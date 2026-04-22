@@ -34,7 +34,59 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
   const [apiHistory, setApiHistory] = useState<ApiMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const messageListRef = useRef<HTMLDivElement>(null)
+  const shouldStickToBottomRef = useRef(true)
+  const streamedAssistantTextRef = useRef('')
+  const flushFrameRef = useRef<number | null>(null)
+  const activeRequestRef = useRef<AbortController | null>(null)
+
+  const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
+    const el = messageListRef.current
+    if (!el) return
+    el.scrollTo({ top: el.scrollHeight, behavior })
+  }
+
+  const updateStickiness = () => {
+    const el = messageListRef.current
+    if (!el) return
+    shouldStickToBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 48
+  }
+
+  const flushAssistantText = () => {
+    flushFrameRef.current = null
+    const nextText = streamedAssistantTextRef.current
+    setMessages(prev => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant' || last.text === nextText) return prev
+      return [...prev.slice(0, -1), { role: 'assistant', text: nextText }]
+    })
+  }
+
+  const scheduleAssistantFlush = () => {
+    if (flushFrameRef.current !== null) return
+    flushFrameRef.current = requestAnimationFrame(flushAssistantText)
+  }
+
+  const cancelScheduledFlush = () => {
+    if (flushFrameRef.current === null) return
+    cancelAnimationFrame(flushFrameRef.current)
+    flushFrameRef.current = null
+  }
+
+  const stopActiveRequest = () => {
+    activeRequestRef.current?.abort()
+    activeRequestRef.current = null
+    cancelScheduledFlush()
+    streamedAssistantTextRef.current = ''
+  }
+
+  const dropPendingAssistant = () => {
+    setMessages(prev => {
+      const last = prev[prev.length - 1]
+      if (!last || last.role !== 'assistant') return prev
+      return prev.slice(0, -1)
+    })
+  }
 
   useEffect(() => {
     if (visible) {
@@ -42,6 +94,12 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
       const id = requestAnimationFrame(() => setEntered(true))
       return () => cancelAnimationFrame(id)
     } else {
+      const hadActiveRequest = !!activeRequestRef.current
+      stopActiveRequest()
+      if (hadActiveRequest) {
+        setLoading(false)
+        dropPendingAssistant()
+      }
       setEntered(false)
       const t = setTimeout(() => setMounted(false), 350)
       return () => clearTimeout(t)
@@ -49,16 +107,35 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
   }, [visible])
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (!mounted || !shouldStickToBottomRef.current) return
+    const id = requestAnimationFrame(() => {
+      scrollToBottom(loading ? 'auto' : 'smooth')
+      updateStickiness()
+    })
+    return () => cancelAnimationFrame(id)
+  }, [messages, loading, mounted])
+
+  useEffect(() => {
+    if (!visible) return
+    shouldStickToBottomRef.current = true
+    const id = requestAnimationFrame(() => {
+      scrollToBottom('auto')
+      updateStickiness()
+    })
+    return () => cancelAnimationFrame(id)
+  }, [visible])
 
   // Reset state when article changes
   useEffect(() => {
+    stopActiveRequest()
     setMessages([{ role: 'assistant', text: '讀完這篇，有幾個後端工程師視角的追問想跟你聊：' }])
     setApiHistory([])
     setInput('')
     setLoading(false)
+    shouldStickToBottomRef.current = true
   }, [article.id])
+
+  useEffect(() => () => stopActiveRequest(), [])
 
   if (!mounted) return null
 
@@ -68,18 +145,22 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
     if (loading || !text.trim()) return
 
     const newApiHistory: ApiMessage[] = [...apiHistory, { role: 'user', content: text }]
+    streamedAssistantTextRef.current = ''
+    shouldStickToBottomRef.current = true
+    cancelScheduledFlush()
     setApiHistory(newApiHistory)
-    setMessages(prev => [...prev, { role: 'user', text }])
+    setMessages(prev => [...prev, { role: 'user', text }, { role: 'assistant', text: '' }])
     setInput('')
     setLoading(true)
-    setMessages(prev => [...prev, { role: 'assistant', text: '' }])
-
-    let assistantText = ''
 
     try {
+      const controller = new AbortController()
+      activeRequestRef.current = controller
+
       const response = await fetch('/api/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           articleTitle: article.title,
           articleSummary: article.summary,
@@ -109,24 +190,29 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
           const raw = line.slice(6)
           if (raw === '[DONE]') continue
           try {
-            assistantText += JSON.parse(raw) as string
-            setMessages(prev => [
-              ...prev.slice(0, -1),
-              { role: 'assistant', text: assistantText },
-            ])
+            streamedAssistantTextRef.current += JSON.parse(raw) as string
+            scheduleAssistantFlush()
           } catch {
             // skip malformed chunk
           }
         }
       }
 
-      setApiHistory(prev => [...prev, { role: 'assistant', content: assistantText }])
-    } catch {
+      cancelScheduledFlush()
+      flushAssistantText()
+      if (activeRequestRef.current === controller) {
+        activeRequestRef.current = null
+      }
+      setApiHistory(prev => [...prev, { role: 'assistant', content: streamedAssistantTextRef.current }])
+    } catch (error) {
+      cancelScheduledFlush()
+      if ((error as Error).name === 'AbortError') return
       setMessages(prev => [
         ...prev.slice(0, -1),
         { role: 'assistant', text: '抱歉，發生錯誤，請再試一次。' },
       ])
     } finally {
+      activeRequestRef.current = null
       setLoading(false)
     }
   }
@@ -175,9 +261,15 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
         }}>✕</button>
       </div>
 
-      <div style={{
+      <div
+        ref={messageListRef}
+        onScroll={updateStickiness}
+        style={{
         flex: 1, overflowY: 'auto', padding: '14px 20px',
         display: 'flex', flexDirection: 'column', gap: 12,
+        WebkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'contain',
+        overflowAnchor: 'none',
       }}>
         {messages.map((m, i) => {
           const isLoadingPlaceholder = loading && i === messages.length - 1 && m.role === 'assistant' && m.text === ''
@@ -233,7 +325,7 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
           </div>
         )}
 
-        <div ref={bottomRef} />
+        <div style={{ height: 1 }} />
       </div>
 
       <div style={{

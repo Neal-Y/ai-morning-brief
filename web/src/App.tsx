@@ -5,6 +5,7 @@ import { ArticleCard } from './components/Card.tsx'
 import { TopChrome, FeedbackBar } from './components/Chrome.tsx'
 import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
+import { formatBriefDateLong, getTaipeiDateString, getViewportHeight } from './date.ts'
 import type { Article, FeedResponse } from './types.ts'
 
 function parsePublishedAgo(classifiedAt: number | string | null | undefined): string {
@@ -38,10 +39,12 @@ export default function App() {
   const [swipeX, setSwipeX] = useState(0)
   const [transitioning, setTransitioning] = useState(false)
   const [showAsk, setShowAsk] = useState(false)
-const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
+  const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
   const [saved, setSaved] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [briefDate, setBriefDate] = useState(() => getTaipeiDateString())
+  const [viewportHeight, setViewportHeight] = useState(() => getViewportHeight())
   const [springing, setSpringing] = useState(false)
   const [streak, setStreak] = useState(() => parseInt(localStorage.getItem('mb_streak') ?? '1'))
   const [accent, setAccentState] = useState<string>(
@@ -59,10 +62,15 @@ const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
   }
 
   useEffect(() => {
-    const today = new Date().toISOString().slice(0, 10)
+    const today = getTaipeiDateString()
+    setBriefDate(today)
     fetch(`/api/feed?date=${today}`)
-      .then(r => r.json() as Promise<FeedResponse>)
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        return r.json() as Promise<FeedResponse>
+      })
       .then(data => {
+        setBriefDate(data.date ?? today)
         setArticles(parseArticles(data.articles))
         setLoading(false)
       })
@@ -70,6 +78,20 @@ const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
         setError('無法載入今日 brief')
         setLoading(false)
       })
+  }, [])
+
+  useEffect(() => {
+    const updateViewportHeight = () => setViewportHeight(getViewportHeight())
+    const visualViewport = window.visualViewport
+
+    updateViewportHeight()
+    visualViewport?.addEventListener('resize', updateViewportHeight)
+    window.addEventListener('resize', updateViewportHeight)
+
+    return () => {
+      visualViewport?.removeEventListener('resize', updateViewportHeight)
+      window.removeEventListener('resize', updateViewportHeight)
+    }
   }, [])
 
   const atCelebration = idx >= articles.length && articles.length > 0
@@ -178,7 +200,10 @@ const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false); return }
+      if (showAsk) {
+        if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false)
+        return
+      }
       if (!curArticle) return
       if (e.key === 'ArrowRight') {
         setFeedback(f => ({ ...f, [curArticle.id]: 'up' }))
@@ -196,10 +221,13 @@ if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false
     return () => window.removeEventListener('keydown', onKey)
   }, [curArticle, showAsk, swipeX])
 
+  const appHeight = viewportHeight > 0 ? `${viewportHeight}px` : '100dvh'
+  const dateLabel = formatBriefDateLong(briefDate)
+
   if (loading || error || (!loading && articles.length === 0)) {
     return (
       <div style={{
-        height: '100dvh', background: T.bg,
+        height: appHeight, background: T.bg,
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 10,
       }}>
@@ -221,12 +249,11 @@ if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false
   const savedCount = Object.values(saved).filter(Boolean).length
   const currentChrome = atCelebration ? articles.length - 1 : idx
   const showFeedbackBar = !!curArticle && !showAsk
-  const flyRotation = flyRotRef.current
 
   return (
-    <div style={{ minHeight: '100dvh', background: T.bgDeep, display: 'flex', justifyContent: 'center' }}>
+    <div style={{ height: appHeight, background: T.bgDeep, display: 'flex', justifyContent: 'center' }}>
       <div style={{
-        width: '100%', maxWidth: 480, height: '100dvh',
+        width: '100%', maxWidth: 480, height: '100%',
         background: T.bg,
         display: 'flex', flexDirection: 'column',
         position: 'relative', overflow: 'hidden',
@@ -239,6 +266,7 @@ if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false
             total={articles.length}
             streak={streak}
             lastReadAgo="today"
+            dateLabel={dateLabel}
           />
         )}
 
@@ -253,7 +281,13 @@ if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false
           onTouchEnd={onPointerUp}
         >
           {atCelebration ? (
-            <Celebration theme={T} savedCount={savedCount} streak={streak} />
+            <Celebration
+              theme={T}
+              savedCount={savedCount}
+              streak={streak}
+              readCount={articles.length}
+              briefDate={briefDate}
+            />
           ) : curArticle ? (
             <>
               {/* Next card — always visible underneath, floats up as current card flies */}

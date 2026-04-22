@@ -6,13 +6,10 @@ interface TopChromeProps {
   total: number
   streak: number
   lastReadAgo: string
+  dateLabel: string
 }
 
-export function TopChrome({ theme, current, total, streak, lastReadAgo }: TopChromeProps) {
-  const now = new Date()
-  const dateStr = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
-    .toUpperCase().replace(/,/g, ' ·')
-
+export function TopChrome({ theme, current, total, streak, lastReadAgo, dateLabel }: TopChromeProps) {
   return (
     <div style={{
       padding: '14px 20px 10px',
@@ -33,7 +30,7 @@ export function TopChrome({ theme, current, total, streak, lastReadAgo }: TopChr
         <div style={{
           fontFamily: theme.mono, fontSize: 9, color: theme.inkMuted,
           letterSpacing: 1, textTransform: 'uppercase',
-        }}>{dateStr}</div>
+        }}>{dateLabel}</div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

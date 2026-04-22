@@ -1,14 +1,16 @@
 import type { Theme } from '../theme.ts'
+import { formatBriefDateShort } from '../date.ts'
 
 interface CelebrationProps {
   theme: Theme
   savedCount: number
   streak: number
+  readCount: number
+  briefDate: string
 }
 
-export function Celebration({ theme, savedCount, streak }: CelebrationProps) {
-  const now = new Date()
-  const dateStr = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase()
+export function Celebration({ theme, savedCount, streak, readCount, briefDate }: CelebrationProps) {
+  const dateStr = formatBriefDateShort(briefDate)
 
   return (
     <div style={{
@@ -65,7 +67,7 @@ export function Celebration({ theme, savedCount, streak }: CelebrationProps) {
         marginBottom: 14,
       }}>
         {[
-          { label: 'READ', value: '3', unit: '篇' },
+          { label: 'READ', value: String(readCount), unit: '篇' },
           { label: 'SAVED', value: String(savedCount), unit: '篇' },
         ].map(s => (
           <div key={s.label} style={{

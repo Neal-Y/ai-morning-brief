@@ -32,12 +32,23 @@ Vercel 部署成功上線 ✅（ai-morning-brief.vercel.app）。
 - ✅ Vercel 部署：`api/index.ts`（hono/vercel handle）+ `vercel.json`
 - ✅ `/api/ask` SSE streaming（Anthropic Haiku 4.5，multi-turn）
 - ✅ AskSheet 真實串流（fetch + ReadableStream，不再是 stub）
+- ✅ 前端穩定化第一輪（2026-04-22）
+  - AskSheet 串流跳動已修正（rAF batching + stick-to-bottom scroll）
+  - Ask close / article switch 會 abort in-flight request
+  - Card 底部大空白已修正（Engineering Impact 貼底）
+  - feed / seed / API 日期改為 Taipei date，不再用 UTC `toISOString().slice(0, 10)`
+  - Celebration `READ` 不再寫死 `3`
+  - App root 高度改吃 `visualViewport` / `innerHeight`，降低手機 viewport 抖動
+  - 詳細交接看 `docs/FRONTEND_FIX_LOG.md`
 
 ### 待確認
 - `/api/feed` 在 Vercel 上是否正常回傳（目前 App 卡 LOADING，可能是 DB 連線問題）
   - 直接開 `/api/feed?date=今日日期` 確認 JSON 回傳
   - 若 500 → 去 Vercel dashboard → Functions log 查原因
 - GitHub Actions secrets 是否已有 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`（daily_sync.yml 需要）
+- 真機 iPhone 上 Ask 輸入時是否仍有 keyboard / viewport 抖動
+  - 若仍抖 → 做更深的 `visualViewport` + keyboard avoidance
+  - 先看 `docs/FRONTEND_FIX_LOG.md` 的 Remaining Risk，再決定是否要追加修
 
 ### 下一步（按優先順序）
 1. **Classifier 吃進 feedback**：feedback 已寫 DB，但 classifier prompt 還沒帶入最近 N 筆偏好（V2 Investment 環節核心）
@@ -66,6 +77,7 @@ src/
   db/client.ts        # Turso libSQL client
   api/app.ts          # Hono app 定義（所有路由，含 /api/ask SSE）
   api/server.ts       # 本地開發用：import app + serve（port 3001）
+  date.ts             # Taipei date helper（YYYY-MM-DD）
 web/
   public/
     manifest.json     # PWA manifest（name: Morning Brief）
@@ -77,6 +89,7 @@ web/
     Chrome.tsx        # TopChrome header + FeedbackBar
     AskSheet.tsx      # ASK 底部 sheet（真實 SSE streaming，multi-turn）
     Celebration.tsx   # 讀完畫面
+  src/date.ts         # brief date formatting + viewport height helper
   src/theme.ts        # 顏色 tokens + ACCENT_PRESETS
   src/types.ts        # Article, FeedResponse types
   src/index.css       # keyframe 動畫
@@ -85,6 +98,7 @@ scripts/
 docs/
   PROPOSAL.md         # V1 完整 spec
   V2_DESIGN.md        # V2 產品設計（部署、功能藍圖）
+  FRONTEND_FIX_LOG.md # 2026-04-22 前端修復交接紀錄（症狀/原因/修法/驗證）
 .github/workflows/
   daily_sync.yml      # cron 07:30 台北，secrets 包含 TURSO_* ✅
 ```
@@ -142,3 +156,4 @@ ANTHROPIC_API_KEY
 - 超過 10 輪對話後，編輯檔案前一律重新讀取該檔案。
 - 大任務拆成獨立模組，不要一個 Agent 硬扛。
 - nvm use 20 先跑，再跑任何 npm 指令。
+- 遇到前端 / mobile UI 問題，先讀 `docs/FRONTEND_FIX_LOG.md` 再動手。
