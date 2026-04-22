@@ -74,7 +74,7 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
         </div>
       )}
 
-      {/* Meta bar — fixed at top */}
+      {/* Meta bar */}
       <div style={{
         padding: '14px 24px 10px',
         display: 'flex', alignItems: 'center', gap: 8,
@@ -97,9 +97,8 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
         )}
       </div>
 
-      {/* Scrollable body */}
+      {/* Scrollable body — Engineering Impact lives inside so extra space falls below it */}
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-        {/* Title */}
         <div style={{ padding: '18px 24px 8px' }}>
           <h1 style={{
             fontFamily: theme.serif,
@@ -110,7 +109,6 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
           }}>{article.title}</h1>
         </div>
 
-        {/* Summary */}
         <div style={{ padding: '0 24px 14px' }}>
           <p style={{
             fontFamily: theme.serif,
@@ -120,10 +118,8 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
           }}>{article.summary}</p>
         </div>
 
-        {/* Hairline rule */}
         <div style={{ height: 1, background: theme.rule, margin: '0 24px', opacity: 0.8 }} />
 
-        {/* Context block */}
         <div style={{ padding: '14px 24px 10px' }}>
           <div style={{
             fontFamily: theme.mono, fontSize: 9, fontWeight: 600,
@@ -136,7 +132,6 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
           }}>{article.context}</p>
         </div>
 
-        {/* Reason bar */}
         {article.reason && (
           <div style={{ padding: '4px 24px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 3, height: 12, background: theme.accent, flexShrink: 0 }} />
@@ -147,7 +142,6 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
           </div>
         )}
 
-        {/* Skill tags */}
         {article.skillTags.length > 0 && (
           <div style={{ padding: '0 24px 12px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {article.skillTags.map(t => (
@@ -159,30 +153,28 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
             ))}
           </div>
         )}
-      </div>
 
-      {/* Engineering Impact — always pinned to card bottom */}
-      <div style={{
-        margin: '0 16px 16px',
-        background: theme.bg,
-        border: `1.5px solid ${theme.ink}`,
-        borderRadius: 2,
-        padding: '14px 16px',
-        position: 'relative',
-        flexShrink: 0,
-      }}>
         <div style={{
-          position: 'absolute', top: -8, left: 12,
-          background: theme.card,
-          padding: '0 6px',
-          fontFamily: theme.mono, fontSize: 9, fontWeight: 700,
-          color: theme.ink, letterSpacing: 2,
-          textTransform: 'uppercase',
-        }}>▸ Engineering Impact</div>
-        <p style={{
-          fontFamily: theme.sans, fontSize: 15, lineHeight: 1.5,
-          color: theme.ink, margin: 0, fontWeight: 500,
-        }}>{article.engineeringImpact}</p>
+          margin: '4px 16px 24px',
+          background: theme.bg,
+          border: `1.5px solid ${theme.ink}`,
+          borderRadius: 2,
+          padding: '14px 16px',
+          position: 'relative',
+        }}>
+          <div style={{
+            position: 'absolute', top: -8, left: 12,
+            background: theme.card,
+            padding: '0 6px',
+            fontFamily: theme.mono, fontSize: 9, fontWeight: 700,
+            color: theme.ink, letterSpacing: 2,
+            textTransform: 'uppercase',
+          }}>▸ Engineering Impact</div>
+          <p style={{
+            fontFamily: theme.sans, fontSize: 15, lineHeight: 1.5,
+            color: theme.ink, margin: 0, fontWeight: 500,
+          }}>{article.engineeringImpact}</p>
+        </div>
       </div>
     </div>
   )
