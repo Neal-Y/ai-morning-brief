@@ -51,8 +51,14 @@ Vercel 部署成功上線 ✅（ai-morning-brief.vercel.app）。
   - `api/ask.ts` 改成 Edge Runtime raw fetch，不用 SDK，直接串流
   - iPhone standalone PWA 底部 action bar 貼底確認 ✅（Issue 6 resolved）
   - Card 中間大空白修正（Engineering Impact 改為自然排版，不再 margin-top: auto 貼底）
+- ✅ 前端穩定化第三輪（2026-04-23 下午）
+  - Engineering Impact 移入 scrollable body，gap 掉到卡片最底下而非中間（Card.tsx）
+  - FeedbackBar / AskSheet safe-area 修正：`clamp(10px, env(safe-area-inset-bottom), 24px)` → `calc(10px + env(safe-area-inset-bottom))`
+    - 舊版 `clamp` 把 34px iPhone home indicator 截到 24px，按鈕下方漏出 ~10px 縫
+    - 新版永遠是 10px 呼吸空間 + 完整 safe area，不再 cap
 
-### 待確認
+### 待確認（真機 iPhone standalone PWA）
+- **FeedbackBar 底部縫**：`calc(10px + env(safe-area-inset-bottom))` 修完後，按鈕下方是否完全貼底（須 push → PWA 關掉重開）
 - `/api/feed` 在 Vercel 上是否正常回傳
   - 直接開 `/api/feed?date=今日日期` 確認 JSON 回傳
   - 若 500 → 去 Vercel dashboard → Functions log 查原因
