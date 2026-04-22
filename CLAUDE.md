@@ -13,33 +13,29 @@ GitHub Actions cron (daily 台北 07:30)
        ├─ notify/ntfy.ts   # ntfy 推播
        └─ notify/db-writer.ts  # upsert 文章到 Turso DB ✅
 
-Hono API server (src/api/server.ts)
+Hono API server (src/api/app.ts → api/index.ts on Vercel)
   ├─ GET  /api/feed?date=   # 從 Turso 讀當日文章
   ├─ POST /api/feedback     # 記錄 up/down
-  └─ POST /api/save         # 儲存文章
+  ├─ POST /api/save         # 儲存文章
+  └─ POST /api/ask          # Haiku 4.5 SSE streaming 追問
 
 React PWA (web/)
   └─ 每日讀取 /api/feed 顯示卡片
 ```
 
-## 最重要的待辦：Vercel 部署
+## 目前狀態
 
-**目前狀態**：整條 pipeline 本地跑通（RSS → LLM → ntfy → Turso DB ✅）。
-Web + API 只跑在 localhost，iPhone 連不到。
+整條 pipeline 跑通（RSS → LLM → ntfy → Turso DB ✅）。
+Vercel 部署已設定並 push，等待確認線上可用。
 
-**要做的事**：部署到 Vercel（V2_DESIGN.md 已決策），讓 iPhone 可以加主畫面使用。
+### 已完成
+- ✅ Vercel 部署：`api/index.ts`（hono/vercel handle）+ `vercel.json`
+- ✅ `/api/ask` SSE streaming（Anthropic Haiku 4.5，multi-turn）
+- ✅ AskSheet 真實串流（fetch + ReadableStream，不再是 stub）
 
-### Vercel 部署步驟
-1. Hono server 改成 Vercel serverless 入口（`api/index.ts` + `@hono/vercel` adapter）
-2. 根目錄加 `vercel.json`（routing：`/api/*` → serverless，`/` → web static）
-3. `vercel.json` 設定 build：web 用 Vite，api 用 tsc
-4. Vercel dashboard 設定 env vars（同 `.env`：TURSO_*, OPENAI_API_KEY, ANTHROPIC_API_KEY, NTFY_TOPIC）
-5. Push → 自動部署
-
-### 其次：AskSheet 真實 API（Week 2）
-- 目前 AskSheet SEND 回假字串
-- 需要 `POST /api/ask` endpoint（Hono + Anthropic Haiku 4.5 SSE streaming）
-- AskSheet.tsx 改成真的打 `/api/ask`，顯示 streaming 回應
+### 待確認 / 下一步
+- 確認 Vercel deploy 成功，iPhone 加主畫面測試
+- GitHub Actions secrets 是否已有 TURSO_*（daily_sync.yml 需要）
 
 ## Project Structure
 
@@ -58,7 +54,8 @@ src/
   notify/db-writer.ts # Turso upsert（BriefResult + ClassifiedArticle[] → articles table）
   db/schema.ts        # Drizzle schema（articles, feedback, saves, conversations, quizzes）
   db/client.ts        # Turso libSQL client
-  api/server.ts       # Hono API server（port 3001，本地開發用）
+  api/app.ts          # Hono app 定義（所有路由，含 /api/ask SSE）
+  api/server.ts       # 本地開發用：import app + serve（port 3001）
 web/
   public/
     manifest.json     # PWA manifest（name: Morning Brief）
