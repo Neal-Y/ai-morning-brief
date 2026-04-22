@@ -38,8 +38,7 @@ export default function App() {
   const [swipeX, setSwipeX] = useState(0)
   const [transitioning, setTransitioning] = useState(false)
   const [showAsk, setShowAsk] = useState(false)
-  const [showTweaks, setShowTweaks] = useState(false)
-  const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
+const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
   const [saved, setSaved] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -180,8 +179,7 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (showTweaks) { if (e.key === 'Escape') setShowTweaks(false); return }
-      if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false); return }
+if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false); return }
       if (!curArticle) return
       if (e.key === 'ArrowRight') {
         setFeedback(f => ({ ...f, [curArticle.id]: 'up' }))
@@ -326,77 +324,6 @@ export default function App() {
           />
         )}
 
-        {/* Tweaks panel */}
-        {showTweaks && (
-          <>
-            <div
-              onClick={() => setShowTweaks(false)}
-              style={{ position: 'absolute', inset: 0, zIndex: 40 }}
-            />
-            <div style={{
-              position: 'absolute',
-              bottom: showFeedbackBar ? 72 : 16,
-              right: 12,
-              zIndex: 41,
-              background: T.card,
-              border: `1.5px solid ${T.ink}`,
-              borderRadius: 2,
-              padding: '12px 14px',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 10,
-            }}>
-              <div style={{
-                fontFamily: T.mono, fontSize: 9, fontWeight: 600,
-                color: T.inkFaint, letterSpacing: 1.5, textTransform: 'uppercase',
-              }}>Accent</div>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {ACCENT_PRESETS.map(p => (
-                  <button
-                    key={p.value}
-                    onClick={(e) => { e.stopPropagation(); setAccent(p.value) }}
-                    title={p.name}
-                    style={{
-                      width: 22, height: 22,
-                      background: p.value,
-                      border: `2px solid ${accent === p.value ? T.ink : 'transparent'}`,
-                      borderRadius: 2,
-                      cursor: 'pointer',
-                      padding: 0,
-                      outline: 'none',
-                    }}
-                  />
-                ))}
-              </div>
-              <div style={{ fontFamily: T.mono, fontSize: 8, color: T.inkFaint, letterSpacing: 0.5 }}>
-                {ACCENT_PRESETS.find(p => p.value === accent)?.name ?? 'custom'}
-              </div>
-            </div>
-          </>
-        )}
-
-        {/* Tweaks button */}
-        <button
-          onClick={() => setShowTweaks(s => !s)}
-          style={{
-            position: 'absolute',
-            bottom: showFeedbackBar ? 52 : 8,
-            right: 12,
-            fontFamily: T.mono,
-            fontSize: 8,
-            fontWeight: 600,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-            color: showTweaks ? T.ink : T.inkFaint,
-            background: showTweaks ? T.ruleSoft : 'transparent',
-            border: `1px solid ${showTweaks ? T.ink : T.ruleSoft}`,
-            borderRadius: 2,
-            padding: '3px 7px',
-            cursor: 'pointer',
-            zIndex: 10,
-            transition: 'all 0.15s',
-          }}
-        >◈ TWEAKS</button>
       </div>
     </div>
   )
