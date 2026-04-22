@@ -26,6 +26,8 @@ const SUGGESTIONS = [
 ]
 
 export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
+  const [mounted, setMounted] = useState(false)
+  const [entered, setEntered] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
     { role: 'assistant', text: '讀完這篇，有幾個後端工程師視角的追問想跟你聊：' },
   ])
@@ -33,6 +35,18 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (visible) {
+      setMounted(true)
+      const id = requestAnimationFrame(() => setEntered(true))
+      return () => cancelAnimationFrame(id)
+    } else {
+      setEntered(false)
+      const t = setTimeout(() => setMounted(false), 350)
+      return () => clearTimeout(t)
+    }
+  }, [visible])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -45,6 +59,8 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
     setInput('')
     setLoading(false)
   }, [article.id])
+
+  if (!mounted) return null
 
   const hasConversation = messages.some(m => m.role === 'user')
 
@@ -122,11 +138,11 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
       height: '78%',
       background: theme.card,
       borderTop: `2px solid ${theme.ink}`,
-      transform: visible ? 'translateY(0)' : 'translateY(100%)',
+      transform: entered ? 'translateY(0)' : 'translateY(100%)',
       transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
       zIndex: 30,
       display: 'flex', flexDirection: 'column',
-      boxShadow: visible ? '0 -12px 40px rgba(26,22,18,0.18)' : 'none',
+      boxShadow: entered ? '0 -12px 40px rgba(26,22,18,0.18)' : 'none',
     }}>
       <div style={{ padding: '8px 0 2px', display: 'flex', justifyContent: 'center' }}>
         <div style={{ width: 32, height: 3, background: theme.ruleSoft }} />
@@ -166,8 +182,12 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
           if (isLoadingPlaceholder) return (
             <div key={i} style={{
               alignSelf: 'flex-start',
-              display: 'flex', gap: 5, alignItems: 'flex-end',
-              padding: '10px 4px',
+              maxWidth: '85%',
+              background: theme.bg,
+              border: `1px solid ${theme.ruleSoft}`,
+              borderRadius: 2,
+              padding: '10px 14px',
+              display: 'flex', gap: 5, alignItems: 'center',
             }}>
               {[0, 1, 2].map(j => (
                 <div key={j} style={{

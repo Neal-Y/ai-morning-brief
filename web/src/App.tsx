@@ -93,12 +93,12 @@ const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
     }, 260)
   }
 
-  const registerFeedback = async (signal: 'up' | 'down') => {
+  const registerFeedback = (signal: 'up' | 'down') => {
     if (!curArticle) return
     flyRotRef.current = Math.min(Math.abs(velocity.current.vx) * 30 + 12, 28)
     setSwipeX(signal === 'up' ? 120 : -120)
     setFeedback(f => ({ ...f, [curArticle.id]: signal }))
-    await fetch('/api/feedback', {
+    fetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ articleId: curArticle.id, signal }),
@@ -201,22 +201,15 @@ if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false
       <div style={{
         height: '100dvh', background: T.bg,
         display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: 16,
+        alignItems: 'center', justifyContent: 'center', gap: 10,
       }}>
-        <div style={{ fontFamily: T.serif, fontSize: 18, fontStyle: 'italic', color: T.ink }}>
+        <div style={{
+          fontFamily: T.serif, fontSize: 20, fontStyle: 'italic', color: T.ink,
+          animation: loading ? 'breathe 2.2s ease-in-out infinite' : undefined,
+        }}>
           The Morning Brief
         </div>
-        {loading ? (
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {[0, 1, 2].map(i => (
-              <div key={i} style={{
-                width: 7, height: 7, borderRadius: '50%',
-                background: T.accent,
-                animation: `breathe 1.6s ease-in-out ${i * 0.28}s infinite`,
-              }} />
-            ))}
-          </div>
-        ) : (
+        {!loading && (
           <div style={{ fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 1 }}>
             {error ?? 'NO ARTICLES TODAY'}
           </div>
