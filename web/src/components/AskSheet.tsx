@@ -161,24 +161,39 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
         flex: 1, overflowY: 'auto', padding: '14px 20px',
         display: 'flex', flexDirection: 'column', gap: 12,
       }}>
-        {messages.map((m, i) => (
-          <div key={i} style={{
-            alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-            maxWidth: '85%',
-            background: m.role === 'user' ? theme.ink : theme.bg,
-            color: m.role === 'user' ? theme.card : theme.ink,
-            padding: '10px 14px',
-            borderRadius: 2,
-            fontFamily: theme.sans, fontSize: 14, lineHeight: 1.5,
-            border: m.role === 'user' ? 'none' : `1px solid ${theme.ruleSoft}`,
-            whiteSpace: 'pre-wrap',
-          }}>
-            {m.text}
-            {loading && i === messages.length - 1 && m.role === 'assistant' && m.text === '' && (
-              <span style={{ opacity: 0.5 }}>▋</span>
-            )}
-          </div>
-        ))}
+        {messages.map((m, i) => {
+          const isLoadingPlaceholder = loading && i === messages.length - 1 && m.role === 'assistant' && m.text === ''
+          if (isLoadingPlaceholder) return (
+            <div key={i} style={{
+              alignSelf: 'flex-start',
+              display: 'flex', gap: 5, alignItems: 'flex-end',
+              padding: '10px 4px',
+            }}>
+              {[0, 1, 2].map(j => (
+                <div key={j} style={{
+                  width: 6, height: 6, borderRadius: '50%',
+                  background: theme.ink,
+                  animation: `dotBounce 1.1s ease-in-out ${j * 0.18}s infinite`,
+                }} />
+              ))}
+            </div>
+          )
+          return (
+            <div key={i} style={{
+              alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
+              maxWidth: '85%',
+              background: m.role === 'user' ? theme.ink : theme.bg,
+              color: m.role === 'user' ? theme.card : theme.ink,
+              padding: '10px 14px',
+              borderRadius: 2,
+              fontFamily: theme.sans, fontSize: 14, lineHeight: 1.5,
+              border: m.role === 'user' ? 'none' : `1px solid ${theme.ruleSoft}`,
+              whiteSpace: 'pre-wrap',
+            }}>
+              {m.text}
+            </div>
+          )
+        })}
 
         {!hasConversation && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>

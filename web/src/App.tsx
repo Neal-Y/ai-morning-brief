@@ -56,7 +56,6 @@ const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
   const setAccent = (value: string) => {
     setAccentState(value)
     localStorage.setItem('accent', value)
-    setShowTweaks(false)
   }
 
   useEffect(() => {
@@ -195,21 +194,33 @@ if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [curArticle, showAsk, showTweaks, swipeX])
+  }, [curArticle, showAsk, swipeX])
 
   if (loading || error || (!loading && articles.length === 0)) {
     return (
       <div style={{
         height: '100dvh', background: T.bg,
         display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center', gap: 12,
+        alignItems: 'center', justifyContent: 'center', gap: 16,
       }}>
         <div style={{ fontFamily: T.serif, fontSize: 18, fontStyle: 'italic', color: T.ink }}>
           The Morning Brief
         </div>
-        <div style={{ fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 1 }}>
-          {error ?? (loading ? 'LOADING...' : 'NO ARTICLES TODAY')}
-        </div>
+        {loading ? (
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            {[0, 1, 2].map(i => (
+              <div key={i} style={{
+                width: 7, height: 7, borderRadius: '50%',
+                background: T.accent,
+                animation: `breathe 1.6s ease-in-out ${i * 0.28}s infinite`,
+              }} />
+            ))}
+          </div>
+        ) : (
+          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 1 }}>
+            {error ?? 'NO ARTICLES TODAY'}
+          </div>
+        )}
       </div>
     )
   }
@@ -294,22 +305,23 @@ if (showAsk) { if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false
             </>
           ) : null}
 
-          {curArticle && (
-            <AskSheet
-              theme={T}
-              article={curArticle}
-              visible={showAsk}
-              onClose={() => setShowAsk(false)}
-            />
-          )}
-
-          {showAsk && (
-            <div
-              onClick={() => setShowAsk(false)}
-              style={{ position: 'absolute', inset: 0, background: 'rgba(26,22,18,0.35)', zIndex: 25 }}
-            />
-          )}
         </div>
+
+        {showAsk && (
+          <div
+            onClick={() => setShowAsk(false)}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(26,22,18,0.35)', zIndex: 25 }}
+          />
+        )}
+
+        {curArticle && (
+          <AskSheet
+            theme={T}
+            article={curArticle}
+            visible={showAsk}
+            onClose={() => setShowAsk(false)}
+          />
+        )}
 
         {showFeedbackBar && (
           <FeedbackBar
