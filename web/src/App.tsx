@@ -284,11 +284,22 @@ export default function App() {
   const currentChrome = atCelebration ? articles.length - 1 : idx
 
   return (
+    <>
+    {atCelebration && (
+      <Celebration
+        theme={T}
+        savedCount={savedCount}
+        streak={streak}
+        readCount={articles.length}
+        briefDate={briefDate}
+      />
+    )}
     <div style={{
       position: 'fixed', inset: 0,
       background: atCelebration ? T.card : T.bg,
       display: 'flex',
       justifyContent: 'center',
+      visibility: atCelebration ? 'hidden' : 'visible',
     }}>
       <div style={{
         width: '100%', maxWidth: 480, height: '100%',
@@ -364,16 +375,6 @@ export default function App() {
 
         </div>
 
-        {atCelebration && (
-          <Celebration
-            theme={T}
-            savedCount={savedCount}
-            streak={streak}
-            readCount={articles.length}
-            briefDate={briefDate}
-          />
-        )}
-
         {showAsk && (
           <div
             onClick={() => setShowAsk(false)}
@@ -418,5 +419,6 @@ export default function App() {
 
       </div>
     </div>
+    </>
   )
 }
