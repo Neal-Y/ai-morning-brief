@@ -39,56 +39,55 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
         margin: 0, marginBottom: 28,
       }}>You've read the morning. Come back tomorrow — the world won't slow down.</p>
 
-      <div style={{
-        background: theme.bg, border: `1.5px solid ${theme.ink}`, borderRadius: 2,
-        padding: '16px', marginBottom: 14,
-        display: 'flex', alignItems: 'center', gap: 14,
-      }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
         <div style={{
-          fontFamily: theme.serif, fontSize: 48, fontWeight: 900,
-          color: theme.accent, lineHeight: 1,
-        }}>{streak}</div>
-        <div style={{ flex: 1 }}>
+          background: theme.bg, border: `1.5px solid ${theme.ink}`, borderRadius: 2,
+          padding: '16px',
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
           <div style={{
-            fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
-            letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2,
-          }}>Day streak</div>
-          <div style={{
-            fontFamily: theme.sans, fontSize: 13, color: theme.ink, fontWeight: 500,
-          }}>keep going — see you tomorrow</div>
-        </div>
-        <div style={{ fontSize: 28 }}>🔥</div>
-      </div>
-
-      <div style={{
-        display: 'grid', gridTemplateColumns: '1fr 1fr',
-        gap: 1,
-        background: theme.ink, border: `1.5px solid ${theme.ink}`, borderRadius: 2,
-        marginBottom: 14,
-      }}>
-        {[
-          { label: 'READ', value: String(readCount), unit: '篇' },
-          { label: 'SAVED', value: String(savedCount), unit: '篇' },
-        ].map(s => (
-          <div key={s.label} style={{
-            background: theme.card, padding: '14px 8px', textAlign: 'center',
-          }}>
+            fontFamily: theme.serif, fontSize: 48, fontWeight: 900,
+            color: theme.accent, lineHeight: 1,
+          }}>{streak}</div>
+          <div style={{ flex: 1 }}>
             <div style={{
               fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
-              letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2,
-            }}>{s.label}</div>
+              letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2,
+            }}>Day streak</div>
             <div style={{
-              fontFamily: theme.serif, fontSize: 24, fontWeight: 700,
-              color: theme.ink, lineHeight: 1,
-            }}>{s.value}</div>
-            <div style={{
-              fontFamily: theme.sans, fontSize: 10, color: theme.inkMuted, marginTop: 2,
-            }}>{s.unit}</div>
+              fontFamily: theme.sans, fontSize: 13, color: theme.ink, fontWeight: 500,
+            }}>keep going — see you tomorrow</div>
           </div>
-        ))}
-      </div>
+          <div style={{ fontSize: 28 }}>🔥</div>
+        </div>
 
-      <div style={{ flex: 1 }} />
+        <div style={{
+          display: 'grid', gridTemplateColumns: '1fr 1fr',
+          gap: 1,
+          background: theme.ink, border: `1.5px solid ${theme.ink}`, borderRadius: 2,
+        }}>
+          {[
+            { label: 'READ', value: String(readCount), unit: '篇' },
+            { label: 'SAVED', value: String(savedCount), unit: '篇' },
+          ].map(s => (
+            <div key={s.label} style={{
+              background: theme.card, padding: '14px 8px', textAlign: 'center',
+            }}>
+              <div style={{
+                fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
+                letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2,
+              }}>{s.label}</div>
+              <div style={{
+                fontFamily: theme.serif, fontSize: 24, fontWeight: 700,
+                color: theme.ink, lineHeight: 1,
+              }}>{s.value}</div>
+              <div style={{
+                fontFamily: theme.sans, fontSize: 10, color: theme.inkMuted, marginTop: 2,
+              }}>{s.unit}</div>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div style={{
         fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
