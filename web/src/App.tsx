@@ -286,13 +286,13 @@ export default function App() {
   return (
     <div style={{
       position: 'fixed', inset: 0,
-      background: T.bg,
+      background: atCelebration ? T.card : T.bg,
       display: 'flex',
       justifyContent: 'center',
     }}>
       <div style={{
         width: '100%', maxWidth: 480, height: '100%',
-        background: T.bg,
+        background: atCelebration ? T.card : T.bg,
         display: 'flex', flexDirection: 'column',
         position: 'relative', overflow: 'hidden',
         fontFamily: T.sans,
