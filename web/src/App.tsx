@@ -357,8 +357,15 @@ export default function App() {
         {showFeedbackBar && (
           <div
             ref={feedbackBarRef}
-            style={{ position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 20 }}
+            style={{
+              position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20,
+              background: T.bg,
+              borderTop: `1.5px solid ${T.ink}`,
+              paddingBottom: 'env(safe-area-inset-bottom)',
+              display: 'flex', justifyContent: 'center',
+            }}
           >
+           <div style={{ width: '100%', maxWidth: 480 }}>
             <FeedbackBar
               theme={T}
               feedback={feedback[curArticle!.id]}
@@ -369,6 +376,7 @@ export default function App() {
               onSave={toggleSave}
               onOpen={() => window.open(curArticle!.url, '_blank')}
             />
+           </div>
           </div>
         )}
 
