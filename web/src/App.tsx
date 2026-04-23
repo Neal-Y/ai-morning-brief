@@ -232,16 +232,50 @@ export default function App() {
         alignItems: 'center', justifyContent: 'center', gap: 10,
       }}>
         <div style={{
-          fontFamily: T.serif, fontSize: 20, fontStyle: 'italic', color: T.ink,
+          fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
+          letterSpacing: 2.5, textTransform: 'uppercase',
+          position: 'absolute',
+          top: 'calc(24px + env(safe-area-inset-top))',
+        }}>
+          Vol. I · Daily Intelligence
+        </div>
+
+        <div style={{
+          fontFamily: T.serif, fontSize: 28, fontStyle: 'italic', color: T.ink,
+          fontWeight: 700, letterSpacing: -0.3,
           animation: loading ? 'breathe 2.2s ease-in-out infinite' : undefined,
         }}>
           The Morning Brief
         </div>
+
+        <div style={{
+          fontFamily: T.serif, fontSize: 13, fontStyle: 'italic',
+          color: T.inkMuted, letterSpacing: 0.2,
+          marginTop: -4,
+        }}>
+          a quiet briefing before the noise
+        </div>
+
         {!loading && (
-          <div style={{ fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 1 }}>
+          <div style={{
+            fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
+            letterSpacing: 1, marginTop: 8,
+          }}>
             {error ?? 'NO ARTICLES TODAY'}
           </div>
         )}
+
+        <div style={{
+          position: 'absolute',
+          bottom: 'calc(24px + env(safe-area-inset-bottom))',
+          display: 'flex', alignItems: 'center', gap: 10,
+          fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
+          letterSpacing: 2.5, textTransform: 'uppercase',
+        }}>
+          <div style={{ width: 20, height: 1, background: T.ruleSoft }} />
+          <span>{formatBriefDateLong(briefDate)} · Taipei</span>
+          <div style={{ width: 20, height: 1, background: T.ruleSoft }} />
+        </div>
       </div>
     )
   }
@@ -252,7 +286,7 @@ export default function App() {
   return (
     <div style={{
       position: 'fixed', inset: 0,
-      background: T.bgDeep,
+      background: T.bg,
       display: 'flex',
       justifyContent: 'center',
     }}>
