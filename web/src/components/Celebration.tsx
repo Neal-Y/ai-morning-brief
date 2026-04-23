@@ -17,6 +17,7 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
       height: '100%', background: theme.card,
       display: 'flex', flexDirection: 'column',
       padding: '40px 24px 24px',
+      paddingTop: 'max(40px, env(safe-area-inset-top))',
       overflowY: 'auto',
     }}>
       <div style={{ height: 3, background: theme.ink, marginBottom: 6 }} />
@@ -39,7 +40,7 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
         margin: 0, marginBottom: 28,
       }}>You've read the morning. Come back tomorrow — the world won't slow down.</p>
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 14 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div style={{
           background: theme.bg, border: `1.5px solid ${theme.ink}`, borderRadius: 2,
           padding: '16px',
@@ -92,6 +93,7 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
       <div style={{
         fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
         letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center',
+        marginTop: 'auto', paddingTop: 24,
       }}>— next edition · tomorrow 07:30 —</div>
     </div>
   )
