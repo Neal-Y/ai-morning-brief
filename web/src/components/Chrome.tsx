@@ -75,6 +75,8 @@ interface FeedbackBarProps {
 }
 
 export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, onSave, onOpen }: FeedbackBarProps) {
+  const bottomSafePad = 'max(6px, calc(env(safe-area-inset-bottom) - 18px))'
+
   const primaryBtn = (
     onClick: () => void,
     content: React.ReactNode,
@@ -131,7 +133,7 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
       background: theme.bg,
       borderTop: `1.5px solid ${theme.ink}`,
       padding: '10px 16px',
-      paddingBottom: 'env(safe-area-inset-bottom)',
+      paddingBottom: bottomSafePad,
       display: 'flex', gap: 6,
       flexShrink: 0,
     }}>
