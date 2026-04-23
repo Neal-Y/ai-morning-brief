@@ -75,8 +75,6 @@ interface FeedbackBarProps {
 }
 
 export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, onSave, onOpen }: FeedbackBarProps) {
-  const bottomSafePad = 'max(6px, calc(env(safe-area-inset-bottom) - 48px))'
-
   const primaryBtn = (
     onClick: () => void,
     content: React.ReactNode,
@@ -91,7 +89,7 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
         color: active ? theme.card : theme.ink,
         border: `1.5px solid ${theme.ink}`,
         borderRadius: 8,
-        padding: '10px 0',
+        padding: '8px 0',
         flex: 1,
         fontFamily: theme.mono, fontSize: 12, fontWeight: 700,
         letterSpacing: 0.5,
@@ -116,7 +114,7 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
         color: active ? theme.card : theme.ink,
         border: `1.5px solid ${theme.ink}`,
         borderRadius: 8,
-        padding: '8px 0',
+        padding: '6px 0',
         flex: 1,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
         transition: 'all 0.15s',
@@ -124,7 +122,7 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
       }}
     >
       {icon}
-      <span style={{ fontFamily: theme.mono, fontSize: 9, fontWeight: 600, letterSpacing: 0.5 }}>{label}</span>
+      <span style={{ fontFamily: theme.mono, fontSize: 8, fontWeight: 600, letterSpacing: 0.5, lineHeight: 1 }}>{label}</span>
     </button>
   )
 
@@ -132,9 +130,8 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
     <div style={{
       background: theme.bg,
       borderTop: `1.5px solid ${theme.ink}`,
-      padding: '10px 16px',
-      paddingBottom: bottomSafePad,
-      display: 'flex', gap: 6,
+      padding: '4px 16px 0',
+      display: 'flex', gap: 5,
       flexShrink: 0,
     }}>
       {primaryBtn(onDislike, (

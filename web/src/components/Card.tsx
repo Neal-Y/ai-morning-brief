@@ -29,9 +29,10 @@ interface ArticleCardProps {
   article: Article
   theme: Theme
   swipeX?: number
+  bottomInset?: string
 }
 
-export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
+export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }: ArticleCardProps) {
   const tintOpacity = Math.min(Math.abs(swipeX) / 200, 0.35)
   const tintColor = swipeX > 0 ? theme.positive : theme.negative
 
@@ -98,7 +99,15 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
       </div>
 
       {/* Scrollable body — Engineering Impact lives inside so extra space falls below it */}
-      <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          paddingBottom: bottomInset,
+        } as React.CSSProperties}
+      >
         <div style={{ padding: '18px 24px 8px' }}>
           <h1 style={{
             fontFamily: theme.serif,
