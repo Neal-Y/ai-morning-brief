@@ -14,7 +14,8 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
 
   return (
     <div style={{
-      height: '100%', background: theme.card,
+      position: 'fixed', inset: 0,
+      background: theme.card,
       display: 'flex', flexDirection: 'column',
       paddingTop: 'max(40px, env(safe-area-inset-top))',
       paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
