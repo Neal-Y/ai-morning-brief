@@ -181,6 +181,12 @@ export default function App() {
   }
 
   useEffect(() => {
+    const color = atCelebration ? T.card : T.bg
+    document.documentElement.style.background = color
+    document.body.style.background = color
+  }, [atCelebration, T.bg, T.card])
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (showAsk) {
         if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false)
