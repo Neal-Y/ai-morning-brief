@@ -56,16 +56,20 @@ Vercel 部署成功上線 ✅（ai-morning-brief.vercel.app）。
   - FeedbackBar / AskSheet safe-area 修正：`clamp(10px, env(safe-area-inset-bottom), 24px)` → `calc(10px + env(safe-area-inset-bottom))`
     - 舊版 `clamp` 把 34px iPhone home indicator 截到 24px，按鈕下方漏出 ~10px 縫
     - 新版永遠是 10px 呼吸空間 + 完整 safe area，不再 cap
+- ✅ 前端穩定化第四輪（2026-04-23 晚）
+  - Celebration 頁面底部暗色帶已修正（Issue 13）
+    - 根本原因：perspective 祖先阻擋 `position: fixed` 跨越 viewport；html/body 背景色錯配
+    - 解法：Celebration 移出 app wrapper fragment；同步 html/body.style.background 與卡片色同調
+    - 結果：暗色帶消失，PWA 獨立模式現在正常
+  - Celebration stats 卡片置中排版，安全區域間距修正（頂部 max(40px, env(safe-area-inset-top))，底部 max(24px, env(safe-area-inset-bottom))）
+  - 動態島重疊已修正（safe-area padding）
+  - Loading 頁面重設計：頂部/底部編輯風格元素，呼吸燈動畫改為主標題
 
 ### 待確認（真機 iPhone standalone PWA）
-- **FeedbackBar 底部縫**：`calc(10px + env(safe-area-inset-bottom))` 修完後，按鈕下方是否完全貼底（須 push → PWA 關掉重開）
 - `/api/feed` 在 Vercel 上是否正常回傳
   - 直接開 `/api/feed?date=今日日期` 確認 JSON 回傳
   - 若 500 → 去 Vercel dashboard → Functions log 查原因
 - GitHub Actions secrets 是否已有 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`（daily_sync.yml 需要）
-- ASK 速度是否明顯改善（Edge Runtime 已部署，需真機確認）
-- 真機 iPhone 上 Ask 輸入時是否仍有 keyboard / viewport 抖動
-  - 若仍抖 → 做更深的 `visualViewport` + keyboard avoidance
 
 ### 下一步（按優先順序）
 1. **Classifier 吃進 feedback**：feedback 已寫 DB，但 classifier prompt 還沒帶入最近 N 筆偏好（V2 Investment 環節核心）

@@ -1,6 +1,6 @@
 # Frontend Fix Log
 
-Last updated: 2026-04-23
+Last updated: 2026-04-23 (evening)
 
 Purpose: give the next session a concrete handoff for the mobile/web issues already fixed, why they happened, and what still needs verification on a real phone.
 
@@ -416,6 +416,53 @@ Changed `margin: 'auto 16px 16px'` → `margin: '12px 16px 16px'`. Engineering I
 ### Validation
 
 - Safari vs standalone screenshots: gap moves from middle of card to bottom
+- `cd web && npm run build` passed
+
+---
+
+## Issue 13: Celebration page dark band at bottom
+
+### Symptom
+
+The end-of-day Celebration screen ("That's it for today") had a persistent dark color stripe at the very bottom, below the stats cards, when running as a standalone iPhone PWA. The band was darker than the main card background and could not be removed by padding adjustments.
+
+### Root Cause
+
+Two layered issues:
+
+1. **Perspective ancestor**: Celebration was originally rendered inside a parent `div` with `perspective: 1200px`. A `perspective` creates a new stacking context and containing block for `position: fixed` children, so `position: fixed; inset: 0` was clipped to that ancestor, not the true viewport.
+2. **Background color mismatch**: After moving Celebration out of `perspective`, the `html` and `body` still had hardcoded `background: #14110D` (T.bg) while the Celebration used `#1F1B15` (T.card). Any gap in iOS PWA fixed-positioning let the body background show through.
+
+### Risk / User Impact
+
+- The dark band looked like a visual glitch in the PWA.
+- It undermined user confidence in the end-of-session summary screen.
+- The band persisted even when adjusting padding, making it hard to debug.
+
+### Fix
+
+Three-layer fix:
+
+1. Moved `<Celebration>` to a React root-level Fragment, fully outside the main app wrapper. No ancestor has `overflow: hidden`, `perspective`, or `transform`, so `position: fixed; inset: 0` now truly covers the viewport.
+2. Main app wrapper uses `visibility: atCelebration ? 'hidden' : 'visible'` so it never competes for space.
+3. Added a `useEffect` in `App.tsx` that syncs `document.documentElement.style.background` and `document.body.style.background` to `T.card` when `atCelebration`, `T.bg` otherwise. This is the final safety net — even if iOS PWA has fixed-positioning quirks, the underlying html/body is the same color as the content.
+
+Also refactored Celebration layout:
+- header stays at top
+- stats cards vertically centered in `flex: 1; justifyContent: center`
+- footer pinned at end
+- added `paddingTop: 'max(40px, env(safe-area-inset-top))'` and `paddingBottom: 'max(24px, env(safe-area-inset-bottom))'` for safe-area respect
+
+### Changed Files
+
+- `web/src/App.tsx`
+- `web/src/components/Celebration.tsx`
+- `web/src/index.css`
+
+### Validation
+
+- Visual inspection: dark band no longer appears
+- Safe area insets properly respected on both iPhone top notch and bottom home indicator
 - `cd web && npm run build` passed
 
 ---
