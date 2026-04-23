@@ -209,6 +209,25 @@ export default function App() {
   }, [curArticle, showAsk, swipeX])
 
   const dateLabel = formatBriefDateLong(briefDate)
+  const showFeedbackBar = !!curArticle && !showAsk
+  const cardBottomInset = showFeedbackBar ? `${feedbackBarHeight}px` : '0px'
+
+  useLayoutEffect(() => {
+    if (!showFeedbackBar || !feedbackBarRef.current) {
+      setFeedbackBarHeight(0)
+      return
+    }
+    const el = feedbackBarRef.current
+    const updateHeight = () => setFeedbackBarHeight(el.getBoundingClientRect().height)
+    updateHeight()
+    const ro = new ResizeObserver(updateHeight)
+    ro.observe(el)
+    window.addEventListener('resize', updateHeight)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', updateHeight)
+    }
+  }, [showFeedbackBar, curArticle?.id])
 
   if (loading || error || (!loading && articles.length === 0)) {
     return (
@@ -234,29 +253,6 @@ export default function App() {
 
   const savedCount = Object.values(saved).filter(Boolean).length
   const currentChrome = atCelebration ? articles.length - 1 : idx
-  const showFeedbackBar = !!curArticle && !showAsk
-  const cardBottomInset = showFeedbackBar ? `${feedbackBarHeight}px` : '0px'
-
-  useLayoutEffect(() => {
-    if (!showFeedbackBar || !feedbackBarRef.current) {
-      setFeedbackBarHeight(0)
-      return
-    }
-
-    const el = feedbackBarRef.current
-    const updateHeight = () => setFeedbackBarHeight(el.getBoundingClientRect().height)
-
-    updateHeight()
-
-    const ro = new ResizeObserver(updateHeight)
-    ro.observe(el)
-    window.addEventListener('resize', updateHeight)
-
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', updateHeight)
-    }
-  }, [showFeedbackBar, curArticle?.id])
 
   return (
     <div style={{
