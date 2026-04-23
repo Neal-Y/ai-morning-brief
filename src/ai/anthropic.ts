@@ -10,11 +10,22 @@ export class AnthropicProvider implements AIProvider {
     this.client = new Anthropic({ apiKey });
   }
 
-  async call(systemPrompt: string, userPrompt: string): Promise<string> {
+  async call(system: string | string[], userPrompt: string): Promise<string> {
+    // string → single cached block (legacy behavior).
+    // string[] → first element cached, rest appended without cache_control so
+    // a variable suffix (e.g. daily feedback context) doesn't bust the prefix cache.
+    const systemBlocks = typeof system === 'string'
+      ? [{ type: 'text' as const, text: system, cache_control: { type: 'ephemeral' as const } }]
+      : system
+          .filter((s) => s.length > 0)
+          .map((text, i) => (i === 0
+            ? { type: 'text' as const, text, cache_control: { type: 'ephemeral' as const } }
+            : { type: 'text' as const, text }));
+
     const response = await this.client.messages.create({
       model: MODEL_IDS['anthropic']!,
       max_tokens: 2048,
-      system: [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      system: systemBlocks,
       messages: [
         { role: 'user', content: userPrompt },
       ],

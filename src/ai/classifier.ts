@@ -2,6 +2,8 @@ import type { AIProvider, ArticleSummary, ArticleClassification, Category, Bucke
 import { extractJson } from './provider.js';
 import { withRetry } from './retry.js';
 import { RETRY_DELAY_MS } from '../config.js';
+import type { FeedbackRow } from '../db/client.js';
+import { FEEDBACK_WINDOW_DAYS } from '../db/client.js';
 
 const CLASSIFIER_SYSTEM = `You are a strict AI news classifier for an engineering-focused daily brief.
 
@@ -139,6 +141,56 @@ function sanitize(text: string): string {
   return text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
+const MIN_DOWNVOTES_FOR_NEGATIVE_SIGNAL = 2;
+
+/**
+ * Build a preference section to append to the classifier system prompt.
+ * Appended at the END so the CLASSIFIER_SYSTEM prefix stays cacheable.
+ *
+ * Rules:
+ *  - 👍 articles listed as-is (up to 10 most recent, enforced by caller's limit).
+ *  - 👎 only counted per-category; a single downvote is not enough signal
+ *    (someone might just be tired that day). Require >= 2 in a category.
+ *  - Explicitly instruct the LLM that bucket rules override preference, and
+ *    absence of a category in the list is NOT a negative signal.
+ */
+export function buildPreferenceContext(rows: FeedbackRow[]): string {
+  if (rows.length === 0) return '';
+
+  const liked = rows.filter((r) => r.signal === 'up').slice(0, 10);
+  const downRows = rows.filter((r) => r.signal === 'down');
+
+  const downCountByCategory = new Map<string, number>();
+  for (const r of downRows) {
+    downCountByCategory.set(r.categoryTag, (downCountByCategory.get(r.categoryTag) ?? 0) + 1);
+  }
+  const penalizedCategories = [...downCountByCategory.entries()]
+    .filter(([, count]) => count >= MIN_DOWNVOTES_FOR_NEGATIVE_SIGNAL)
+    .map(([cat]) => cat);
+
+  if (liked.length === 0 && penalizedCategories.length === 0) return '';
+
+  const likedBlock = liked.length > 0
+    ? `## 使用者 👍 過的文章\n${liked.map((r) => `- [${r.categoryTag}] ${sanitize(r.title)}`).join('\n')}`
+    : '';
+
+  const penalizedBlock = penalizedCategories.length > 0
+    ? `## 累積 ≥${MIN_DOWNVOTES_FOR_NEGATIVE_SIGNAL} 次 👎 的 category（輕微降分即可，不要完全排除）\n${penalizedCategories.map((c) => `- ${c}`).join('\n')}`
+    : '';
+
+  return `
+
+## 使用者偏好（近 ${FEEDBACK_WINDOW_DAYS} 天，僅供參考）
+
+${[likedBlock, penalizedBlock].filter(Boolean).join('\n\n')}
+
+偏好套用規則（嚴格）：
+1. Bucket / renderLevel / recommendation 的判準永遠以上方核心規則為主，不可為了迎合偏好把 DROP 拉成 HARD_TECH_AI。
+2. 「沒出現在上方列表」的 category 不代表使用者不喜歡，只是沒訊號，維持中立評分。
+3. engineeringImpact 仍必須具體陳述工程影響，禁止用「符合使用者偏好」當理由。
+4. 偏好只用來在分數相近時輕微傾斜（±5 分以內），不可主導 bucket 結果。`;
+}
+
 function buildClassifierUserPrompt(article: ArticleSummary): string {
   return `TITLE:
 ${sanitize(article.title)}
@@ -200,11 +252,12 @@ function parseClassification(raw: string): ArticleClassification {
 
 async function classifyOne(
   provider: AIProvider,
-  article: ArticleSummary
+  article: ArticleSummary,
+  systemParts: string[]
 ): Promise<ArticleClassification> {
   return withRetry(
     async () => {
-      const raw = await provider.call(CLASSIFIER_SYSTEM, buildClassifierUserPrompt(article));
+      const raw = await provider.call(systemParts, buildClassifierUserPrompt(article));
       return parseClassification(raw);
     },
     { retries: 1, delayMs: RETRY_DELAY_MS, label: `classify:${article.title.slice(0, 40)}` }
@@ -252,14 +305,21 @@ const CLASSIFIER_CONCURRENCY = 3;
 
 export async function classifyArticles(
   provider: AIProvider,
-  articles: ArticleSummary[]
+  articles: ArticleSummary[],
+  preferenceContext: string = ''
 ): Promise<ArticleClassification[]> {
   if (articles.length === 0) return [];
+
+  // Split into [stable prefix, variable suffix] so the stable CLASSIFIER_SYSTEM
+  // stays cached across days even when daily feedback context changes.
+  const systemParts = preferenceContext
+    ? [CLASSIFIER_SYSTEM, preferenceContext]
+    : [CLASSIFIER_SYSTEM];
 
   const results = await withConcurrency(
     articles,
     CLASSIFIER_CONCURRENCY,
-    (a) => classifyOne(provider, a)
+    (a) => classifyOne(provider, a, systemParts)
   );
 
   return results.map((r, i) => {

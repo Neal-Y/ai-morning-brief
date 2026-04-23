@@ -467,6 +467,67 @@ Also refactored Celebration layout:
 
 ---
 
+## Issue 14: iOS standalone PWA "框框" (theme_color seam) + stale SW cache
+
+### Symptom
+
+On iPhone home-screen PWA only (not Safari), a thin color band appeared around the status bar area / edges of the app — visibly a different shade from the dark app body. Users also reported that pushing a new build + swiping the app away + reopening did not pick up the new version consistently.
+
+### Root Cause
+
+Three overlapping problems in the PWA layer:
+
+1. **Conflicting manifests**. `web/index.html` explicitly linked `/manifest.json` (the static one in `web/public/`), but `vite-plugin-pwa` was ALSO injecting a second `<link rel="manifest" href="/manifest.webmanifest">` into the same HTML at build time. iOS would pick one or the other depending on UA/version.
+
+2. **Three different `theme_color` values across the build output**:
+   - `<meta name="theme-color" content="#0f172a">` in `index.html` (slate-900)
+   - `/manifest.json`: `#0F1923` (dark teal)
+   - `/manifest.webmanifest` (VitePWA-generated): `#0f172a`
+   The actual app body is `T.bg = #14110D` (warm dark brown). In standalone mode iOS paints the status bar background from `theme_color` — none of the three matched the app, so a visible seam appeared around the top edge.
+
+3. **Stale service worker**. VitePWA configured `registerType: 'autoUpdate'` + `skipWaiting: true` + `clientsClaim: true` and auto-injected `/registerSW.js` in the built HTML. This registered a Workbox SW that precached the wrong `/manifest.webmanifest` + missing `/icon-192.png` + `/icon-512.png`. Even after pushing new builds, the SW could serve cached assets, making updates feel unreliable.
+
+The app is a once-a-day read — it has no offline use case. The entire PWA plugin was providing negative value.
+
+### Risk / User Impact
+
+- Visible color seam around the status bar in standalone mode broke the "native app" illusion.
+- Pushes did not reliably reach the user's installed PWA — they'd swipe away the app, reopen, and still see the old version.
+- Frontend changes were getting debugged against an SW-cached stale copy instead of fresh code.
+
+### Fix
+
+1. **Removed `vite-plugin-pwa`** entirely (`npm uninstall vite-plugin-pwa` + deleted plugin from `vite.config.ts`).
+2. **Unified `theme_color` / `background_color` on `#14110D`** in both `index.html` meta tag and `web/public/manifest.json` so the static manifest is the single source of truth and matches the app's real `T.bg`.
+3. **Added a self-unregistering service worker** at `web/public/sw.js`. When an existing home-screen PWA checks `/sw.js` for updates, it fetches this new content, installs it, and its `activate` handler wipes all caches and calls `self.registration.unregister()`, leaving the browser SW-free.
+4. **Belt-and-suspenders cleanup in `main.tsx`**: on every page load, `navigator.serviceWorker.getRegistrations()` is walked and each entry is unregistered, and `caches.keys()` entries are deleted. No-op once nothing's left to clean.
+
+### Changed Files
+
+- `web/vite.config.ts` — plugin removed, documented why
+- `web/index.html` — `theme-color` → `#14110D`
+- `web/public/manifest.json` — `theme_color` + `background_color` → `#14110D`
+- `web/public/sw.js` — new, kill-switch SW
+- `web/src/main.tsx` — unregister/clear-caches on every load
+- `web/package.json` — `vite-plugin-pwa` dep removed
+
+### Validation
+
+- `cd web && npm run build` passes
+- Built `dist/` no longer contains `manifest.webmanifest`, `registerSW.js`, `workbox-*.js`, or any VitePWA-generated assets
+- `dist/index.html` contains exactly one `<link rel="manifest">` and one `<meta name="theme-color">`, both aligned on `#14110D`
+
+### Real-device follow-up
+
+Existing PWA installs may need one or two foreground cycles for the kill-switch SW to activate. If a user still sees the framed/stale behavior after pushing:
+
+1. Foreground the installed PWA, wait ~5s (this triggers the SW update check), then kill + reopen.
+2. If still stale, long-press home-screen icon → Remove app → re-add to home screen.
+
+The kill-switch is idempotent, so even repeated runs are safe.
+
+---
+
 ## What Was Intentionally Not Changed
 
 - `lastReadAgo="today"` in the header is still a placeholder string. It is cosmetic, not a correctness bug.

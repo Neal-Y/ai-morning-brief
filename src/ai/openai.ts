@@ -10,12 +10,17 @@ export class OpenAIProvider implements AIProvider {
     this.client = new OpenAI({ apiKey });
   }
 
-  async call(systemPrompt: string, userPrompt: string): Promise<string> {
+  async call(system: string | string[], userPrompt: string): Promise<string> {
+    // OpenAI auto-caches prefixes — no explicit cache_control API. Concatenate
+    // array form back into a single string; the stable prefix still benefits
+    // from automatic prefix caching as long as callers keep it first.
+    const systemContent = typeof system === 'string' ? system : system.join('\n');
+
     const response = await this.client.chat.completions.create({
       model: MODEL_IDS['openai']!,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: systemPrompt },
+        { role: 'system', content: systemContent },
         { role: 'user', content: userPrompt },
       ],
     });

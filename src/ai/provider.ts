@@ -77,7 +77,18 @@ export interface BriefResult {
 
 export interface AIProvider {
   name: string; // "GPT" or "Claude"
-  call(systemPrompt: string, userPrompt: string): Promise<string>;
+  /**
+   * Run an LLM call with a system prompt and a user prompt.
+   *
+   * `system` may be either:
+   *  - `string` — entire system prompt treated as one cacheable block.
+   *  - `string[]` — first element is cached (stable prefix), remaining elements
+   *    are concatenated without cache_control (variable suffix). Use this when
+   *    part of the system prompt changes per-run (e.g. user preference context)
+   *    while the bulk stays stable — it lets Anthropic keep the prefix cached
+   *    across days even when the suffix varies.
+   */
+  call(system: string | string[], userPrompt: string): Promise<string>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

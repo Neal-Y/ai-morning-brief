@@ -4,21 +4,12 @@ import { getTodaysArticles } from './rss/feed.js';
 import { OpenAIProvider } from './ai/openai.js';
 import { AnthropicProvider } from './ai/anthropic.js';
 import type { AIProvider, ClassifiedArticle } from './ai/provider.js';
-import { classifyArticles } from './ai/classifier.js';
+import { classifyArticles, buildPreferenceContext } from './ai/classifier.js';
 import { generateBrief, buildDegradedBrief } from './ai/brief.js';
 import { formatBriefText, sendNtfy, sendErrorNotice, sendEmptyNotice } from './notify/ntfy.js';
 import { writeArticlesToDB } from './notify/db-writer.js';
-
-function getTaipeiDate(): string {
-  return new Intl.DateTimeFormat('zh-TW', {
-    timeZone: 'Asia/Taipei',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  })
-    .format(new Date())
-    .replace(/\//g, '-');
-}
+import { getRecentFeedback } from './db/client.js';
+import { getTaipeiDateString } from './date.js';
 
 /** Day-of-year (1-based) in Taipei timezone. */
 function getTaipeiDayOfYear(): number {
@@ -64,7 +55,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const date = getTaipeiDate();
+  const date = getTaipeiDateString();
   console.log(`[main] AI Morning Brief — ${date}`);
 
   // ── Stage 1: Fetch + keyword score + prefilter ────────────────────────────
@@ -123,7 +114,24 @@ async function main(): Promise<void> {
     .slice(0, CLASSIFIER_CAP);
   console.log(`[main] Sending top ${toClassify.length}/${prefiltered.length} articles to classifier`);
 
-  const classifications = await classifyArticles(provider, toClassify);
+  // Load recent feedback for preference context. Empty string if below threshold
+  // or if DB is unreachable — pipeline must never fail because of this.
+  let preferenceContext = '';
+  try {
+    const feedbackRows = await getRecentFeedback();
+    if (feedbackRows.length > 0) {
+      preferenceContext = buildPreferenceContext(feedbackRows);
+      const up = feedbackRows.filter((r) => r.signal === 'up').length;
+      const down = feedbackRows.filter((r) => r.signal === 'down').length;
+      console.log(`[main] Injecting ${feedbackRows.length} feedback signals into classifier (${up} up / ${down} down)`);
+    } else {
+      console.log('[main] Skipping preference injection (below threshold or no feedback)');
+    }
+  } catch (err) {
+    console.warn('[main] Failed to load feedback, continuing without preference:', err instanceof Error ? err.message : err);
+  }
+
+  const classifications = await classifyArticles(provider, toClassify, preferenceContext);
 
   const allClassified: ClassifiedArticle[] = toClassify.map((article, i) => ({
     ...article,

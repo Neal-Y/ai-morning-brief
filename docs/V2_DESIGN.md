@@ -212,9 +212,9 @@ quizzes = {
 - **Demo goal**: 手機打開能看到今天 3 張卡
 
 ### Week 2 — Core Interaction
-- [ ] 👍👎 寫回 DB
-- [ ] 下次 classifier 吃進 prompt(最近 20 筆偏好)
-- [ ] 💬 追問:SSE streaming,Haiku 預設
+- [x] 👍👎 寫回 DB
+- [x] 下次 classifier 吃進 prompt(最近 30 天 / 20 筆偏好,門檻 10)
+- [x] 💬 追問:SSE streaming,Haiku 預設
 - [ ] Skill-tag 加到 classifier 輸出
 - **Demo goal**: 滑卡、點追問看 Claude 即時回、明天 brief 真的變了
 
@@ -275,7 +275,7 @@ quizzes = {
 
 ## 10. Open Questions (待討論,不 blocking)
 
-1. **反饋衰減** — 最近 20 筆偏好夠嗎?要不要加時間衰減權重?先做最簡單版,之後 tune。
+1. **反饋衰減** — MVP 決定:近 30 天窗 + 最多 20 筆 + 門檻 10 筆才注入 + 👎 per-category 至少 2 次才算負訊號。時間衰減權重留 Phase 2 視實際資料決定。
 2. **Quiz 排程演算法** — 3/7/14 是固定間隔還是 SM-2 algorithm (Anki)?MVP 用固定間隔,Phase 2 考慮 SM-2。
 3. **Skill tag 詞彙表** — 開放任意 tag 還是 controlled vocabulary?先 controlled(預定義 ~20 個),避免 classifier 亂生。
 4. **Notion page template** — 要不要讓使用者自訂?MVP 硬編碼,之後再抽成設定。
