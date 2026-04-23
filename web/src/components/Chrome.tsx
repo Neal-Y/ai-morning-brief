@@ -75,7 +75,7 @@ interface FeedbackBarProps {
 }
 
 export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, onSave, onOpen }: FeedbackBarProps) {
-  const bottomSafePad = 'max(6px, calc(env(safe-area-inset-bottom) - 18px))'
+  const bottomSafePad = 'max(6px, calc(env(safe-area-inset-bottom) - 28px))'
 
   const primaryBtn = (
     onClick: () => void,
