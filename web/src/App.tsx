@@ -318,15 +318,7 @@ export default function App() {
           onTouchMove={onPointerMove}
           onTouchEnd={onPointerUp}
         >
-          {atCelebration ? (
-            <Celebration
-              theme={T}
-              savedCount={savedCount}
-              streak={streak}
-              readCount={articles.length}
-              briefDate={briefDate}
-            />
-          ) : curArticle ? (
+          {curArticle ? (
             <>
               {/* Next card — always visible underneath, floats up as current card flies */}
               {articles[idx + 1] && (
@@ -371,6 +363,16 @@ export default function App() {
           ) : null}
 
         </div>
+
+        {atCelebration && (
+          <Celebration
+            theme={T}
+            savedCount={savedCount}
+            streak={streak}
+            readCount={articles.length}
+            briefDate={briefDate}
+          />
+        )}
 
         {showAsk && (
           <div
