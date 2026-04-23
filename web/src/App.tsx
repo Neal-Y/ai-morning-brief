@@ -46,7 +46,7 @@ export default function App() {
   const [briefDate, setBriefDate] = useState(() => getTaipeiDateString())
   const [springing, setSpringing] = useState(false)
   const [streak, setStreak] = useState(() => parseInt(localStorage.getItem('mb_streak') ?? '1'))
-  const [accent, setAccentState] = useState<string>(
+  const [accent] = useState<string>(
     () => localStorage.getItem('accent') ?? ACCENT_PRESETS[0]!.value
   )
   const [feedbackBarHeight, setFeedbackBarHeight] = useState(0)
@@ -56,11 +56,6 @@ export default function App() {
   const velocity = useRef<{ vx: number; lastX: number; lastT: number }>({ vx: 0, lastX: 0, lastT: 0 })
   const flyRotRef = useRef(12)
   const feedbackBarRef = useRef<HTMLDivElement | null>(null)
-
-  const setAccent = (value: string) => {
-    setAccentState(value)
-    localStorage.setItem('accent', value)
-  }
 
   useEffect(() => {
     const today = getTaipeiDateString()
