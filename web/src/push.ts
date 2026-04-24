@@ -17,13 +17,14 @@ export function isStandalone(): boolean {
   return window.matchMedia('(display-mode: standalone)').matches
 }
 
-/** Completes the push subscription assuming permission is already granted. */
-export async function completeSubscription(): Promise<boolean> {
-  if (!isPushSupported()) return false
-  if (Notification.permission !== 'granted') return false
+/** Completes the push subscription assuming permission is already granted.
+ *  Returns null on success, or an error string for debugging. */
+export async function completeSubscription(): Promise<string | null> {
+  if (!isPushSupported()) return 'push not supported'
+  if (Notification.permission !== 'granted') return `permission: ${Notification.permission}`
 
   const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
-  if (!vapidKey) return false
+  if (!vapidKey) return 'VAPID key missing'
 
   try {
     const reg = await navigator.serviceWorker.ready
@@ -33,15 +34,15 @@ export async function completeSubscription(): Promise<boolean> {
       applicationServerKey: urlBase64ToUint8Array(vapidKey),
     })
 
-    await fetch('/api/push-subscribe', {
+    const res = await fetch('/api/push-subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sub.toJSON()),
     })
+    if (!res.ok) return `server ${res.status}`
 
-    return true
+    return null
   } catch (err) {
-    console.warn('[push] Subscribe failed:', err)
-    return false
+    return err instanceof Error ? err.message : String(err)
   }
 }
