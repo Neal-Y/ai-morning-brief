@@ -17,17 +17,15 @@ export function isStandalone(): boolean {
   return window.matchMedia('(display-mode: standalone)').matches
 }
 
-/** Returns true if subscribed successfully. */
-export async function subscribeToPush(): Promise<boolean> {
+/** Completes the push subscription assuming permission is already granted. */
+export async function completeSubscription(): Promise<boolean> {
   if (!isPushSupported()) return false
+  if (Notification.permission !== 'granted') return false
 
   const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
   if (!vapidKey) return false
 
   try {
-    const permission = await Notification.requestPermission()
-    if (permission !== 'granted') return false
-
     const reg = await navigator.serviceWorker.ready
     const existing = await reg.pushManager.getSubscription()
     const sub = existing ?? await reg.pushManager.subscribe({

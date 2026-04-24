@@ -3,7 +3,7 @@ import { THEME_DARK, ACCENT_PRESETS } from './theme.ts'
 import type { Theme } from './theme.ts'
 import { ArticleCard } from './components/Card.tsx'
 import { TopChrome, FeedbackBar } from './components/Chrome.tsx'
-import { isPushSupported, isStandalone, subscribeToPush } from './push.ts'
+import { isPushSupported, isStandalone, completeSubscription } from './push.ts'
 import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
 import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
@@ -64,14 +64,17 @@ export default function App() {
   const feedbackBarRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    if (isPushSupported() && isStandalone()) {
-      const check = () => {
-        if (Notification.permission !== 'default') setPermissionResolved(true)
+    if (!subscribing) return
+    const interval = setInterval(() => {
+      if (Notification.permission !== 'default') {
+        clearInterval(interval)
+        setSubscribing(false)
+        setPermissionResolved(true)
+        if (Notification.permission === 'granted') void completeSubscription()
       }
-      document.addEventListener('visibilitychange', check)
-      return () => document.removeEventListener('visibilitychange', check)
-    }
-  }, [])
+    }, 500)
+    return () => clearInterval(interval)
+  }, [subscribing])
 
   useEffect(() => {
     const today = getTaipeiDateString()
@@ -283,9 +286,12 @@ export default function App() {
             <button
               onClick={async () => {
                 setSubscribing(true)
-                await subscribeToPush()
-                setSubscribing(false)
-                setPermissionResolved(true)
+                try { await Notification.requestPermission() } catch { /* ignore */ }
+                if (Notification.permission !== 'default') {
+                  setSubscribing(false)
+                  setPermissionResolved(true)
+                  if (Notification.permission === 'granted') void completeSubscription()
+                }
               }}
               disabled={subscribing}
               style={{
@@ -296,7 +302,17 @@ export default function App() {
                 textTransform: 'uppercase',
               }}
             >
-              {subscribing ? '...' : '🔔 啟用推播通知'}
+              {subscribing ? (
+                <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', height: 12 }}>
+                  {[0, 1, 2].map(i => (
+                    <span key={i} style={{
+                      display: 'inline-block', width: 4, height: 4,
+                      borderRadius: '50%', background: 'currentColor',
+                      animation: `dotBounce 1.2s ease-in-out ${i * 0.18}s infinite`,
+                    }} />
+                  ))}
+                </span>
+              ) : '啟用推播通知'}
             </button>
             <button
               onClick={() => setPermissionResolved(true)}
