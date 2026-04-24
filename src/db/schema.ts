@@ -51,3 +51,11 @@ export const quizzes = sqliteTable('quizzes', {
   lastShownAt: integer('last_shown_at', { mode: 'timestamp' }),
   userRecall: text('user_recall'),
 })
+
+export const pushSubscriptions = sqliteTable('push_subscriptions', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
+  endpoint: text('endpoint').notNull().unique(),
+  p256dh: text('p256dh').notNull(),
+  auth: text('auth').notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
+})

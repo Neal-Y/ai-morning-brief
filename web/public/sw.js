@@ -1,29 +1,30 @@
-// Self-unregistering service worker.
-//
-// Purpose: clean up the VitePWA-generated service worker that used to live at
-// this URL. When an iPhone home-screen PWA checks `/sw.js` for updates, it
-// will download this new version, install it, activate it, and then this code
-// unregisters itself and wipes all caches — leaving the browser in a clean
-// "no SW" state. After that, the app loads straight from the network like a
-// normal website.
-//
-// Safe to delete this file once you're confident no user still has the old
-// VitePWA service worker registered.
-
 self.addEventListener('install', () => {
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil((async () => {
-    try {
-      const keys = await caches.keys()
-      await Promise.all(keys.map((k) => caches.delete(k)))
-    } catch (_) { /* ignore */ }
-    try {
-      await self.registration.unregister()
-    } catch (_) { /* ignore */ }
-    const clients = await self.clients.matchAll({ type: 'window' })
-    clients.forEach((c) => c.navigate(c.url))
-  })())
+  event.waitUntil(self.clients.claim())
+})
+
+self.addEventListener('push', (event) => {
+  const data = event.data?.json() ?? {}
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? 'AI Morning Brief', {
+      body: data.body ?? '今日 brief 已就緒',
+      icon: '/apple-touch-icon.png',
+      badge: '/apple-touch-icon.png',
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if ('focus' in client) return client.focus()
+      }
+      return self.clients.openWindow('/')
+    })
+  )
 })

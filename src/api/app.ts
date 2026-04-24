@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { db } from '../db/client.js'
 import { getTaipeiDateString } from '../date.js'
-import { articles, feedback, saves } from '../db/schema.js'
+import { articles, feedback, saves, pushSubscriptions } from '../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
 
 // NOTE: /api/ask is NOT defined here. In production, Vercel rewrites /api/ask
@@ -37,6 +37,21 @@ app.post('/api/feedback', async (c) => {
 app.post('/api/save', async (c) => {
   const { articleId, userNote } = await c.req.json<{ articleId: string; userNote?: string }>()
   await db.insert(saves).values({ articleId, userNote: userNote ?? null, createdAt: new Date() })
+  return c.json({ ok: true })
+})
+
+app.post('/api/push-subscribe', async (c) => {
+  const { endpoint, keys } = await c.req.json<{
+    endpoint: string
+    keys: { p256dh: string; auth: string }
+  }>()
+  await db
+    .insert(pushSubscriptions)
+    .values({ endpoint, p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: pushSubscriptions.endpoint,
+      set: { p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() },
+    })
   return c.json({ ok: true })
 })
 

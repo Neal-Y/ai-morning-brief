@@ -7,6 +7,7 @@ import type { AIProvider, ClassifiedArticle } from './ai/provider.js';
 import { classifyArticles, buildPreferenceContext } from './ai/classifier.js';
 import { generateBrief, buildDegradedBrief } from './ai/brief.js';
 import { formatBriefText, sendNtfy, sendErrorNotice, sendEmptyNotice } from './notify/ntfy.js';
+import { sendWebPush } from './notify/web-push.js';
 import { writeArticlesToDB } from './notify/db-writer.js';
 import { getRecentFeedback } from './db/client.js';
 import { getTaipeiDateString } from './date.js';
@@ -212,10 +213,18 @@ async function main(): Promise<void> {
       body,
       { actionLinks: buttonLinks }
     );
-    console.log('[main] Sent successfully');
+    console.log('[ntfy] Sent successfully');
   } catch (err) {
     console.error('[ntfy] Failed to send:', err instanceof Error ? err.message : err);
     process.exit(1);
+  }
+
+  // Web Push — runs in parallel with ntfy during transition period.
+  // Remove ntfy above once Web Push is confirmed working.
+  try {
+    await sendWebPush(`AI Morning Brief ${date}`, '今日 brief 已就緒，點此開啟');
+  } catch (err) {
+    console.warn('[web-push] Failed:', err instanceof Error ? err.message : err);
   }
 
   // ── Stage 6: Persist to Turso DB ─────────────────────────────────────────

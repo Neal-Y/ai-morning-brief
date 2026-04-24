@@ -3,20 +3,44 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
 
-// One-time cleanup for the previous VitePWA service worker (2026-04-23 removal).
-// Belt-and-suspenders to the self-unregistering sw.js: on every page load,
-// actively unregister any leftover service workers and wipe caches. Cheap,
-// no-op once there's nothing left to clean.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.getRegistrations().then((regs) => {
-    regs.forEach((r) => { void r.unregister() })
-  }).catch(() => { /* ignore */ })
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const rawData = atob(base64)
+  return new Uint8Array([...rawData].map((c) => c.charCodeAt(0)))
 }
-if ('caches' in window) {
-  caches.keys().then((keys) => {
-    keys.forEach((k) => { void caches.delete(k) })
-  }).catch(() => { /* ignore */ })
+
+async function setupPushNotifications(): Promise<void> {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
+
+  const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
+  if (!vapidKey) return
+
+  try {
+    const reg = await navigator.serviceWorker.register('/sw.js')
+
+    const permission = await Notification.requestPermission()
+    if (permission !== 'granted') return
+
+    await navigator.serviceWorker.ready
+
+    const existing = await reg.pushManager.getSubscription()
+    const sub = existing ?? await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    })
+
+    await fetch('/api/push-subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub.toJSON()),
+    })
+  } catch (err) {
+    console.warn('[push] Setup failed:', err)
+  }
 }
+
+void setupPushNotifications()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
