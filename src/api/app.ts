@@ -41,18 +41,23 @@ app.post('/api/save', async (c) => {
 })
 
 app.post('/api/push-subscribe', async (c) => {
-  const { endpoint, keys } = await c.req.json<{
-    endpoint: string
-    keys: { p256dh: string; auth: string }
-  }>()
-  await db
-    .insert(pushSubscriptions)
-    .values({ endpoint, p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() })
-    .onConflictDoUpdate({
-      target: pushSubscriptions.endpoint,
-      set: { p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() },
-    })
-  return c.json({ ok: true })
+  try {
+    const { endpoint, keys } = await c.req.json<{
+      endpoint: string
+      keys: { p256dh: string; auth: string }
+    }>()
+    await db
+      .insert(pushSubscriptions)
+      .values({ endpoint, p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: pushSubscriptions.endpoint,
+        set: { p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() },
+      })
+    return c.json({ ok: true })
+  } catch (err) {
+    console.error('[push-subscribe] Failed:', err)
+    return c.json({ ok: false, error: String(err) }, 500)
+  }
 })
 
 export default app
