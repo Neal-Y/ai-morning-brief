@@ -1,6 +1,4 @@
-import { useState } from 'react'
 import type { Theme } from '../theme.ts'
-import { isPushSupported, isStandalone, subscribeToPush } from '../push.ts'
 
 interface TopChromeProps {
   theme: Theme
@@ -205,68 +203,5 @@ function IconExternal({ size = 14 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M14 4h6v6M10 14L20 4M20 14v6H4V4h6" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
-  )
-}
-
-const BANNER_DISMISSED_KEY = 'push_banner_dismissed'
-
-export function PushBanner({ theme }: { theme: Theme }) {
-  const [visible, setVisible] = useState(() => {
-    if (!isPushSupported()) return false
-    if (!isStandalone()) return false
-    if (Notification.permission !== 'default') return false
-    if (localStorage.getItem(BANNER_DISMISSED_KEY)) return false
-    return true
-  })
-  const [subscribing, setSubscribing] = useState(false)
-
-  if (!visible) return null
-
-  const dismiss = () => {
-    localStorage.setItem(BANNER_DISMISSED_KEY, '1')
-    setVisible(false)
-  }
-
-  const enable = async () => {
-    setSubscribing(true)
-    const ok = await subscribeToPush()
-    if (ok || Notification.permission !== 'default') setVisible(false)
-    else setSubscribing(false)
-  }
-
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '8px 16px',
-      background: theme.card,
-      borderTop: `1px solid ${theme.ruleSoft}`,
-      flexShrink: 0,
-    }}>
-      <span style={{ fontSize: 14 }}>🔔</span>
-      <span style={{ flex: 1, fontFamily: theme.mono, fontSize: 10, color: theme.inkMuted, letterSpacing: 0.3 }}>
-        啟用推播，明早自動通知
-      </span>
-      <button
-        onClick={enable}
-        disabled={subscribing}
-        style={{
-          fontFamily: theme.mono, fontSize: 10, fontWeight: 700,
-          color: theme.card, background: theme.accent,
-          border: 'none', borderRadius: 6, padding: '5px 10px',
-          cursor: 'pointer', letterSpacing: 0.5,
-          opacity: subscribing ? 0.6 : 1,
-        }}
-      >
-        {subscribing ? '...' : '啟用'}
-      </button>
-      <button
-        onClick={dismiss}
-        style={{
-          fontFamily: theme.mono, fontSize: 10,
-          color: theme.inkFaint, background: 'transparent',
-          border: 'none', cursor: 'pointer', padding: '4px 2px',
-        }}
-      >✕</button>
-    </div>
   )
 }
