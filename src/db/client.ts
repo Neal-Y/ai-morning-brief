@@ -5,7 +5,7 @@ import * as schema from './schema.js'
 import { articles, feedback } from './schema.js'
 
 const client = createClient({
-  url: process.env.TURSO_DATABASE_URL!,
+  url: process.env.TURSO_DATABASE_URL!.replace('libsql://', 'https://'),
   authToken: process.env.TURSO_AUTH_TOKEN,
 })
 
