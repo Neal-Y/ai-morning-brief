@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { db } from '../db/client.js'
 import { getTaipeiDateString } from '../date.js'
-import { articles, feedback, saves, pushSubscriptions } from '../db/schema.js'
+import { articles, feedback, saves } from '../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
 
 // NOTE: /api/ask is NOT defined here. In production, Vercel rewrites /api/ask
@@ -46,8 +46,25 @@ app.post('/api/push-subscribe', async (c) => {
       endpoint: string
       keys: { p256dh: string; auth: string }
     }>()
-    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint))
-    await db.insert(pushSubscriptions).values({ endpoint, p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() })
+    const dbUrl = (process.env['TURSO_DATABASE_URL'] ?? '').replace('libsql://', 'https://')
+    const token = process.env['TURSO_AUTH_TOKEN'] ?? ''
+    const res = await fetch(`${dbUrl}/v2/pipeline`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        requests: [
+          { type: 'execute', stmt: { sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?', args: [{ type: 'text', value: endpoint }] } },
+          { type: 'execute', stmt: { sql: 'INSERT INTO push_subscriptions (endpoint, p256dh, auth, updated_at) VALUES (?, ?, ?, ?)', args: [{ type: 'text', value: endpoint }, { type: 'text', value: keys.p256dh }, { type: 'text', value: keys.auth }, { type: 'integer', value: String(Date.now()) }] } },
+          { type: 'close' },
+        ],
+      }),
+    })
+    if (!res.ok) {
+      const body = await res.text()
+      console.error('[push-subscribe] Turso error:', res.status, body)
+      return c.json({ ok: false, error: `turso ${res.status}` }, 500)
+    }
+    console.log('[push-subscribe] OK')
     return c.json({ ok: true })
   } catch (err) {
     console.error('[push-subscribe] Failed:', err)
