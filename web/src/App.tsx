@@ -65,6 +65,12 @@ export default function App() {
   const feedbackBarRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
+    if (isPushSupported() && isStandalone() && Notification.permission === 'granted') {
+      completeSubscription().then(setPushDebug)
+    }
+  }, [])
+
+  useEffect(() => {
     if (!subscribing) return
     const interval = setInterval(() => {
       if (Notification.permission !== 'default') {
