@@ -43,11 +43,13 @@ app.post('/api/save', async (c) => {
 app.post('/api/push-subscribe', async (c) => {
   console.log('[push-subscribe] started')
   try {
-    const { endpoint, keys } = await c.req.json<{
-      endpoint: string
-      keys: { p256dh: string; auth: string }
-    }>()
-    console.log('[push-subscribe] body parsed, endpoint len:', endpoint.length)
+    const raw = await Promise.race([
+      c.req.text(),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('text() timeout 5s')), 5000)),
+    ])
+    console.log('[push-subscribe] text read, len:', raw.length)
+    const { endpoint, keys } = JSON.parse(raw) as { endpoint: string; keys: { p256dh: string; auth: string } }
+    console.log('[push-subscribe] parsed, endpoint len:', endpoint.length)
     await dbClient.batch([
       { sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?', args: [endpoint] },
       { sql: 'INSERT INTO push_subscriptions (endpoint, p256dh, auth, updated_at) VALUES (?, ?, ?, ?)', args: [endpoint, keys.p256dh, keys.auth, Date.now()] },
