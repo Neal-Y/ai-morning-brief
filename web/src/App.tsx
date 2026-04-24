@@ -64,6 +64,16 @@ export default function App() {
   const feedbackBarRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
+    if (isPushSupported() && isStandalone()) {
+      const check = () => {
+        if (Notification.permission !== 'default') setPermissionResolved(true)
+      }
+      document.addEventListener('visibilitychange', check)
+      return () => document.removeEventListener('visibilitychange', check)
+    }
+  }, [])
+
+  useEffect(() => {
     const today = getTaipeiDateString()
     setBriefDate(today)
     fetch(`/api/feed?date=${today}`)
