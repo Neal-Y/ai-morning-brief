@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { THEME_DARK, ACCENT_PRESETS } from './theme.ts'
 import type { Theme } from './theme.ts'
 import { ArticleCard } from './components/Card.tsx'
-import { TopChrome, FeedbackBar } from './components/Chrome.tsx'
+import { TopChrome, FeedbackBar, PushBanner } from './components/Chrome.tsx'
 import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
 import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
@@ -409,6 +409,7 @@ export default function App() {
             }}
           >
             <div style={{ width: '100%', maxWidth: 480 }}>
+            <PushBanner theme={T} />
             <FeedbackBar
               theme={T}
               feedback={feedback[curArticle!.id]}
