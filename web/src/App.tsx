@@ -2,7 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { THEME_DARK, ACCENT_PRESETS } from './theme.ts'
 import type { Theme } from './theme.ts'
 import { ArticleCard } from './components/Card.tsx'
-import { TopChrome, FeedbackBar, PushBanner } from './components/Chrome.tsx'
+import { TopChrome, FeedbackBar } from './components/Chrome.tsx'
+import { isPushSupported, isStandalone, subscribeToPush } from './push.ts'
 import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
 import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
@@ -50,6 +51,11 @@ export default function App() {
     () => localStorage.getItem('accent') ?? ACCENT_PRESETS[0]!.value
   )
   const [feedbackBarHeight, setFeedbackBarHeight] = useState(0)
+  const [permissionResolved, setPermissionResolved] = useState(() => {
+    if (!isPushSupported() || !isStandalone()) return true
+    return Notification.permission !== 'default'
+  })
+  const [subscribing, setSubscribing] = useState(false)
 
   const T = buildTheme(accent)
   const dragStart = useRef<{ x: number; y: number; axis: 'x' | 'y' | null } | null>(null)
@@ -230,7 +236,7 @@ export default function App() {
     }
   }, [showFeedbackBar, curArticle?.id])
 
-  if (loading || error || (!loading && articles.length === 0)) {
+  if (loading || error || articles.length === 0 || !permissionResolved) {
     return (
       <div style={{
         position: 'fixed', inset: 0, background: T.bg,
@@ -262,7 +268,40 @@ export default function App() {
           a quiet briefing before the noise
         </div>
 
-        {!loading && (
+        {!loading && !permissionResolved && (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, marginTop: 16 }}>
+            <button
+              onClick={async () => {
+                setSubscribing(true)
+                await subscribeToPush()
+                setSubscribing(false)
+                setPermissionResolved(true)
+              }}
+              disabled={subscribing}
+              style={{
+                fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 1,
+                color: T.card, background: T.accent,
+                border: 'none', borderRadius: 8, padding: '10px 24px',
+                cursor: 'pointer', opacity: subscribing ? 0.6 : 1,
+                textTransform: 'uppercase',
+              }}
+            >
+              {subscribing ? '...' : '🔔 啟用推播通知'}
+            </button>
+            <button
+              onClick={() => setPermissionResolved(true)}
+              style={{
+                fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
+                background: 'transparent', border: 'none',
+                cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
+              }}
+            >
+              略過
+            </button>
+          </div>
+        )}
+
+        {!loading && permissionResolved && (error || articles.length === 0) && (
           <div style={{
             fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
             letterSpacing: 1, marginTop: 8,
@@ -409,7 +448,6 @@ export default function App() {
             }}
           >
             <div style={{ width: '100%', maxWidth: 480 }}>
-            <PushBanner theme={T} />
             <FeedbackBar
               theme={T}
               feedback={feedback[curArticle!.id]}
