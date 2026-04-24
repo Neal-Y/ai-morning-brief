@@ -56,7 +56,7 @@ export default function App() {
     return Notification.permission !== 'default'
   })
   const [subscribing, setSubscribing] = useState(false)
-  const [pushDebug, setPushDebug] = useState<string | null>(null)
+  const [pushDebug, setPushDebug] = useState<string | null | undefined>(undefined)
 
   const T = buildTheme(accent)
   const dragStart = useRef<{ x: number; y: number; axis: 'x' | 'y' | null } | null>(null)

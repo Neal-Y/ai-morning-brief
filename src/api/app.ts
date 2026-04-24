@@ -46,13 +46,8 @@ app.post('/api/push-subscribe', async (c) => {
       endpoint: string
       keys: { p256dh: string; auth: string }
     }>()
-    await db
-      .insert(pushSubscriptions)
-      .values({ endpoint, p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() })
-      .onConflictDoUpdate({
-        target: pushSubscriptions.endpoint,
-        set: { p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() },
-      })
+    await db.delete(pushSubscriptions).where(eq(pushSubscriptions.endpoint, endpoint))
+    await db.insert(pushSubscriptions).values({ endpoint, p256dh: keys.p256dh, auth: keys.auth, updatedAt: new Date() })
     return c.json({ ok: true })
   } catch (err) {
     console.error('[push-subscribe] Failed:', err)
