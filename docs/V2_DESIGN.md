@@ -1,7 +1,7 @@
 # AI Morning Brief V2 — Product & Engineering Design
 
-> **Status**: Design spec, not yet implemented. Baseline is [PROPOSAL.md](./PROPOSAL.md) (V1, ntfy-based).
-> **Target**: 4 週內從「通知」進化為「每日學習 OS」。
+> **Status**: F1–F3 + Feedback loop 已上線（Vercel + GitHub Actions）。F4 Notion 整合為下一優先。
+> **Baseline**: [PROPOSAL.md](./PROPOSAL.md) (V1, ntfy-based)。
 
 ---
 
@@ -105,13 +105,12 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
 | DB | **Turso (libSQL)** free tier | 9GB + 10 億讀/月免費,SQLite 語意,零運維 |
 | ORM | **Drizzle** | type-safe、零 abstraction、對 Go 背景的人友善 |
 | Streaming | **SSE** (Server-Sent Events) | 追問即時感,比 WebSocket 輕 |
-| LLM | Anthropic SDK (Haiku 主力 / Sonnet 擔當) | 官方 SDK、prompt caching |
+| LLM | GPT-4o / Sonnet 4.6（Classifier + Brief 輪替）<br>Haiku 4.5（Ask 追問專用） | 官方 SDK、prompt caching |
 | 外部整合 | Notion API | 免費、個人用無限 |
 | Cron | **GitHub Actions** (沿用 V1) | 免費、已運作 |
 | Deploy | **Vercel** free tier (PWA + API) | 零成本、CI 整合 |
 
-**總月費:$0 infra + ~$7 LLM ≈ 210 TWD/月**
-**每日約 7 TWD,遠低於預算上限 80 TWD/day**
+**總月費:$0 infra + ~$3 LLM ≈ 90 TWD/月**（實測，見下方 §8）
 
 ---
 
@@ -132,18 +131,22 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
                             │  quizzes       │
                             └────────────────┘
                                       ▲
-                                      │
-     ┌────────────────────────────────┤
-     ▼                                │
-┌──────────────┐   SSE   ┌────────────┴───────────┐
-│ PWA (React)  │◄────────│ Hono API (Vercel Func) │
-│              │         │                        │
-│ - Card swipe │         │ - /api/feed            │
-│ - 👍👎      │────────►│ - /api/feedback        │
-│ - 💬 追問   │         │ - /api/ask (SSE)       │
-│ - 🔖 save    │         │ - /api/save → Notion   │
-│ - Quiz       │         │ - /api/quiz            │
-└──────────────┘         └────────────────────────┘
+                          ┌───────────┴──────────────┐
+                          │                          │
+┌──────────────┐   REST   │  ┌─────────────────────┐ │
+│ PWA (React)  │◄────────►│  │ Hono API            │ │
+│              │          │  │ (api/index.ts)      │ │
+│ - Card swipe │          │  │ - GET /api/feed     │ │
+│ - 👍👎      │          │  │ - POST /api/feedback│ │
+│ - 🔖 save    │          │  │ - POST /api/save    │ │
+│ - Quiz       │          │  └─────────────────────┘ │
+│              │   SSE    │  ┌─────────────────────┐ │
+│ - 💬 追問   │◄────────►│  │ Edge Function       │ │
+└──────────────┘          │  │ (api/ask.ts)        │ │
+                          │  │ - POST /api/ask     │ │
+                          │  └─────────────────────┘ │
+                          │    Vercel                 │
+                          └───────────────────────────┘
 ```
 
 ---
@@ -204,29 +207,29 @@ quizzes = {
 
 ## 7. Phased Rollout
 
-### Week 1 — Foundation
-- [ ] `pnpm` monorepo or single Hono + Vite app 骨架
-- [ ] Turso 建立 + Drizzle schema migrate
-- [ ] Port V1 scraper/classifier/brief gen → 寫入 Turso 而非 ntfy
-- [ ] PWA shell:卡片 swipe UI(先用假資料)
-- **Demo goal**: 手機打開能看到今天 3 張卡
+### Week 1 — Foundation ✅
+- [x] Hono + Vite + PWA 骨架
+- [x] Turso 建立 + Drizzle schema migrate
+- [x] Port V1 scraper/classifier/brief gen → 寫入 Turso + ntfy
+- [x] PWA shell:卡片 swipe UI
+- **Result**: 手機打開能看到今天 3 張卡，Vercel 上線
 
-### Week 2 — Core Interaction
+### Week 2 — Core Interaction ✅
 - [x] 👍👎 寫回 DB
-- [x] 下次 classifier 吃進 prompt(最近 30 天 / 20 筆偏好,門檻 10)
-- [x] 💬 追問:SSE streaming,Haiku 預設
-- [ ] Skill-tag 加到 classifier 輸出
-- **Demo goal**: 滑卡、點追問看 Claude 即時回、明天 brief 真的變了
+- [x] Classifier 吃進 feedback prompt（近 30 天 / 20 筆 / 門檻 10）
+- [x] 💬 追問：SSE streaming，Haiku 4.5（`api/ask.ts` Edge Function，非 Hono）
+- [ ] Skill-tag 加到 classifier 輸出（待做）
+- **Result**: 滑卡、追問、feedback loop 全部上線
 
-### Week 3 — Investment Layer
-- [ ] Notion API 整合:`🔖` → 自動建 page(設計好的 template)
-- [ ] 收藏時順手讓 Haiku 生成 quiz question + answer,存到 `quizzes`
-- [ ] 基本 dashboard:streak、本週讀了幾篇、最常點 tag
-- **Demo goal**: 每收藏一篇,Notion 就長一篇,完全不用手動整理
+### Week 3 — Investment Layer（進行中）
+- [ ] **Notion API 整合（F4）**：`🔖` → 自動建 page（下一優先）
+- [ ] 收藏時 Haiku 生成 quiz QA pair，存到 `quizzes`
+- [ ] 基本 dashboard：streak（已有 localStorage 版）、本週讀了幾篇
+- **Demo goal**: 每收藏一篇，Notion 就長一篇，完全不用手動整理
 
 ### Week 4 — Retention Engine
-- [ ] 晨間 recall quiz flow(3/7/14 天前的卡,遮答案)
-- [ ] 週報 cron(週日 22:00,Sonnet 生成,同步 Notion)
+- [ ] 晨間 recall quiz flow（3/7/14 天前的卡，遮答案）
+- [ ] 週報 cron（週日 22:00，Sonnet 生成，同步 Notion）
 - **Demo goal**: 每天「先答 quiz → 再看新 brief」變成日常
 
 ### Phase 2 (Optional,視黏著度決定)
@@ -236,24 +239,20 @@ quizzes = {
 
 ---
 
-## 8. 成本試算
+## 8. 成本試算（實際）
 
-| 項目 | Model | 每日用量 | 每日成本 |
+| 項目 | Model | 每日用量 | 估計年費 |
 |---|---|---|---|
-| Classifier | Haiku 4.5 | 20 篇 × ~500 tok | $0.02 |
-| Brief generator | Sonnet 4.6 | 1 call | $0.05 |
-| 💬 追問 | Haiku (90%) / Sonnet (10%) | 5 輪對話 | $0.05 |
-| Quiz 生成 | Haiku | 收藏時跑,~5 張 | $0.005 |
-| 週報 (攤平) | Sonnet / 週一次 | — | $0.015 |
+| Classifier | GPT-4o / Sonnet 4.6（輪替） | top 12 篇各送一次 LLM | ~$32 |
+| Brief generator | GPT-4o / Sonnet 4.6（輪替） | 1 call / 天 | ~$4 |
+| 💬 追問 | Haiku 4.5 | ~4 turns / 使用日（SSE） | ~$1 |
 | Notion API | — | 無限 | $0 |
 | Turso | — | free tier | $0 |
 | Vercel | — | free tier | $0 |
 | GitHub Actions | — | free | $0 |
-| **Total** | | | **~$0.14 / day ≈ 4 TWD** |
+| **Total** | | | **~$35–40/年 ≈ 90 TWD/月** |
 
-**預算使用率:4 TWD / 80 TWD = 5%**
-
-若 Phase 2 加 TTS(local Piper),仍為 $0 增量。
+Prompt caching 已啟用（Anthropic `cache_control`、OpenAI 自動），Classifier system prompt 跨 12 次 call 只寫一次 cache，大幅壓低輸入成本。調整 `CLASSIFIER_CAP`（預設 12）可線性控制主要成本。
 
 ---
 
@@ -275,7 +274,7 @@ quizzes = {
 
 ## 10. Open Questions (待討論,不 blocking)
 
-1. **反饋衰減** — MVP 決定:近 30 天窗 + 最多 20 筆 + 門檻 10 筆才注入 + 👎 per-category 至少 2 次才算負訊號。時間衰減權重留 Phase 2 視實際資料決定。
+1. **反饋衰減** — ✅ 已實作：近 30 天窗 + 最多 20 筆 + 門檻 10 筆才注入 + 👎 per-category 至少 2 次才算負訊號。時間衰減權重留 Phase 2 視實際資料決定。
 2. **Quiz 排程演算法** — 3/7/14 是固定間隔還是 SM-2 algorithm (Anki)?MVP 用固定間隔,Phase 2 考慮 SM-2。
 3. **Skill tag 詞彙表** — 開放任意 tag 還是 controlled vocabulary?先 controlled(預定義 ~20 個),避免 classifier 亂生。
 4. **Notion page template** — 要不要讓使用者自訂?MVP 硬編碼,之後再抽成設定。

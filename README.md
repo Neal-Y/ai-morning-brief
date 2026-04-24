@@ -1,126 +1,134 @@
 # AI Morning Brief
 
-每日自動化 AI 技術情報系統 — RSS 抓取 → LLM 分析 → ntfy 手機推播。
+每日自動化 AI 技術情報系統：RSS 抓取 → LLM 分析 → Turso DB → Web PWA + ntfy 推播。
+
+**Live:** https://ai-morning-brief.vercel.app
+
+## 功能概覽
+
+- **每日 pipeline**：GitHub Actions 07:30（台北）自動抓 RSS、LLM 分類、寫 Turso DB、ntfy 推播
+- **Web PWA**：滑卡瀏覽、👍👎 回饋、💬 追問（Haiku streaming）、🔖 收藏、streak 計數
+- **Feedback loop**：Classifier 讀近 30 天 👍👎 回饋調整選文偏好（≥10 筆啟動）
+- **Provider alternation**：GPT-4o / Claude Sonnet 4.6 按日輪替
 
 ## Quick Start
 
 ```bash
-# 1. Clone & install
-git clone <repo-url> && cd ai-morning-brief
+# Backend pipeline + API
+nvm use 20
 npm install
+cp .env.example .env   # 填入 keys
+npm run dev:api        # Hono API (port 3001)
 
-# 2. Set env vars
-cp .env.example .env
-# Edit .env with your keys
+# Frontend
+cd web && npm install
+npm run dev            # Vite dev (port 5173, proxy → 3001)
+```
 
-# 3. Run locally
-npm run dev
+手動跑一次 pipeline（會真的推 ntfy + 寫 DB）：
+
+```bash
+npm run dev:pipeline
 ```
 
 ## Environment Variables
 
-| Variable             | Required              | Description                                      |
-| -------------------- | --------------------- | ------------------------------------------------ |
-| `NTFY_TOPIC`         | ✅                    | Your ntfy topic name                             |
-| `AI_PROVIDER`        | ✅                    | `openai` / `anthropic` / `alternate`             |
-| `OPENAI_API_KEY`     | if openai / alternate | OpenAI API key                                   |
-| `ANTHROPIC_API_KEY`  | if anthropic / alternate | Anthropic API key                             |
+| Variable              | Required               | Description                          |
+| --------------------- | ---------------------- | ------------------------------------ |
+| `TURSO_DATABASE_URL`  | ✅                     | libsql://xxx.turso.io                |
+| `TURSO_AUTH_TOKEN`    | ✅                     | Turso JWT token                      |
+| `NTFY_TOPIC`          | ✅                     | ntfy topic name                      |
+| `AI_PROVIDER`         | ✅                     | `openai` / `anthropic` / `alternate` |
+| `OPENAI_API_KEY`      | if openai / alternate  | OpenAI API key                       |
+| `ANTHROPIC_API_KEY`   | if anthropic / alternate | Anthropic API key                  |
 
-`alternate` 模式：每日自動輪替，偶數天（年內第幾天）→ GPT，奇數天 → Claude。
+`alternate` 模式：偶數天（年內第幾天）→ GPT-4o，奇數天 → Claude Sonnet 4.6。
 
-## Deploy to GitHub Actions
+## Deploy
 
-1. Push this repo to GitHub
-2. 到 repo → Settings → Secrets and variables → Actions → New repository secret
-3. 新增以下 Secrets：
+### GitHub Actions（pipeline）
+
+1. Push 到 GitHub
+2. Settings → Secrets → Actions，新增以下 secrets：
+   - `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`
    - `NTFY_TOPIC`
-   - `OPENAI_API_KEY`
-   - `ANTHROPIC_API_KEY`
-4. GitHub Actions 每天台灣時間 07:30 自動執行
+   - `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
+3. 每天台灣時間 07:30 自動執行
 
-手動測試：Actions → AI Morning Brief → Run workflow
+手動觸發：Actions → AI Morning Brief → Run workflow
+
+### Vercel（Web + API）
+
+```bash
+vercel deploy
+```
+
+`api/index.ts`（Hono）和 `api/ask.ts`（Edge Runtime SSE）分別部署為 Vercel Functions。`web/` 為靜態 React PWA。
 
 ## Cost
 
-每天執行一次，估計年費：
+每天跑一次 pipeline，加上 Web 追問，估計年費：
+
+| 元件 | 模型 | 用途 | 估計年費 |
+| ---- | ---- | ---- | -------- |
+| Classifier | GPT-4o / Sonnet 4.6（輪替） | 每天 top 12 篇各送一次 LLM | ~$32 |
+| Brief | GPT-4o / Sonnet 4.6（輪替） | 每天 1 次 LLM call | ~$4 |
+| Ask | Claude Haiku 4.5 | 使用者追問，streaming | ~$1 |
+| **總計** | | | **~$35–40/年** |
+
+定價參考（prompt caching 已啟用）：
 
 | Model | Input /M | Output /M | Cache Read /M |
 | ----- | -------- | --------- | ------------- |
-| gpt-4o | $2.50 | $10.00 | $1.25（自動，50% off）|
-| claude-sonnet-4-6 | $3.00 | $15.00 | $0.30（opt-in，90% off）|
+| gpt-4o | $2.50 | $10.00 | $1.25（自動）|
+| claude-sonnet-4-6 | $3.00 | $15.00 | $0.30（cache_control opt-in）|
+| claude-haiku-4-5 | $0.80 | $4.00 | $0.08（cache_control opt-in）|
 
-兩個 provider 均啟用 prompt caching（OpenAI 自動、Anthropic 透過 `cache_control`），classifier system prompt 重複發送的成本大幅降低。
-
-**估計 ~$20–25/年**（`alternate` 模式，每天送 top 12 篇文章給 classifier）。
-
-調整 `config.ts` 的 `CLASSIFIER_CAP`（預設 12）可進一步控制成本。
+調整 `src/config.ts` 的 `CLASSIFIER_CAP`（預設 12）可線性控制 classifier 成本。
 
 ## Architecture
 
-### Data Flow
+### System Overview
 
 ```
-┌─────────────────────────────────────────────────────┐
-│  Stage 1 — rss/feed.ts                              │
-│                                                     │
-│  7 RSS sources ──Promise.allSettled──► fetch 平行   │
-│    → filterLast24h()   只留 24h 內文章              │
-│    → scoreArticle()    關鍵字加減分 (llm=+4, ...)   │
-│    → prefilter()       丟掉分數 < -2 的文章         │
-│                                                     │
-│  輸出：ArticleSummary[]  (title/link/score/...)     │
-└──────────────────────┬──────────────────────────────┘
-                       │ 依分數排序，取 top 12
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  Stage 2 — ai/classifier.ts                         │
-│                                                     │
-│  每篇文章各送一次 LLM（平行，最多 3 個同時）         │
-│    → 回傳 bucket:      HARD_TECH_AI / SIGNALS / DROP│
-│    → 回傳 renderLevel: FULL / LIGHT / OMIT          │
-│    → 回傳 score, summary, engineeringImpact...      │
-│                                                     │
-│  輸出：ClassifiedArticle[]                          │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  Stage 3 — index.ts（選篇邏輯）                     │
-│                                                     │
-│  HARD_TECH_AI  最多取 2 篇                          │
-│  SIGNALS       最多取 1 篇                          │
-│  不滿 3 篇 → 從 DROP 裡補分數最高的（降級為 LIGHT） │
-│                                                     │
-│  輸出：selected[]（固定 3 篇）                      │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  Stage 4 — ai/brief.ts                              │
-│                                                     │
-│  3 篇文章 → 送一次 LLM → 生成完整 brief             │
-│    BriefResult: title / sections[] / actionLinks[]  │
-│    每篇含 summary / context / engineeringImpact     │
-└──────────────────────┬──────────────────────────────┘
-                       │
-                       ▼
-┌─────────────────────────────────────────────────────┐
-│  Stage 5 — notify/ntfy.ts                           │
-│                                                     │
-│  formatBriefText() → 結構轉純文字                   │
-│  sendNtfy()        → HTTP POST 到 ntfy.sh           │
-│                        title + body + 3 action buttons│
-└─────────────────────────────────────────────────────┘
+GitHub Actions cron (07:30 台北)
+  └─ src/index.ts
+       ├─ rss/feed.ts          RSS 抓取 + 24h 過濾 + 關鍵字打分
+       ├─ db/client.ts         讀近 30 天 feedback 作偏好 context
+       ├─ ai/classifier.ts     per-article LLM 分類（concurrency=3）
+       ├─ ai/brief.ts          brief 生成（1 次 LLM call）
+       ├─ notify/ntfy.ts       ntfy 推播
+       └─ notify/db-writer.ts  upsert 文章到 Turso
+
+Hono API  (src/api/app.ts → api/index.ts on Vercel)
+  ├─ GET  /api/feed?date=      從 Turso 讀當日文章
+  ├─ POST /api/feedback        👍👎 回饋（delete-then-insert）
+  └─ POST /api/save            收藏文章
+
+Edge Function (api/ask.ts — Vercel 獨立路由)
+  └─ POST /api/ask             Haiku 4.5 SSE streaming 追問（multi-turn）
+
+React PWA (web/)
+  └─ 滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / streak
 ```
 
-### Stage 一覽
+### Pipeline Stages
 
-| Stage | 檔案 | 做什麼 | 輸入 → 輸出 |
-|-------|------|--------|-------------|
-| 1 Feed | `rss/feed.ts` | 抓文章、過濾、關鍵字打分 | RSS feeds → `ArticleSummary[]` |
-| 2 Classify | `ai/classifier.ts` | LLM 判斷每篇價值與分類 | top 12 篇 → `ClassifiedArticle[]` |
-| 3 Select | `index.ts` | 按 bucket 規則挑 3 篇 | 全部分類結果 → 3 篇 `selected[]` |
-| 4 Brief | `ai/brief.ts` | LLM 寫完整摘要 | 3 篇 → `BriefResult` |
-| 5 Notify | `notify/ntfy.ts` | 格式化 + 推播 | `BriefResult` → 手機通知 |
+| Stage | 檔案 | 輸入 → 輸出 |
+|-------|------|-------------|
+| 1 Feed | `rss/feed.ts` | RSS feeds → `ArticleSummary[]`（過濾 + 打分）|
+| 2 Classify | `ai/classifier.ts` | top 12 篇 → `ClassifiedArticle[]`（bucket / renderLevel / score）|
+| 3 Select | `src/index.ts` | 全部分類 → 3 篇（HARD_TECH ≤2, SIGNALS ≤1，不足補 filler）|
+| 4 Brief | `ai/brief.ts` | 3 篇 → `BriefResult`（summary / context / engineeringImpact）|
+| 5 Write | `notify/db-writer.ts` | `BriefResult` → Turso upsert |
+| 6 Notify | `notify/ntfy.ts` | `BriefResult` → ntfy 推播 |
 
-**Provider alternation:** `AI_PROVIDER=alternate` 按台北時區當日年內天數奇偶輪替 GPT / Claude，兩個 API key 都需要設定。
+### Database Schema（Turso / libSQL）
+
+| Table | 用途 |
+|-------|------|
+| `articles` | 每日文章 + 分類結果 |
+| `feedback` | 👍👎 回饋，用於 classifier 偏好 |
+| `saves` | 🔖 收藏紀錄 |
+| `conversations` | 💬 追問對話歷史 |
+| `quizzes` | Quiz QA pairs（schema 已建，功能待開發）|
