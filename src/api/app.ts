@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { db, client as dbClient } from '../db/client.js'
+import { db } from '../db/client.js'
 import { getTaipeiDateString } from '../date.js'
 import { articles, feedback, saves } from '../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
@@ -40,26 +40,9 @@ app.post('/api/save', async (c) => {
   return c.json({ ok: true })
 })
 
-app.post('/api/push-subscribe', async (c) => {
-  console.log('[push-subscribe] started')
-  try {
-    const raw = await Promise.race([
-      c.req.text(),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('text() timeout 5s')), 5000)),
-    ])
-    console.log('[push-subscribe] text read, len:', raw.length)
-    const { endpoint, keys } = JSON.parse(raw) as { endpoint: string; keys: { p256dh: string; auth: string } }
-    console.log('[push-subscribe] parsed, endpoint len:', endpoint.length)
-    await dbClient.batch([
-      { sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?', args: [endpoint] },
-      { sql: 'INSERT INTO push_subscriptions (endpoint, p256dh, auth, updated_at) VALUES (?, ?, ?, ?)', args: [endpoint, keys.p256dh, keys.auth, Date.now()] },
-    ], 'write')
-    console.log('[push-subscribe] OK')
-    return c.json({ ok: true })
-  } catch (err) {
-    console.error('[push-subscribe] Failed:', err)
-    return c.json({ ok: false, error: String(err) }, 500)
-  }
-})
+// NOTE: /api/push-subscribe is NOT defined here. In production, Vercel rewrites
+// it directly to api/push-subscribe.ts (Edge Runtime). The Hono/Node.js adapter
+// hangs on request body reading for this endpoint specifically — the Edge
+// Runtime's native Request object works around the issue.
 
 export default app
