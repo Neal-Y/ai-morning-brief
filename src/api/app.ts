@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { db } from '../db/client.js'
+import { db, client as dbClient } from '../db/client.js'
 import { getTaipeiDateString } from '../date.js'
 import { articles, feedback, saves } from '../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
@@ -41,29 +41,17 @@ app.post('/api/save', async (c) => {
 })
 
 app.post('/api/push-subscribe', async (c) => {
+  console.log('[push-subscribe] started')
   try {
     const { endpoint, keys } = await c.req.json<{
       endpoint: string
       keys: { p256dh: string; auth: string }
     }>()
-    const dbUrl = (process.env['TURSO_DATABASE_URL'] ?? '').replace('libsql://', 'https://')
-    const token = process.env['TURSO_AUTH_TOKEN'] ?? ''
-    const res = await fetch(`${dbUrl}/v2/pipeline`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        requests: [
-          { type: 'execute', stmt: { sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?', args: [{ type: 'text', value: endpoint }] } },
-          { type: 'execute', stmt: { sql: 'INSERT INTO push_subscriptions (endpoint, p256dh, auth, updated_at) VALUES (?, ?, ?, ?)', args: [{ type: 'text', value: endpoint }, { type: 'text', value: keys.p256dh }, { type: 'text', value: keys.auth }, { type: 'integer', value: String(Date.now()) }] } },
-          { type: 'close' },
-        ],
-      }),
-    })
-    if (!res.ok) {
-      const body = await res.text()
-      console.error('[push-subscribe] Turso error:', res.status, body)
-      return c.json({ ok: false, error: `turso ${res.status}` }, 500)
-    }
+    console.log('[push-subscribe] body parsed, endpoint len:', endpoint.length)
+    await dbClient.batch([
+      { sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?', args: [endpoint] },
+      { sql: 'INSERT INTO push_subscriptions (endpoint, p256dh, auth, updated_at) VALUES (?, ?, ?, ?)', args: [endpoint, keys.p256dh, keys.auth, Date.now()] },
+    ], 'write')
     console.log('[push-subscribe] OK')
     return c.json({ ok: true })
   } catch (err) {
