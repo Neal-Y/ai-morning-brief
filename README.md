@@ -59,6 +59,23 @@ npx web-push generate-vapid-keys
 | ------------------------- | -------- | ----------- |
 | `VITE_VAPID_PUBLIC_KEY`   | ✅       | 與 `VAPID_PUBLIC_KEY` 相同值，但變數名要有 `VITE_` 前綴才會被 Vite bake 進前端 bundle |
 
+### Notion (Vercel env only — 不需進 GitHub Actions secrets)
+
+| Variable             | Required for 🔖 | Description |
+| -------------------- | --------------- | ----------- |
+| `NOTION_API_KEY`     | ✅              | Notion internal integration token (`secret_...`)，integration 要有 database 的寫權限 |
+| `NOTION_DATABASE_ID` | ✅              | 目標 database id；database 必須 share 給 integration |
+
+**Manual setup**：
+
+1. 到 Notion → Settings → Integrations → New internal integration → 拿 token。
+2. 建一個 database，properties：`Title (title)` `URL (url)` `Source (rich_text)` `Category (select)` `Score (number)` `Brief Date (date)` `Article ID (rich_text)`。
+3. database 右上「...」→ Add connections → 選你的 integration。
+4. 從 database URL 抓 ID（`notion.so/<workspace>/<DATABASE_ID>?v=...`）。
+5. `NOTION_API_KEY` + `NOTION_DATABASE_ID` 加到 Vercel 的 production / preview env。
+
+Notion sync 失敗不會阻擋 🔖 — `saves` row 仍會寫入（`notion_page_id = NULL`），下次點同一篇會自動 retry。
+
 `alternate` 模式：偶數天（年內第幾天）→ GPT-4o，奇數天 → Claude Sonnet 4.6。
 
 ## Deploy
@@ -122,12 +139,12 @@ GitHub Actions cron (07:30 台北)
 
 Hono API  (src/api/app.ts → api/index.ts on Vercel)
   ├─ GET  /api/feed?date=      從 Turso 讀當日文章
-  ├─ POST /api/feedback        👍👎 回饋（delete-then-insert）
-  └─ POST /api/save            收藏文章
+  └─ POST /api/feedback        👍👎 回饋（delete-then-insert）
 
 Edge Functions (Vercel 獨立路由，不走 Hono)
   ├─ POST /api/ask             api/ask.ts — Haiku 4.5 SSE streaming 追問（multi-turn）
-  └─ POST /api/push-subscribe  api/push-subscribe.ts — 寫 push_subscriptions（Turso HTTP API）
+  ├─ POST /api/push-subscribe  api/push-subscribe.ts — 寫 push_subscriptions（Turso HTTP API）
+  └─ POST /api/save            api/save.ts — 查 article + Notion 建 page + upsert saves
 
 React PWA (web/)
   ├─ 滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / streak

@@ -9,7 +9,8 @@
 - **ntfy 已淘汰**（2026-04-25），現在唯一推播管道是 Web Push（VAPID + iOS standalone PWA）。
 - 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`；現在 SW (`web/public/sw.js`) 是真正的 push handler（`push` + `notificationclick` events，無 fetch cache）。
 - Classifier 已吃進 feedback（V2 Investment 環節核心），近 30 天 / 20 筆 / 門檻 10 筆。Anthropic cache 有拆 prefix（穩定部分跨天保留）。
-- **下一個大事**：Notion 整合（F4），🔖 → 自動建 page。
+- **F4 Notion 整合（2026-04-25）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `saves.articleId` unique，Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。
+- **下一個大事**：收藏時順手生成 quiz（F5）。
 
 ---
 
@@ -27,12 +28,12 @@ GitHub Actions cron (daily 台北 07:30)
 
 Hono API (src/api/app.ts → api/index.ts on Vercel)
   ├─ GET  /api/feed?date=   # 從 Turso 讀當日文章
-  ├─ POST /api/feedback     # up/down（delete-then-insert，同 articleId 只留最新）
-  └─ POST /api/save         # 儲存文章（Notion 整合未接）
+  └─ POST /api/feedback     # up/down（delete-then-insert，同 articleId 只留最新）
 
 Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
   ├─ POST /api/ask              # api/ask.ts — Haiku 4.5 SSE streaming 追問
-  └─ POST /api/push-subscribe   # api/push-subscribe.ts — 寫 push_subscriptions
+  ├─ POST /api/push-subscribe   # api/push-subscribe.ts — 寫 push_subscriptions
+  └─ POST /api/save             # api/save.ts — 查 article + Notion 建 page + upsert saves
 
 React PWA (web/)
   ├─ 滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration
@@ -53,7 +54,7 @@ React PWA (web/)
 | 👍👎 → DB | ✅ | delete-then-insert 防誤按 |
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
-| 🔖 Notion 整合 | ⏳ 未做 | 下一項（F4） |
+| 🔖 Notion 整合 | ✅ | `api/save.ts` Edge Runtime + raw fetch；Notion 失敗 graceful（saves 仍寫，notion_page_id null，下次 retry） |
 | Quiz 生成 | ⏳ 未做 | `quizzes` table 已建 schema |
 | 晨間 Recall Quiz | ⏳ 未做 | 需先有 quiz 資料 |
 | Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
@@ -63,10 +64,10 @@ React PWA (web/)
 
 ## 下一步（按優先順序）
 
-1. **Notion 整合 (F4)** — 🔖 → 自動建 Notion page；解決「想做筆記最後沒做」痛點。
-2. **收藏時生成 quiz** — Haiku 順手產 QA pair，存 `quizzes` table。
-3. **晨間 recall quiz** — 打開 app 先答 3/7/14 天前的卡。
-4. **Skill-tag 產出** — classifier 加 `skillTags` 欄位。
+1. **收藏時生成 quiz (F5 起點)** — Haiku 順手產 QA pair，存 `quizzes` table。
+2. **晨間 recall quiz** — 打開 app 先答 3/7/14 天前的卡。
+3. **Skill-tag 產出** — classifier 加 `skillTags` 欄位。
+4. **Notion 強化（v1.1）** — 失敗 backfill cron、conversations 寫回後塞進 page、筆記輸入 UI。
 5. **通知文案再優化**（觀察一週通知品質後評估）：
    - 目前 lead = `displayedItems[0].title`（最高分 HARD_TECH_AI 的 RSS 原標）
    - 真實 case 看下來如果 lead 經常很弱，考慮讓 brief generator 多輸出一個 `lead: { articleId, headline }` 欄位（同一次 LLM call 改 schema，cost = 0）
@@ -102,13 +103,15 @@ src/
   ai/openai.ts · anthropic.ts
   notify/web-push.ts  # web-push 函式庫，對 push_subscriptions 全表發送
   notify/db-writer.ts # Turso upsert
-  db/schema.ts        # articles / feedback / saves / conversations / quizzes / push_subscriptions
+  notion/client.ts    # raw fetch Notion REST API（createSavePage）
+  db/schema.ts        # articles / feedback / saves (article_id unique) / conversations / quizzes / push_subscriptions
   db/client.ts        # libSQL client (https://) + getRecentFeedback()
-  api/app.ts          # Hono app（/api/feed /api/feedback /api/save）
+  api/app.ts          # Hono app（/api/feed /api/feedback）
   api/server.ts       # 本地 dev (port 3001)
 api/index.ts             # Vercel entry (hono/vercel handle)
 api/ask.ts               # Edge Runtime SSE for /api/ask
 api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
+api/save.ts              # Edge Runtime POST → Notion + Turso HTTP API（建 page + upsert saves）
 vercel.json
 web/
   index.html
@@ -159,6 +162,13 @@ VAPID_PUBLIC_KEY      # web-push generate-vapid-keys
 VAPID_PRIVATE_KEY
 ```
 
+**Notion (Vercel env only — 不需要進 GitHub Actions secrets，cron 不會呼叫 Notion):**
+```
+NOTION_API_KEY        # internal integration token (secret_xxx)
+NOTION_DATABASE_ID    # database 要 share 給 integration
+```
+Notion database 需要的 properties：`Title (title)` `URL (url)` `Source (rich_text)` `Category (select)` `Score (number)` `Brief Date (date)` `Article ID (rich_text)`。
+
 **Frontend (Vercel build-time only — `VITE_` prefix is required for Vite to bake into bundle):**
 ```
 VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數名才會出現在前端 bundle
@@ -182,6 +192,8 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - Infra 錯誤不送 Web Push：RSS 全掛、config/provider 錯誤、DB 寫入失敗、Web Push 全部發送失敗都要 `exit(1)`，讓 GitHub Actions failed；Actions log 是錯誤診斷 source of truth。
 - DB upsert 一律用 `onConflictDoUpdate`（用 `onConflictDoNothing` 會讓 count log 誤報）
 - db-writer 的 conflict target 是 `articles.url`
+- `saves.articleId` 是 unique（一篇一筆）；`/api/save` handler 自己做 select-then-update / insert，不依賴 Drizzle upsert（Edge Runtime 用 raw Turso HTTP API）
+- Notion sync 失敗不阻斷收藏：寫 `saves` row 但 `notion_page_id = NULL`，回 `{ ok: true, notionSynced: false }`，下次同篇再點會 retry
 
 **Classifier 偏好：**
 - Preference context **必須附加在 system prompt 尾端**（保 cache prefix，不要插中間／開頭）
@@ -192,9 +204,10 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 **Edge Runtime endpoints（POST 一律走這裡，不要進 Hono）：**
 - `/api/ask` → `api/ask.ts`（SSE streaming）
 - `/api/push-subscribe` → `api/push-subscribe.ts`（寫 Turso）
+- `/api/save` → `api/save.ts`（查 article、Notion 建 page、upsert saves）
 - **背景**：Hono 的 body parser 在 `hono/vercel` Node.js adapter 上會 hang —— `c.req.json()` / `c.req.text()` 對某些 POST 永遠不 resolve，function 撐到 300s timeout 才回 504。GET 沒事，不是 DB / libSQL / drizzle / VAPID 的問題（全試過了）。改用 Edge Runtime 的原生 `Request.json()` 就 OK。
 - **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。
-- `vercel.json` 的 rewrite 順序：`/api/ask` 和 `/api/push-subscribe` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
+- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/push-subscribe`、`/api/save` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 

@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { db } from '../db/client.js'
 import { getTaipeiDateString } from '../date.js'
-import { articles, feedback, saves } from '../db/schema.js'
+import { articles, feedback } from '../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
 
 // NOTE: /api/ask is NOT defined here. In production, Vercel rewrites /api/ask
@@ -34,15 +34,11 @@ app.post('/api/feedback', async (c) => {
   return c.json({ ok: true })
 })
 
-app.post('/api/save', async (c) => {
-  const { articleId, userNote } = await c.req.json<{ articleId: string; userNote?: string }>()
-  await db.insert(saves).values({ articleId, userNote: userNote ?? null, createdAt: new Date() })
-  return c.json({ ok: true })
-})
-
-// NOTE: /api/push-subscribe is NOT defined here. In production, Vercel rewrites
-// it directly to api/push-subscribe.ts (Edge Runtime). The Hono/Node.js adapter
-// hangs on request body reading for this endpoint specifically — the Edge
-// Runtime's native Request object works around the issue.
+// NOTE: /api/save and /api/push-subscribe are NOT defined here. In production,
+// Vercel rewrites them directly to api/save.ts and api/push-subscribe.ts
+// (Edge Runtime). The Hono/Node.js adapter hangs on request body reading for
+// these endpoints — the Edge Runtime's native Request object works around it.
+// /api/save additionally calls Notion, which adds latency that should not block
+// the Hono pool.
 
 export default app

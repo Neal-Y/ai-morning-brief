@@ -143,13 +143,13 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
 │              │          │  │ (api/index.ts, Node)   │  │
 │ - Card swipe │          │  │ - GET /api/feed        │  │
 │ - 👍👎      │          │  │ - POST /api/feedback   │  │
-│ - 🔖 save    │          │  │ - POST /api/save       │  │
-│ - Quiz       │          │  └────────────────────────┘  │
-│ - SW push    │          │  ┌────────────────────────┐  │
-│   handler    │   SSE    │  │ Edge Functions         │  │
-│              │◄────────►│  │ - POST /api/ask        │  │
+│ - 🔖 save    │          │  └────────────────────────┘  │
+│ - Quiz       │          │  ┌────────────────────────┐  │
+│ - SW push    │   SSE    │  │ Edge Functions         │  │
+│   handler    │◄────────►│  │ - POST /api/ask        │  │
 │              │   POST   │  │ - POST /api/push-      │  │
 │              │◄────────►│  │   subscribe            │  │
+│              │          │  │ - POST /api/save       │  │
 └──────────────┘          │  └────────────────────────┘  │
        ▲                  │    Vercel                    │
        │ Web Push (VAPID) │                              │
@@ -230,7 +230,7 @@ quizzes = {
 - **Result**: 滑卡、追問、feedback loop、Web Push 全部上線
 
 ### Week 3 — Investment Layer（進行中）
-- [ ] **Notion API 整合（F4）**：`🔖` → 自動建 page（下一優先）
+- [x] **Notion API 整合（F4）**：`🔖` → 自動建 page（2026-04-25 上線；`api/save.ts` Edge Runtime + raw fetch，Notion 失敗不阻斷收藏）
 - [ ] 收藏時 Haiku 生成 quiz QA pair，存到 `quizzes`
 - [ ] 基本 dashboard：streak（已有 localStorage 版）、本週讀了幾篇
 - [ ] 通知文案再優化：lead 標題品質觀察一週後，視情況讓 brief generator 多輸出 `lead` 欄位

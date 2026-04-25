@@ -28,7 +28,7 @@ export const feedback = sqliteTable('feedback', {
 
 export const saves = sqliteTable('saves', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
-  articleId: text('article_id').notNull().references(() => articles.id),
+  articleId: text('article_id').notNull().unique().references(() => articles.id),
   userNote: text('user_note'),
   notionPageId: text('notion_page_id'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
