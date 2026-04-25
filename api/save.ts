@@ -83,11 +83,22 @@ export default async function handler(req: Request): Promise<Response> {
   let userNote: string | null = null
   try {
     const body = (await req.json()) as { articleId?: unknown; userNote?: unknown }
-    if (typeof body.articleId !== 'string' || body.articleId.length === 0) {
+    // articleId is SHA-256(url).slice(0,16) — 16 lowercase hex chars. Tight
+    // shape check rejects garbage before we touch Turso or Notion.
+    if (typeof body.articleId !== 'string' || !/^[a-f0-9]{16}$/.test(body.articleId)) {
       return jsonResponse({ ok: false, error: 'invalid_article_id' }, 400)
     }
     articleId = body.articleId
-    if (typeof body.userNote === 'string') userNote = body.userNote
+    if (typeof body.userNote === 'string') {
+      const trimmed = body.userNote.trim()
+      if (trimmed.length === 0) {
+        userNote = null
+      } else if (trimmed.length > 4000) {
+        return jsonResponse({ ok: false, error: 'user_note_too_long' }, 400)
+      } else {
+        userNote = trimmed
+      }
+    }
   } catch {
     return jsonResponse({ ok: false, error: 'invalid_body' }, 400)
   }

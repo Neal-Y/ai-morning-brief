@@ -22,6 +22,15 @@ app.get('/api/feed', async (c) => {
     .from(articles)
     .where(eq(articles.briefDate, date))
     .orderBy(desc(articles.score))
+  // Cache populated days at the edge (rows are immutable once the daily
+  // pipeline finishes). For empty responses we use a short cache so a PWA
+  // opened before the cron run isn't stuck on stale empty data for 5 minutes.
+  c.header(
+    'Cache-Control',
+    rows.length > 0
+      ? 'public, s-maxage=300, stale-while-revalidate=300'
+      : 'public, s-maxage=30',
+  )
   return c.json({ date, articles: rows })
 })
 

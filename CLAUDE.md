@@ -207,6 +207,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/save` → `api/save.ts`（查 article、Notion 建 page、upsert saves）
 - **背景**：Hono 的 body parser 在 `hono/vercel` Node.js adapter 上會 hang —— `c.req.json()` / `c.req.text()` 對某些 POST 永遠不 resolve，function 撐到 300s timeout 才回 504。GET 沒事，不是 DB / libSQL / drizzle / VAPID 的問題（全試過了）。改用 Edge Runtime 的原生 `Request.json()` 就 OK。
 - **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。
+- **例外**：`/api/feedback` 仍在 Hono。body 只有 `{ articleId, signal }` < 100 bytes、Hono Node adapter 對短 body 沒觀察到 hang，因此先保留不搬。**這是過渡狀態，不是 reference**：新 endpoint 仍一律 Edge，不要拿 feedback 當例子複製。
 - `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/push-subscribe`、`/api/save` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
