@@ -1,6 +1,6 @@
 # AI Morning Brief V2 — Product & Engineering Design
 
-> **Status**: F1–F3 + Feedback loop + Web Push 已上線（Vercel + GitHub Actions）。**ntfy 已淘汰（2026-04-25）**，唯一推播管道為 Web Push。F4 Notion 整合為下一優先。
+> **Status**: F1–F4 + Feedback loop + Web Push 已上線（Vercel + GitHub Actions）。**ntfy 已淘汰（2026-04-25）**，唯一推播管道為 Web Push。F4 Notion 整合已 ship（`api/save.ts` Edge Runtime + raw fetch），下一優先為 F5（收藏時生成 quiz）。
 > **Baseline**: [PROPOSAL.md](./PROPOSAL.md) (V1, 已被 V2 取代)。
 
 ---
