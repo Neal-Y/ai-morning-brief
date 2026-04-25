@@ -87,6 +87,8 @@ export interface AIProvider {
    *    across days even when the suffix varies.
    */
   call(system: string | string[], userPrompt: string): Promise<string>;
+  /** Print cumulative token + cache stats for all calls made on this instance. */
+  logUsageSummary(): void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

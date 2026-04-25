@@ -180,6 +180,11 @@ async function main(): Promise<void> {
     return buildDegradedBrief(selected, date);
   });
 
+  // After all LLM work for this run, surface cumulative cache + token stats.
+  // Used to verify whether the stable system-prompt prefix is actually held
+  // across runs (Anthropic) or hits OpenAI's automatic prefix cache.
+  provider.logUsageSummary();
+
   // ── Stage 5: Persist to Turso DB ─────────────────────────────────────────
   // Web Push is only an entrypoint into the PWA. Persist first so a tapped
   // notification never opens to an empty/stale feed.
