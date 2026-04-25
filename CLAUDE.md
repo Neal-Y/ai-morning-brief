@@ -167,9 +167,14 @@ ANTHROPIC_API_KEY
 - Cold-start 門檻 10 筆，低於門檻一律不注入（防過擬合）
 - 👎 per-category 要 ≥ 2 次才算負訊號（單一 👎 可能只是當天心情，別當真）
 
-**Ask endpoint：**
-- `/api/ask` **只**在 `api/ask.ts`（Edge Runtime、raw fetch），不在 Hono app 裡。不要為了 local dev 方便而在 `src/api/app.ts` 複製一份，會 prompt drift。
-- 結果：本地 `npm run dev:api` 無法測 Ask，要測請 push 到 Vercel preview。
+**Edge Runtime endpoints（POST 一律走這裡，不要進 Hono）：**
+- `/api/ask` → `api/ask.ts`（SSE streaming）
+- `/api/push-subscribe` → `api/push-subscribe.ts`（寫 Turso）
+- **背景**：Hono 的 body parser 在 `hono/vercel` Node.js adapter 上會 hang —— `c.req.json()` / `c.req.text()` 對某些 POST 永遠不 resolve，function 撐到 300s timeout 才回 504。GET 沒事，不是 DB / libSQL / drizzle / VAPID 的問題（全試過了）。改用 Edge Runtime 的原生 `Request.json()` 就 OK。
+- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。
+- `vercel.json` 的 rewrite 順序：`/api/ask` 和 `/api/push-subscribe` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
+- 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
+- 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 
 **PWA / Service Worker：**
 - **不要**重新加 `vite-plugin-pwa` 或其他 SW 產生器。app 是「每天開一次抓新資料」，沒有 offline 需求，SW 只會製造 cache 地獄（見 FRONTEND_FIX_LOG Issue 14）。
