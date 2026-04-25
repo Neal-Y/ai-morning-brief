@@ -50,11 +50,11 @@ Each article has a renderLevel from the classifier. Treat it as authoritative �
 
 - renderLevel FULL: Fill all four content fields (summary, context, engineeringImpact, reason). Set shortJudgment to null.
 - renderLevel LIGHT: Fill all four content fields exactly like FULL. Additionally fill shortJudgment (≤20 Chinese characters, signal-type format). shortJudgment is a priority label — it does NOT replace the content fields.
-- renderLevel OMIT: Do NOT include in sections. Put a one-line note in skippedToday at most.
+- renderLevel OMIT: Do NOT include in sections. Drop the article entirely.
 
 Section rules:
 - If there are no HARD_TECH_AI articles to display, set "Hard Tech AI" items to [].
-- If all articles end up OMIT, output empty sections and set skippedToday to ["今日無重大 AI 工程更新"].
+- If all articles end up OMIT, output both sections with empty items arrays.
 
 ## Content field writing rules (applies to FULL and LIGHT equally)
 
@@ -168,9 +168,6 @@ Return JSON only (no markdown fence):
         }
       ]
     }
-  ],
-  "skippedToday": [
-    "可省略；若有必要，只放一行短描述"
   ]
 }
 
@@ -244,22 +241,9 @@ function parseBriefResult(raw: string): BriefResult {
     }
   );
 
-  const skippedToday: string[] = Array.isArray(obj['skippedToday'])
-    ? (obj['skippedToday'] as unknown[]).map(String)
-    : [];
-
-  const actionLinks: BriefResult['actionLinks'] = Array.isArray(obj['actionLinks'])
-    ? (obj['actionLinks'] as unknown[]).map((l: unknown) => {
-        const link = l as Record<string, unknown>;
-        return { label: String(link['label'] ?? ''), url: String(link['url'] ?? '') };
-      })
-    : [];
-
   return {
     title: String(obj['title'] ?? ''),
     sections,
-    skippedToday,
-    actionLinks,
   };
 }
 
@@ -298,7 +282,6 @@ export function buildDegradedBrief(articles: ClassifiedArticle[], date: string):
 
   const hardItems = hardTech.map((a, i) => toItem(a, i));
   const signalItems = signals.map((a, i) => toItem(a, hardTech.length + i));
-  const allDisplayed = [...hardItems, ...signalItems];
 
   return {
     title: `AI Morning Brief ${date}`,
@@ -306,10 +289,5 @@ export function buildDegradedBrief(articles: ClassifiedArticle[], date: string):
       { name: 'Hard Tech AI', items: hardItems },
       { name: 'Important AI Signals', items: signalItems },
     ],
-    skippedToday: [],
-    actionLinks: allDisplayed.map((item, i) => ({
-      label: `原文 ${i + 1}`,
-      url: item.url,
-    })),
   };
 }

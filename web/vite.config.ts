@@ -13,8 +13,8 @@ import react from '@vitejs/plugin-react'
 //
 // The app doesn't need offline support — it's a once-a-day read. A static
 // manifest in `web/public/manifest.json` is sufficient, and `web/public/sw.js`
-// now contains a self-unregistering service worker that cleans up any SW left
-// behind on existing iPhone home-screen installs.
+// is hand-written: only `push` + `notificationclick` handlers, no fetch /
+// cache logic (avoids the cache hell that vite-plugin-pwa caused).
 export default defineConfig({
   plugins: [react()],
   server: {

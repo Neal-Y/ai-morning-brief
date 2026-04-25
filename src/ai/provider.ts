@@ -69,8 +69,6 @@ export interface BriefSection {
 export interface BriefResult {
   title: string;
   sections: BriefSection[];
-  skippedToday: string[];
-  actionLinks: Array<{ label: string; url: string }>;
 }
 
 // ── Provider interface ────────────────────────────────────────────────────────

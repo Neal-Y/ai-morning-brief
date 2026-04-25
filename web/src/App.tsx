@@ -56,7 +56,6 @@ export default function App() {
     return Notification.permission !== 'default'
   })
   const [subscribing, setSubscribing] = useState(false)
-  const [pushDebug, setPushDebug] = useState<string | null | undefined>(undefined)
 
   const T = buildTheme(accent)
   const dragStart = useRef<{ x: number; y: number; axis: 'x' | 'y' | null } | null>(null)
@@ -66,7 +65,7 @@ export default function App() {
 
   useEffect(() => {
     if (isPushSupported() && isStandalone() && Notification.permission === 'granted') {
-      completeSubscription().then(setPushDebug)
+      void completeSubscription()
     }
   }, [])
 
@@ -77,7 +76,7 @@ export default function App() {
         clearInterval(interval)
         setSubscribing(false)
         setPermissionResolved(true)
-        if (Notification.permission === 'granted') completeSubscription().then(setPushDebug)
+        if (Notification.permission === 'granted') void completeSubscription()
       }
     }, 500)
     return () => clearInterval(interval)
@@ -297,7 +296,7 @@ export default function App() {
                 if (Notification.permission !== 'default') {
                   setSubscribing(false)
                   setPermissionResolved(true)
-                  if (Notification.permission === 'granted') completeSubscription().then(setPushDebug)
+                  if (Notification.permission === 'granted') void completeSubscription()
                 }
               }}
               disabled={subscribing}
@@ -363,20 +362,6 @@ export default function App() {
 
   return (
     <>
-    {pushDebug !== undefined && (
-      <div
-        onClick={() => setPushDebug(null)}
-        style={{
-          position: 'fixed', top: 'env(safe-area-inset-top)', left: 0, right: 0,
-          zIndex: 9999, padding: '8px 16px',
-          background: pushDebug === null ? '#1a5c1a' : '#5c1a1a',
-          fontFamily: T.mono, fontSize: 10, color: '#fff', letterSpacing: 0.5,
-          textAlign: 'center',
-        }}
-      >
-        PUSH: {pushDebug === null ? 'OK ✓' : pushDebug}
-      </div>
-    )}
     {atCelebration && (
       <Celebration
         theme={T}

@@ -41,9 +41,13 @@ export async function writeArticlesToDB(
       };
     });
 
+  // Empty-day path exits before reaching here, so receiving zero rows means the
+  // brief generator dropped everything (all OMIT or malformed output). Failing
+  // loud prevents a Web Push that opens to an empty feed.
   if (rows.length === 0) {
-    console.log('[db-writer] No articles to write');
-    return;
+    throw new Error(
+      `Brief produced 0 displayable items from ${selected.length} selected articles`,
+    );
   }
 
   await db

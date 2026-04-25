@@ -27,7 +27,6 @@ jobs:
       - name: Run AI Morning Brief
         run: npm run start
         env:
-          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           AI_PROVIDER: ${{ secrets.AI_PROVIDER }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

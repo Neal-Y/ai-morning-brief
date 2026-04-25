@@ -1,7 +1,7 @@
 # AI Morning Brief V2 — Product & Engineering Design
 
-> **Status**: F1–F3 + Feedback loop 已上線（Vercel + GitHub Actions）。F4 Notion 整合為下一優先。
-> **Baseline**: [PROPOSAL.md](./PROPOSAL.md) (V1, ntfy-based)。
+> **Status**: F1–F3 + Feedback loop + Web Push 已上線（Vercel + GitHub Actions）。**ntfy 已淘汰（2026-04-25）**，唯一推播管道為 Web Push。F4 Notion 整合為下一優先。
+> **Baseline**: [PROPOSAL.md](./PROPOSAL.md) (V1, 已被 V2 取代)。
 
 ---
 
@@ -13,6 +13,8 @@ V1 (ntfy 推播) 完成了「每天送內容到你眼前」,但沒解決兩個�
 2. **沒有 compounding** — 每天看完就結束,產品不會變得更懂你,你的知識也沒累積成資產。
 
 V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從「收推播」變成「打開一個越用越懂我的技術學習 feed」。
+
+> **2026-04-25 更新**：V2 完成度足以淘汰 ntfy。現在通知改走 Web Push（VAPID + iOS standalone PWA），標題 = lead story headline，點擊直接落到 PWA 卡片介面，沒有 ntfy 的中間層。Infra 錯誤由 GitHub Actions failure + log 診斷，不送到使用者 Web Push。
 
 ---
 
@@ -39,10 +41,11 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
 
 ## 3. 功能清單 (Feature List)
 
-### F1 — PWA 卡片介面 (替代 ntfy)
+### F1 — PWA 卡片介面 + Web Push（已替代 ntfy）✅
 - 每張卡一篇文章,swipe 切換
 - View Transitions API 提供 native 感切換
 - Home screen icon 一鍵開啟(iOS Shortcuts + PWA)
+- **Web Push (VAPID)**：早上 07:30 自動推播到 iPhone 鎖定畫面，標題 = lead story headline，點擊開啟 PWA
 
 ### F2 — 👍👎 反饋 → Classifier 學習
 - 每張卡兩顆鈕:`👍 要更多這種` / `👎 不要這種`
@@ -120,33 +123,37 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
 ┌─────────────────────────────────┐
 │ GitHub Actions cron (每日 07:30)│
 │   scraper → classifier → brief  │ ──┐
+│   → persist → web-push          │   │
 └─────────────────────────────────┘   │
                                       ▼
-                            ┌────────────────┐
-                            │ Turso (libSQL) │
-                            │  articles      │
-                            │  feedback      │
-                            │  saves         │
-                            │  conversations │
-                            │  quizzes       │
-                            └────────────────┘
+                            ┌─────────────────────┐
+                            │ Turso (libSQL)      │
+                            │  articles           │
+                            │  feedback           │
+                            │  saves              │
+                            │  conversations      │
+                            │  quizzes            │
+                            │  push_subscriptions │
+                            └─────────────────────┘
                                       ▲
-                          ┌───────────┴──────────────┐
-                          │                          │
-┌──────────────┐   REST   │  ┌─────────────────────┐ │
-│ PWA (React)  │◄────────►│  │ Hono API            │ │
-│              │          │  │ (api/index.ts)      │ │
-│ - Card swipe │          │  │ - GET /api/feed     │ │
-│ - 👍👎      │          │  │ - POST /api/feedback│ │
-│ - 🔖 save    │          │  │ - POST /api/save    │ │
-│ - Quiz       │          │  └─────────────────────┘ │
-│              │   SSE    │  ┌─────────────────────┐ │
-│ - 💬 追問   │◄────────►│  │ Edge Function       │ │
-└──────────────┘          │  │ (api/ask.ts)        │ │
-                          │  │ - POST /api/ask     │ │
-                          │  └─────────────────────┘ │
-                          │    Vercel                 │
-                          └───────────────────────────┘
+                          ┌───────────┴──────────────────┐
+                          │                              │
+┌──────────────┐   REST   │  ┌────────────────────────┐  │
+│ PWA (React)  │◄────────►│  │ Hono API               │  │
+│              │          │  │ (api/index.ts, Node)   │  │
+│ - Card swipe │          │  │ - GET /api/feed        │  │
+│ - 👍👎      │          │  │ - POST /api/feedback   │  │
+│ - 🔖 save    │          │  │ - POST /api/save       │  │
+│ - Quiz       │          │  └────────────────────────┘  │
+│ - SW push    │          │  ┌────────────────────────┐  │
+│   handler    │   SSE    │  │ Edge Functions         │  │
+│              │◄────────►│  │ - POST /api/ask        │  │
+│              │   POST   │  │ - POST /api/push-      │  │
+│              │◄────────►│  │   subscribe            │  │
+└──────────────┘          │  └────────────────────────┘  │
+       ▲                  │    Vercel                    │
+       │ Web Push (VAPID) │                              │
+       └──────────────────┴ from GitHub Actions runner ──┘
 ```
 
 ---
@@ -210,7 +217,7 @@ quizzes = {
 ### Week 1 — Foundation ✅
 - [x] Hono + Vite + PWA 骨架
 - [x] Turso 建立 + Drizzle schema migrate
-- [x] Port V1 scraper/classifier/brief gen → 寫入 Turso + ntfy
+- [x] Port V1 scraper/classifier/brief gen → 寫入 Turso（V1 ntfy 推播鏈路已於 Week 2 退役，改走 Web Push）
 - [x] PWA shell:卡片 swipe UI
 - **Result**: 手機打開能看到今天 3 張卡，Vercel 上線
 
@@ -218,13 +225,15 @@ quizzes = {
 - [x] 👍👎 寫回 DB
 - [x] Classifier 吃進 feedback prompt（近 30 天 / 20 筆 / 門檻 10）
 - [x] 💬 追問：SSE streaming，Haiku 4.5（`api/ask.ts` Edge Function，非 Hono）
+- [x] **Web Push 全鏈路上線**：VAPID 生成、`api/push-subscribe.ts` Edge Function 寫 `push_subscriptions`、pipeline 先 persist 再 `notify/web-push.ts` 推送到所有訂閱者、ntfy 退役（2026-04-25）
 - [ ] Skill-tag 加到 classifier 輸出（待做）
-- **Result**: 滑卡、追問、feedback loop 全部上線
+- **Result**: 滑卡、追問、feedback loop、Web Push 全部上線
 
 ### Week 3 — Investment Layer（進行中）
 - [ ] **Notion API 整合（F4）**：`🔖` → 自動建 page（下一優先）
 - [ ] 收藏時 Haiku 生成 quiz QA pair，存到 `quizzes`
 - [ ] 基本 dashboard：streak（已有 localStorage 版）、本週讀了幾篇
+- [ ] 通知文案再優化：lead 標題品質觀察一週後，視情況讓 brief generator 多輸出 `lead` 欄位
 - **Demo goal**: 每收藏一篇，Notion 就長一篇，完全不用手動整理
 
 ### Week 4 — Retention Engine
@@ -262,7 +271,7 @@ Prompt caching 已啟用（Anthropic `cache_control`、OpenAI 自動），Classi
 - 修改檔案後必須跑 `npm run build`
 - 超過 10 輪對話,編輯檔案前重新讀
 - 大任務拆獨立模組
-- Graceful degradation:Turso down 也不能讓 cron 掛
+- Graceful degradation 限於 LLM 內容生成：classifier 單篇失敗與 brief generator 失敗可 fallback；DB persist / Web Push 發送失敗必須讓 cron fail，避免通知點開後沒有內容。
 
 **新增規則 (V2 專屬):**
 - DB migration 用 Drizzle Kit,每個 schema 改動都要有 migration file

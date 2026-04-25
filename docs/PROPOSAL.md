@@ -1,7 +1,10 @@
-# AI Morning Brief — Full Specification
+# AI Morning Brief — V1 Specification (Historical)
 
-> **Status: reflects current implementation as of 2026-04-13.**
-> This document supersedes the original MVP proposal. Code is the ground truth; update this file when the implementation diverges.
+> **Status: V1 historical spec. Frozen 2026-04-13. Superseded by [V2_DESIGN.md](./V2_DESIGN.md).**
+>
+> The ntfy delivery path described below (Stage 5 / `notify/ntfy.ts` / `NTFY_TOPIC`) was retired in production on 2026-04-25 and replaced by Web Push (VAPID + iOS standalone PWA). Empty-day and infra-error semantics also shifted: infra failures now `exit(1)` and surface via GitHub Actions log instead of being pushed to the user's phone.
+>
+> For current behavior see [V2_DESIGN.md](./V2_DESIGN.md), [../CLAUDE.md](../CLAUDE.md), and the codebase. This file is retained for historical reference only.
 
 ## 1. 專案願景
 

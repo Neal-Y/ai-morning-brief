@@ -18,31 +18,29 @@ export function isStandalone(): boolean {
 }
 
 /** Completes the push subscription assuming permission is already granted.
- *  Returns null on success, or an error string for debugging. */
-export async function completeSubscription(): Promise<string | null> {
-  if (!isPushSupported()) return 'push not supported'
-  if (Notification.permission !== 'granted') return `permission: ${Notification.permission}`
+ *  Returns true on success. Failures are logged and swallowed (fire-and-forget caller). */
+export async function completeSubscription(): Promise<boolean> {
+  if (!isPushSupported()) return false
+  if (Notification.permission !== 'granted') return false
 
   const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
-  if (!vapidKey) return 'VAPID key missing'
-
-  const t = <T>(p: Promise<T>, label: string): Promise<T> =>
-    Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`timeout: ${label}`)), 10_000))])
+  if (!vapidKey) return false
 
   try {
-    const reg = await t(navigator.serviceWorker.ready, 'sw.ready')
-    const existing = await t(reg.pushManager.getSubscription(), 'getSubscription')
-    const sub = existing ?? await t(
-      reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(vapidKey) }),
-      'subscribe'
-    )
-    const res = await t(
-      fetch('/api/push-subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(sub.toJSON()) }),
-      'fetch'
-    )
-    if (!res.ok) return `server ${res.status}`
-    return null
+    const reg = await navigator.serviceWorker.ready
+    const existing = await reg.pushManager.getSubscription()
+    const sub = existing ?? await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    })
+    const res = await fetch('/api/push-subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub.toJSON()),
+    })
+    return res.ok
   } catch (err) {
-    return err instanceof Error ? err.message : String(err)
+    console.warn('[push] Subscribe failed:', err)
+    return false
   }
 }

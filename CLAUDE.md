@@ -4,9 +4,10 @@
 
 ## TL;DR（新 session 先看這段）
 
-- 整條 pipeline 已上線：GitHub Actions 每天 07:30 台北時間跑 → ntfy 推播 + 寫 Turso DB。
-- Vercel 部署完成：`ai-morning-brief.vercel.app`（Hono API + React PWA）。
-- 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`，PWA 是靜態 manifest + kill-switch SW，**沒有** service worker cache。
+- 整條 pipeline 已上線：GitHub Actions 每天 07:30 台北時間跑 → 寫 Turso DB → **Web Push** 推播。
+- Vercel 部署完成：`ai-morning-brief.vercel.app`（Hono API + React PWA + Edge Runtime functions）。
+- **ntfy 已淘汰**（2026-04-25），現在唯一推播管道是 Web Push（VAPID + iOS standalone PWA）。
+- 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`；現在 SW (`web/public/sw.js`) 是真正的 push handler（`push` + `notificationclick` events，無 fetch cache）。
 - Classifier 已吃進 feedback（V2 Investment 環節核心），近 30 天 / 20 筆 / 門檻 10 筆。Anthropic cache 有拆 prefix（穩定部分跨天保留）。
 - **下一個大事**：Notion 整合（F4），🔖 → 自動建 page。
 
@@ -21,19 +22,21 @@ GitHub Actions cron (daily 台北 07:30)
        ├─ db/client.getRecentFeedback # 讀近 30 天 feedback 作為偏好 context
        ├─ ai/classifier.ts            # per-article LLM 分類（concurrency=3）
        ├─ ai/brief.ts                 # brief generator（一次 LLM call）
-       ├─ notify/ntfy.ts              # ntfy 推播
-       └─ notify/db-writer.ts         # upsert 文章到 Turso
+       ├─ notify/db-writer.ts         # upsert 文章到 Turso（成功後才推播）
+       └─ notify/web-push.ts          # 對 push_subscriptions 全表發 Web Push
 
 Hono API (src/api/app.ts → api/index.ts on Vercel)
   ├─ GET  /api/feed?date=   # 從 Turso 讀當日文章
   ├─ POST /api/feedback     # up/down（delete-then-insert，同 articleId 只留最新）
   └─ POST /api/save         # 儲存文章（Notion 整合未接）
 
-Edge function (api/ask.ts — Vercel 獨立路由，不走 Hono)
-  └─ POST /api/ask          # Haiku 4.5 SSE streaming 追問（raw fetch，multi-turn）
+Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
+  ├─ POST /api/ask              # api/ask.ts — Haiku 4.5 SSE streaming 追問
+  └─ POST /api/push-subscribe   # api/push-subscribe.ts — 寫 push_subscriptions
 
 React PWA (web/)
-  └─ 滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration
+  ├─ 滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration
+  └─ Splash gate：iOS standalone 第一次開啟 → 請求 notification permission → 寫 subscription
 ```
 
 ---
@@ -42,14 +45,15 @@ React PWA (web/)
 
 | 功能 | 狀態 | 備註 |
 |---|---|---|
-| RSS → 分類 → 推播 | ✅ | V1 遺留，穩定 |
-| Turso DB 寫入 | ✅ | article id = SHA-256(url).slice(0,16) |
-| Vercel 部署 | ✅ | `api/index.ts` + `vercel.json` |
+| RSS → 分類 → 寫 Turso | ✅ | V1 遺留，穩定 |
+| Web Push 推播 | ✅ | 標題 = lead story title, body = 「Hard Tech AI／Signals」section labels |
+| Turso DB 寫入 | ✅ | article id = SHA-256(url).slice(0,16)；client 用 `https://` 而非 `libsql://`（serverless friendly） |
+| Vercel 部署 | ✅ | `api/index.ts` (Hono) + `api/ask.ts` & `api/push-subscribe.ts` (Edge) |
 | PWA 卡片 UI | ✅ | iPhone standalone 已穩定，細節見 FRONTEND_FIX_LOG |
 | 👍👎 → DB | ✅ | delete-then-insert 防誤按 |
-| 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch（不在 Hono 裡） |
+| 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
-| 🔖 Notion 整合 | ⏳ 未做 | 下一項 |
+| 🔖 Notion 整合 | ⏳ 未做 | 下一項（F4） |
 | Quiz 生成 | ⏳ 未做 | `quizzes` table 已建 schema |
 | 晨間 Recall Quiz | ⏳ 未做 | 需先有 quiz 資料 |
 | Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
@@ -63,7 +67,10 @@ React PWA (web/)
 2. **收藏時生成 quiz** — Haiku 順手產 QA pair，存 `quizzes` table。
 3. **晨間 recall quiz** — 打開 app 先答 3/7/14 天前的卡。
 4. **Skill-tag 產出** — classifier 加 `skillTags` 欄位。
-5. **Classifier 偏好 v2**（跑一週後評估再動，**不要提早優化**）：
+5. **通知文案再優化**（觀察一週通知品質後評估）：
+   - 目前 lead = `displayedItems[0].title`（最高分 HARD_TECH_AI 的 RSS 原標）
+   - 真實 case 看下來如果 lead 經常很弱，考慮讓 brief generator 多輸出一個 `lead: { articleId, headline }` 欄位（同一次 LLM call 改 schema，cost = 0）
+6. **Classifier 偏好 v2**（跑一週後評估再動，**不要提早優化**）：
    - 明確 exploration slot（非 filler 副產品）
    - `selectionReason` / `wasFiller` 欄位
    - 前端 feedback undo
@@ -73,8 +80,10 @@ React PWA (web/)
 
 ## 待確認（真機 / 部署）
 
-- [ ] `/api/feed?date=...` 在 Vercel 上正常回傳（500 就看 Functions log）
-- [ ] GitHub Actions secrets 已設 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN`
+- [x] `/api/feed?date=...` 在 Vercel 上正常回傳
+- [x] `/api/push-subscribe` 寫入 `push_subscriptions` table（Edge Runtime，已驗證 2026-04-25）
+- [x] GitHub Actions secrets 已設 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` + `VAPID_*`
+- [ ] 連續 3 天 07:30 自動觸發都能成功收到 Web Push（觀察一週）
 
 ---
 
@@ -91,19 +100,22 @@ src/
   ai/brief.ts         # brief generator + degraded fallback
   ai/retry.ts
   ai/openai.ts · anthropic.ts
-  notify/ntfy.ts
+  notify/web-push.ts  # web-push 函式庫，對 push_subscriptions 全表發送
   notify/db-writer.ts # Turso upsert
-  db/schema.ts        # articles / feedback / saves / conversations / quizzes
-  db/client.ts        # libSQL client + getRecentFeedback()
-  api/app.ts          # Hono app（/api/feed /api/feedback /api/save /api/ask）
+  db/schema.ts        # articles / feedback / saves / conversations / quizzes / push_subscriptions
+  db/client.ts        # libSQL client (https://) + getRecentFeedback()
+  api/app.ts          # Hono app（/api/feed /api/feedback /api/save）
   api/server.ts       # 本地 dev (port 3001)
-api/index.ts          # Vercel entry (hono/vercel handle)
-api/ask.ts            # Vercel Edge runtime SSE for /api/ask
+api/index.ts             # Vercel entry (hono/vercel handle)
+api/ask.ts               # Edge Runtime SSE for /api/ask
+api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
 vercel.json
 web/
   index.html
   public/manifest.json · apple-touch-icon.png · icon-512.svg
-  src/App.tsx         # swipe 物理 + streak
+  public/sw.js          # push handler SW（push + notificationclick events）
+  src/App.tsx           # swipe 物理 + streak + push permission gate
+  src/push.ts           # isPushSupported / isStandalone / completeSubscription
   src/components/
     Card.tsx · Chrome.tsx · AskSheet.tsx · Celebration.tsx
   src/{date,theme,types}.ts · index.css
@@ -123,7 +135,7 @@ docs/
 ```bash
 # Pipeline
 npm run build          # tsc
-npm run dev:pipeline   # tsx src/index.ts（會真的推 ntfy + 寫 DB）
+npm run dev:pipeline   # tsx src/index.ts（會真的寫 DB + 推 Web Push）
 npm run dev:api        # Hono API server (port 3001)
 
 # Web
@@ -135,13 +147,21 @@ npm run db:seed        # 3 篇假文章（今日日期）
 
 ## Env Vars
 
+**Pipeline (GitHub Actions secrets) + Server (Vercel env):**
 ```
-TURSO_DATABASE_URL    # libsql://xxx.turso.io
+TURSO_DATABASE_URL    # libsql://xxx.turso.io（client.ts 內部換成 https:// transport）
 TURSO_AUTH_TOKEN      # JWT
-NTFY_TOPIC
 AI_PROVIDER           # "openai" | "anthropic" | "alternate"
 OPENAI_API_KEY
 ANTHROPIC_API_KEY
+VAPID_SUBJECT         # mailto:you@example.com
+VAPID_PUBLIC_KEY      # web-push generate-vapid-keys
+VAPID_PRIVATE_KEY
+```
+
+**Frontend (Vercel build-time only — `VITE_` prefix is required for Vite to bake into bundle):**
+```
+VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數名才會出現在前端 bundle
 ```
 
 ---
@@ -158,6 +178,8 @@ ANTHROPIC_API_KEY
 - Classifier concurrency 上限 3（Anthropic free-tier TPM）
 - Selection caps：`HARD_TECH_MAX=2`, `SIGNALS_MAX=1`, `BRIEF_MAX=3`
 - Filler logic：若 HARD_TECH + SIGNALS < 3，top-scoring DROP 補位（renderLevel → LIGHT）
+- Pipeline 順序固定是 brief → DB persist → Web Push。Web Push 是 PWA 入口，不可在 DB 寫入成功前送出。
+- Infra 錯誤不送 Web Push：RSS 全掛、config/provider 錯誤、DB 寫入失敗、Web Push 全部發送失敗都要 `exit(1)`，讓 GitHub Actions failed；Actions log 是錯誤診斷 source of truth。
 - DB upsert 一律用 `onConflictDoUpdate`（用 `onConflictDoNothing` 會讓 count log 誤報）
 - db-writer 的 conflict target 是 `articles.url`
 
@@ -180,7 +202,13 @@ ANTHROPIC_API_KEY
 - **不要**重新加 `vite-plugin-pwa` 或其他 SW 產生器。app 是「每天開一次抓新資料」，沒有 offline 需求，SW 只會製造 cache 地獄（見 FRONTEND_FIX_LOG Issue 14）。
 - Manifest 用靜態 `web/public/manifest.json`（index.html 單一 `<link rel="manifest">`）。
 - `theme_color` / `background_color` / `<meta name="theme-color">` 三處必須全部對齊 `T.bg = #14110D`，不然 iOS standalone 會出現 status bar 色差「框框」。
-- `web/public/sw.js` 是 kill-switch（自動 unregister + 清 cache），不是正常 SW — 確定沒用戶卡在舊 PWA 版本前不要刪。
+- `web/public/sw.js` 現在是 **真正的 push handler**（`push` + `notificationclick` events），**沒有** fetch / cache event handler。如果以後加 fetch handler 一定要小心 cache 地獄重演。
+
+**Web Push / iOS PWA：**
+- iOS Web Push **只在 standalone 模式下支援**（首頁捷徑開啟，不是 Safari 直接開網址）。所以 `App.tsx` 的 splash gate `permissionResolved` 初始判定要先過 `isStandalone()`。
+- `Notification.requestPermission()` 必須由 user gesture 觸發（按鈕 onClick），不能在 `useEffect` 內自動呼叫。
+- `Notification.permission` 已是 `granted` 時，App startup useEffect 會自動 call `completeSubscription()` 補寫 `push_subscriptions`（fire-and-forget，使用者無感）。
+- 當天有文章：通知標題 = `displayedItems[0].title`（lead story），副標 = active section labels（`Hard Tech AI／Signals`）。當天無文章：標題 = `AI Morning Brief {date}`、副標 = `今日無重大 AI 新聞`。
 
 ---
 

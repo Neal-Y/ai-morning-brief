@@ -4,7 +4,9 @@ import { desc, eq, gte } from 'drizzle-orm'
 import * as schema from './schema.js'
 import { articles, feedback } from './schema.js'
 
-export const client = createClient({
+// Use https:// transport (HTTP requests, not WebSocket) — required for Vercel
+// serverless / edge environments where short-lived WebSocket connections hang.
+const client = createClient({
   url: process.env.TURSO_DATABASE_URL!.replace('libsql://', 'https://'),
   authToken: process.env.TURSO_AUTH_TOKEN,
 })
@@ -18,9 +20,9 @@ export interface FeedbackRow {
   signal: 'up' | 'down'
 }
 
-export const FEEDBACK_MIN_THRESHOLD = 10
+const FEEDBACK_MIN_THRESHOLD = 10
 export const FEEDBACK_WINDOW_DAYS = 30
-export const FEEDBACK_MAX_ROWS = 20
+const FEEDBACK_MAX_ROWS = 20
 
 /**
  * Fetch recent feedback joined with article metadata, for classifier preference context.

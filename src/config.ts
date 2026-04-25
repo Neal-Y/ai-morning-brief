@@ -1,5 +1,5 @@
 export type ProviderName = 'openai' | 'anthropic' | 'alternate';
-export type SourceTier = 'broad' | 'technical';
+type SourceTier = 'broad' | 'technical';
 
 export interface RssSource {
   name: string;
@@ -8,7 +8,6 @@ export interface RssSource {
 }
 
 export interface Config {
-  ntfyTopic: string;
   aiProvider: ProviderName;
   openaiApiKey: string | undefined;
   anthropicApiKey: string | undefined;
@@ -71,10 +70,9 @@ export const WINDOW_HOURS = 24;
 export const CLASSIFIER_CAP = 12;      // top-N by keyword score sent to LLM classifier
 export const HARD_TECH_MAX = 2;        // max articles from HARD_TECH_AI bucket
 export const SIGNALS_MAX = 1;          // max articles from IMPORTANT_AI_SIGNALS bucket
-export const BRIEF_MAX = 3;            // hard cap: ntfy Click(1) + buttons(2) = 3 entries
+export const BRIEF_MAX = 3;            // hard cap: number of articles per brief
 export const PREFILTER_MIN_SCORE = -2; // drop articles below this combined score
 export const RETRY_DELAY_MS = 5000;
-export const NTFY_BASE_URL = 'https://ntfy.sh';
 
 // Positive keyword weights — technical relevance signals
 export const KEYWORD_WEIGHTS: Readonly<Record<string, number>> = Object.freeze({
@@ -139,11 +137,6 @@ export const MODEL_IDS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 export function loadConfig(): Config {
-  const ntfyTopic = process.env['NTFY_TOPIC'];
-  if (!ntfyTopic) {
-    throw new Error('Missing required env var: NTFY_TOPIC');
-  }
-
   const aiProvider = process.env['AI_PROVIDER'] as ProviderName | undefined;
   const validProviders = ['openai', 'anthropic', 'alternate'];
   if (!aiProvider || !validProviders.includes(aiProvider)) {
@@ -166,7 +159,6 @@ export function loadConfig(): Config {
   }
 
   return {
-    ntfyTopic,
     aiProvider,
     openaiApiKey: process.env['OPENAI_API_KEY'],
     anthropicApiKey: process.env['ANTHROPIC_API_KEY'],

@@ -6,7 +6,6 @@ import { AnthropicProvider } from './ai/anthropic.js';
 import type { AIProvider, ClassifiedArticle } from './ai/provider.js';
 import { classifyArticles, buildPreferenceContext } from './ai/classifier.js';
 import { generateBrief, buildDegradedBrief } from './ai/brief.js';
-import { formatBriefText, sendNtfy, sendErrorNotice, sendEmptyNotice } from './notify/ntfy.js';
 import { sendWebPush } from './notify/web-push.js';
 import { writeArticlesToDB } from './notify/db-writer.js';
 import { getRecentFeedback } from './db/client.js';
@@ -60,40 +59,30 @@ async function main(): Promise<void> {
   console.log(`[main] AI Morning Brief — ${date}`);
 
   // ── Stage 1: Fetch + keyword score + prefilter ────────────────────────────
+  // Note: RSS / sources failures exit non-zero so GitHub Actions surfaces them
+  // via workflow-failure email — we don't push these to the user's phone.
   let feedResult: Awaited<ReturnType<typeof getTodaysArticles>>;
   try {
     feedResult = await getTodaysArticles();
   } catch (err) {
     console.error('[rss] Feed fetch error:', err);
-    try {
-      await sendErrorNotice(config.ntfyTopic, `RSS 抓取失敗：${err instanceof Error ? err.message : String(err)}`);
-    } catch (ntfyErr) {
-      console.error('[ntfy] Failed to send error notice:', ntfyErr);
-      process.exit(1);
-    }
-    process.exit(0);
+    process.exit(1);
   }
 
   const { articles: prefiltered, sourceFailures, sourceTotal } = feedResult;
   console.log(`[rss] ${prefiltered.length} articles after prefilter (${sourceFailures}/${sourceTotal} sources failed)`);
 
   if (sourceFailures === sourceTotal) {
-    console.warn('[rss] All sources failed');
-    try {
-      await sendErrorNotice(config.ntfyTopic, '所有 RSS 來源均無法存取。');
-    } catch (ntfyErr) {
-      console.error('[ntfy]', ntfyErr);
-      process.exit(1);
-    }
-    process.exit(0);
+    console.error('[rss] All sources failed');
+    process.exit(1);
   }
 
   if (prefiltered.length === 0) {
-    console.log('[main] No articles in last 24h');
+    console.log('[main] No articles in last 24h — sending empty-day notice');
     try {
-      await sendEmptyNotice(config.ntfyTopic, date);
-    } catch (ntfyErr) {
-      console.error('[ntfy]', ntfyErr);
+      await sendWebPush(`AI Morning Brief ${date}`, '今日無重大 AI 新聞');
+    } catch (err) {
+      console.error('[web-push] Empty-day notice failed:', err instanceof Error ? err.message : err);
       process.exit(1);
     }
     process.exit(0);
@@ -191,48 +180,37 @@ async function main(): Promise<void> {
     return buildDegradedBrief(selected, date);
   });
 
-  // ── Stage 5: Format + push ────────────────────────────────────────────────
-  const body = formatBriefText(brief, provider.name);
-
-  // Build action links from displayed items in sections (FULL + LIGHT, not OMIT).
-  // No Click header — tap opens the notification body, not a URL.
-  // ntfy supports max 3 action buttons → articles 1-3 each get a button.
-  const displayedItems = brief.sections
-    .flatMap((s) => s.items)
-    .filter((item) => item.renderLevel !== 'OMIT');
-
-  const buttonLinks = displayedItems.map((item, i) => ({
-    label: `原文 ${i + 1}`,
-    url: item.url,
-  }));
-
-  try {
-    await sendNtfy(
-      config.ntfyTopic,
-      `AI Morning Brief ${date}`,
-      body,
-      { actionLinks: buttonLinks }
-    );
-    console.log('[ntfy] Sent successfully');
-  } catch (err) {
-    console.error('[ntfy] Failed to send:', err instanceof Error ? err.message : err);
-    process.exit(1);
-  }
-
-  // Web Push — runs in parallel with ntfy during transition period.
-  // Remove ntfy above once Web Push is confirmed working.
-  try {
-    await sendWebPush(`AI Morning Brief ${date}`, '今日 brief 已就緒，點此開啟');
-  } catch (err) {
-    console.warn('[web-push] Failed:', err instanceof Error ? err.message : err);
-  }
-
-  // ── Stage 6: Persist to Turso DB ─────────────────────────────────────────
+  // ── Stage 5: Persist to Turso DB ─────────────────────────────────────────
+  // Web Push is only an entrypoint into the PWA. Persist first so a tapped
+  // notification never opens to an empty/stale feed.
   try {
     await writeArticlesToDB(brief, selected, date);
   } catch (err) {
     console.error('[db-writer] Failed to write articles:', err instanceof Error ? err.message : err);
-    // Non-fatal: ntfy already sent, don't exit(1)
+    process.exit(1);
+  }
+
+  // ── Stage 6: Push ────────────────────────────────────────────────────────
+  const displayedItems = brief.sections
+    .flatMap((s) => s.items)
+    .filter((item) => item.renderLevel !== 'OMIT');
+
+  // Web Push: title = lead story headline (the strongest reason to open),
+  // body = active section labels (gives a sense of today's mix).
+  const leadTitle = displayedItems[0]?.title ?? `AI Morning Brief ${date}`;
+  const sectionLabel: Record<string, string> = {
+    'Hard Tech AI': 'Hard Tech AI',
+    'Important AI Signals': 'Signals',
+  };
+  const subtitle = brief.sections
+    .filter((s) => s.items.some((item) => item.renderLevel !== 'OMIT'))
+    .map((s) => sectionLabel[s.name] ?? s.name)
+    .join('／');
+  try {
+    await sendWebPush(leadTitle, subtitle);
+  } catch (err) {
+    console.error('[web-push] Failed:', err instanceof Error ? err.message : err);
+    process.exit(1);
   }
 }
 

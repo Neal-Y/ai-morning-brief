@@ -1,7 +1,7 @@
 {
   "name": "ai-morning-brief",
   "version": "1.0.0",
-  "description": "Daily automated tech news: RSS → LLM analysis → ntfy push",
+  "description": "Daily automated AI tech brief: RSS → LLM analysis → Turso DB → PWA + Web Push",
   "type": "module",
   "engines": {
     "node": ">=20"

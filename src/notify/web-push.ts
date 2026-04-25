@@ -8,8 +8,7 @@ function isConfigured(): boolean {
 
 export async function sendWebPush(title: string, body: string): Promise<void> {
   if (!isConfigured()) {
-    console.log('[web-push] VAPID keys not configured, skipping')
-    return
+    throw new Error('VAPID keys not configured')
   }
 
   webpush.setVapidDetails(
@@ -20,8 +19,7 @@ export async function sendWebPush(title: string, body: string): Promise<void> {
 
   const subs = await db.select().from(pushSubscriptions)
   if (subs.length === 0) {
-    console.log('[web-push] No subscriptions found, skipping')
-    return
+    throw new Error('No push subscriptions found')
   }
 
   const payload = JSON.stringify({ title, body })
@@ -37,4 +35,10 @@ export async function sendWebPush(title: string, body: string): Promise<void> {
   const ok = results.filter((r) => r.status === 'fulfilled').length
   const fail = results.filter((r) => r.status === 'rejected').length
   console.log(`[web-push] Sent ${ok}/${subs.length} subscriptions${fail > 0 ? ` (${fail} failed)` : ''}`)
+
+  if (ok === 0) {
+    const firstFailure = results.find((r) => r.status === 'rejected')
+    const reason = firstFailure?.status === 'rejected' ? firstFailure.reason : 'unknown error'
+    throw new Error(`All push notifications failed: ${reason instanceof Error ? reason.message : String(reason)}`)
+  }
 }

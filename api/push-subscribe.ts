@@ -29,19 +29,18 @@ export default async function handler(req: Request): Promise<Response> {
     if (!res.ok) {
       const body = await res.text()
       console.error('[push-subscribe] Turso error:', res.status, body)
-      return new Response(JSON.stringify({ ok: false, error: `turso ${res.status}` }), {
+      return new Response(JSON.stringify({ ok: false }), {
         status: 500,
         headers: { 'Content-Type': 'application/json' },
       })
     }
 
-    console.log('[push-subscribe] OK')
     return new Response(JSON.stringify({ ok: true }), {
       headers: { 'Content-Type': 'application/json' },
     })
   } catch (err) {
     console.error('[push-subscribe] Failed:', err)
-    return new Response(JSON.stringify({ ok: false, error: String(err) }), {
+    return new Response(JSON.stringify({ ok: false }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
     })

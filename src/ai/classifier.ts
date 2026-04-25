@@ -56,7 +56,7 @@ Choose exactly one:
 
 - FULL: Article has direct and concrete engineering value. Should be displayed with full summary, engineering impact, and recommendation. Assign to READ_NOW articles and strong SKIM articles with specific engineering consequences.
 - LIGHT: Article has moderate signal value — worth one-line awareness, but not full treatment. Assign to SKIM articles with limited engineering consequence, or notable SIGNALS items.
-- OMIT: No display value. Goes to skippedToday at most. Assign to SKIP articles, event/promo, social-opinion, weak company news.
+- OMIT: No display value. Article is dropped from the brief. Assign to SKIP articles, event/promo, social-opinion, weak company news.
 
 ## Recommendation rules
 
