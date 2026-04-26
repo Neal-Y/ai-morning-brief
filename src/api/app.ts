@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { db } from '../db/client.js'
 import { getTaipeiDateString } from '../date.js'
-import { articles, feedback } from '../db/schema.js'
+import { articles } from '../db/schema.js'
 import { eq, desc } from 'drizzle-orm'
 
 // NOTE: /api/ask is NOT defined here. In production, Vercel rewrites /api/ask
@@ -34,20 +34,11 @@ app.get('/api/feed', async (c) => {
   return c.json({ date, articles: rows })
 })
 
-app.post('/api/feedback', async (c) => {
-  const { articleId, signal } = await c.req.json<{ articleId: string; signal: 'up' | 'down' }>()
-  // Only keep the latest feedback per article — prevents accidental double-taps
-  // from doubling weight in classifier preference context.
-  await db.delete(feedback).where(eq(feedback.articleId, articleId))
-  await db.insert(feedback).values({ articleId, signal, createdAt: new Date() })
-  return c.json({ ok: true })
-})
-
-// NOTE: /api/save and /api/push-subscribe are NOT defined here. In production,
-// Vercel rewrites them directly to api/save.ts and api/push-subscribe.ts
-// (Edge Runtime). The Hono/Node.js adapter hangs on request body reading for
-// these endpoints — the Edge Runtime's native Request object works around it.
-// /api/save additionally calls Notion, which adds latency that should not block
-// the Hono pool.
+// NOTE: /api/save, /api/push-subscribe, and /api/feedback are NOT defined here.
+// In production, Vercel rewrites them directly to api/save.ts,
+// api/push-subscribe.ts, and api/feedback.ts (Edge Runtime). The Hono/Node.js
+// adapter hangs on request body reading for these endpoints — the Edge
+// Runtime's native Request object works around it. All POST endpoints that
+// need to read the body live as Edge functions; this Hono app is now read-only.
 
 export default app

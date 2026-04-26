@@ -27,13 +27,13 @@ GitHub Actions cron (daily 台北 07:30)
        └─ notify/web-push.ts          # 對 push_subscriptions 全表發 Web Push
 
 Hono API (src/api/app.ts → api/index.ts on Vercel)
-  ├─ GET  /api/feed?date=   # 從 Turso 讀當日文章
-  └─ POST /api/feedback     # up/down（delete-then-insert，同 articleId 只留最新）
+  └─ GET  /api/feed?date=   # 從 Turso 讀當日文章（read-only；所有 POST 都搬去 Edge）
 
 Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
   ├─ POST /api/ask              # api/ask.ts — Haiku 4.5 SSE streaming 追問
   ├─ POST /api/push-subscribe   # api/push-subscribe.ts — 寫 push_subscriptions
-  └─ POST /api/save             # api/save.ts — 查 article + Notion 建 page + upsert saves
+  ├─ POST /api/save             # api/save.ts — 查 article + Notion 建 page + upsert saves
+  └─ POST /api/feedback         # api/feedback.ts — up/down（delete-then-insert，同 articleId 只留最新）
 
 React PWA (web/)
   ├─ 滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration
@@ -51,7 +51,7 @@ React PWA (web/)
 | Turso DB 寫入 | ✅ | article id = SHA-256(url).slice(0,16)；client 用 `https://` 而非 `libsql://`（serverless friendly） |
 | Vercel 部署 | ✅ | `api/index.ts` (Hono) + `api/ask.ts` & `api/push-subscribe.ts` (Edge) |
 | PWA 卡片 UI | ✅ | iPhone standalone 已穩定，細節見 FRONTEND_FIX_LOG |
-| 👍👎 → DB | ✅ | delete-then-insert 防誤按 |
+| 👍👎 → DB | ✅ | delete-then-insert 防誤按；Edge Runtime（2026-04-26 從 Hono 搬出，原本 504 timeout） |
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
 | 🔖 Notion 整合 | ✅ | `api/save.ts` Edge Runtime + raw fetch；Notion 失敗 graceful（saves 仍寫，notion_page_id null，下次 retry） |
@@ -112,6 +112,7 @@ api/index.ts             # Vercel entry (hono/vercel handle)
 api/ask.ts               # Edge Runtime SSE for /api/ask
 api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
 api/save.ts              # Edge Runtime POST → Notion + Turso HTTP API（建 page + upsert saves）
+api/feedback.ts          # Edge Runtime POST → Turso HTTP API（delete-then-insert feedback）
 vercel.json
 web/
   index.html
@@ -205,10 +206,10 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/ask` → `api/ask.ts`（SSE streaming）
 - `/api/push-subscribe` → `api/push-subscribe.ts`（寫 Turso）
 - `/api/save` → `api/save.ts`（查 article、Notion 建 page、upsert saves）
-- **背景**：Hono 的 body parser 在 `hono/vercel` Node.js adapter 上會 hang —— `c.req.json()` / `c.req.text()` 對某些 POST 永遠不 resolve，function 撐到 300s timeout 才回 504。GET 沒事，不是 DB / libSQL / drizzle / VAPID 的問題（全試過了）。改用 Edge Runtime 的原生 `Request.json()` 就 OK。
-- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。
-- **例外**：`/api/feedback` 仍在 Hono。body 只有 `{ articleId, signal }` < 100 bytes、Hono Node adapter 對短 body 沒觀察到 hang，因此先保留不搬。**這是過渡狀態，不是 reference**：新 endpoint 仍一律 Edge，不要拿 feedback 當例子複製。
-- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/push-subscribe`、`/api/save` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
+- `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
+- **背景**：Hono 的 body parser 在 `hono/vercel` Node.js adapter 上會 hang —— `c.req.json()` / `c.req.text()` 對某些 POST 永遠不 resolve，function 撐到 300s timeout 才回 504。GET 沒事，不是 DB / libSQL / drizzle / VAPID 的問題（全試過了）。**feedback 一開始留在 Hono，2026-04-26 也觀察到 504**（連續 3 次 timeout，body 大小不是 trigger），所以全搬完了。改用 Edge Runtime 的原生 `Request.json()` 就 OK。
+- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（只剩 `/api/feed` GET）。
+- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/push-subscribe`、`/api/save`、`/api/feedback` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 
