@@ -3,6 +3,7 @@ import { THEME_DARK, ACCENT_PRESETS } from './theme.ts'
 import type { Theme } from './theme.ts'
 import { ArticleCard } from './components/Card.tsx'
 import { TopChrome, FeedbackBar } from './components/Chrome.tsx'
+import { navigate } from './router.ts'
 import { isPushSupported, isStandalone, completeSubscription } from './push.ts'
 import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
@@ -393,6 +394,7 @@ export default function App() {
             streak={streak}
             lastReadAgo="today"
             dateLabel={dateLabel}
+            onOpenLibrary={() => navigate('/library')}
           />
         )}
 

@@ -7,9 +7,10 @@ interface TopChromeProps {
   streak: number
   lastReadAgo: string
   dateLabel: string
+  onOpenLibrary?: () => void
 }
 
-export function TopChrome({ theme, current, total, streak, lastReadAgo, dateLabel }: TopChromeProps) {
+export function TopChrome({ theme, current, total, streak, lastReadAgo, dateLabel, onOpenLibrary }: TopChromeProps) {
   return (
     <div style={{
       padding: '14px 20px 10px',
@@ -27,10 +28,28 @@ export function TopChrome({ theme, current, total, streak, lastReadAgo, dateLabe
           color: theme.ink, letterSpacing: -0.3,
           fontStyle: 'italic',
         }}>The Morning Brief</div>
-        <div style={{
-          fontFamily: theme.mono, fontSize: 9, color: theme.inkMuted,
-          letterSpacing: 1, textTransform: 'uppercase',
-        }}>{dateLabel}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div style={{
+            fontFamily: theme.mono, fontSize: 9, color: theme.inkMuted,
+            letterSpacing: 1, textTransform: 'uppercase',
+          }}>{dateLabel}</div>
+          {onOpenLibrary && (
+            <button
+              aria-label="開啟 Library"
+              onClick={onOpenLibrary}
+              style={{
+                width: 26, height: 26,
+                background: 'transparent',
+                border: `1px solid ${theme.ruleSoft}`,
+                borderRadius: 2,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                color: theme.ink, cursor: 'pointer', padding: 0,
+              }}
+            >
+              <IconLibrary size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -202,6 +221,17 @@ function IconExternal({ size = 14 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M14 4h6v6M10 14L20 4M20 14v6H4V4h6" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  )
+}
+
+function IconLibrary({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="3" x2="4" y2="21" />
+      <line x1="8" y1="3" x2="8" y2="21" />
+      <rect x="11" y="4" width="4" height="17" />
+      <path d="M17 5l3 16" />
     </svg>
   )
 }

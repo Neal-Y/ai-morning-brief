@@ -67,4 +67,5 @@ export const TAG_COLORS: Record<string, { fg: string; bg: string }> = {
   '#market':        { fg: '#2D2D2D', bg: '#E0DCD4' },
   '#opinion':       { fg: '#5A5A2D', bg: '#EAE8D4' },
   '#research':      { fg: '#3D5A6B', bg: '#D4E0E6' },
+  '#event-promo':   { fg: '#8A3D1E', bg: '#EEE0D4' },
 }

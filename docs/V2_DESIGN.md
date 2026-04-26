@@ -263,7 +263,14 @@ quizzes = {
 - [ ] 若 PR-A 證明有用 → PR-B（filter + 搜尋） → PR-C（補做 reaction）
 - **Demo goal**: 能找到「我昨天看到一篇 X 但沒收藏」的文章，不用開 DB console
 
-### Week 5+ — Retention Engine（前提：Library 證明有用）
+### Week 5 — 內容品質一輪（Library 之後）
+- [ ] **4a. RSS 源擴充**：Anthropic news / OpenAI blog / Cloudflare blog / AWS ML blog（4 個）。上線前 `curl` 驗證 URL 有效
+- [ ] **4b. Keyword weight 校準**：官方 blog 進來一週後，看 PREFILTER 是否要調
+- [ ] **4c. Skill-tag 產出**（原 F6）：classifier 加 `skillTags` 陣列，配 Library PR-B filter chip 一起做才有意義
+- **明確不加**：AWS What's New（firehose）、Google AI Blog（行銷腔）、changelog feeds（太細粒度）
+- **Demo goal**: 多源帶來累積感 — Library 顯示「這個月看了 Anthropic / OpenAI / Cloudflare 各幾篇」
+
+### Week 6+ — Retention Engine（前提：Library 證明有用）
 - [ ] 晨間 recall quiz flow（從 Library 選 3/7/14 天前的卡，遮答案）— 配退場條件
 - [ ] 週報 cron（週日 22:00，Sonnet 生成，同步 Notion）
 - **Demo goal**: 每天「先答 quiz → 再看新 brief」變成日常

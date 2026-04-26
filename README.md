@@ -109,7 +109,7 @@ Notion sync 失敗不會阻擋 🔖 — `saves` row 仍會寫入（`notion_page_
 vercel deploy
 ```
 
-`api/index.ts`（Hono，現在只剩 `/api/feed` GET）+ `api/ask.ts` + `api/push-subscribe.ts` + `api/save.ts` + `api/feedback.ts`（皆 Edge Runtime）分別部署為 Vercel Functions。`web/` 為靜態 React PWA。
+`api/index.ts`（Hono read-only：`/api/feed`、`/api/library`）+ `api/ask.ts` + `api/push-subscribe.ts` + `api/save.ts` + `api/unsave.ts` + `api/feedback.ts`（皆 Edge Runtime）分別部署為 Vercel Functions。`web/` 為靜態 React PWA。
 
 > **為什麼所有 POST 都走 Edge Runtime？**
 > Hono 在 Vercel Node.js adapter 上 `c.req.json()` 對某些 POST 會 hang 到 5 分鐘 timeout（2026-04-26 在 `/api/feedback` 上重現過一次，body < 100 bytes 也會觸發）。Edge Runtime 用原生 `Request.json()` 沒這問題。Hono app 現在 read-only。詳見 `CLAUDE.md` Conventions 段。
@@ -150,16 +150,19 @@ GitHub Actions cron (07:30 台北)
        └─ notify/web-push.ts   對 push_subscriptions 全表發 Web Push
 
 Hono API  (src/api/app.ts → api/index.ts on Vercel)
-  └─ GET  /api/feed?date=      從 Turso 讀當日文章（read-only；所有 POST 都搬到 Edge）
+  ├─ GET  /api/feed?date=      從 Turso 讀當日文章
+  └─ GET  /api/library         歷史文章 + feedback/saves 狀態（read-only；所有 POST 都搬到 Edge）
 
 Edge Functions (Vercel 獨立路由，不走 Hono)
   ├─ POST /api/ask             api/ask.ts — Haiku 4.5 SSE streaming 追問（multi-turn）
   ├─ POST /api/push-subscribe  api/push-subscribe.ts — 寫 push_subscriptions（Turso HTTP API）
   ├─ POST /api/save            api/save.ts — 查 article + Notion 建 page + upsert saves
+  ├─ POST /api/unsave          api/unsave.ts — 刪 in-app saves row（不動 Notion page）
   └─ POST /api/feedback        api/feedback.ts — 👍👎 回饋（delete-then-insert，2026-04-26 從 Hono 搬出）
 
 React PWA (web/)
-  ├─ 滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / streak
+  ├─ 今日滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / streak
+  ├─ /library 歷史頁：日期分組、filter、展開 LLM 內容、收藏/移除收藏、AskSheet
   └─ Splash gate：iOS standalone 第一次開啟時請求 notification 權限 + 寫 subscription
 ```
 

@@ -6,5 +6,6 @@ dist/
 auth
 auth-wal
 web/dist/
+web/tsconfig.tsbuildinfo
 .DS_Store
 .idea/
