@@ -11,7 +11,8 @@
 - Classifier 已吃進 feedback（V2 Investment 環節核心），近 30 天 / 20 筆 / 門檻 10 筆。Anthropic cache 有拆 prefix（穩定部分跨天保留）。
 - **F4 Notion 整合（2026-04-25）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `saves.articleId` unique，Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。
 - **產品方向重新校準（2026-04-26）**：原本 V2_DESIGN.md 把 quiz (F5) 排第一，覆盤後發現 quiz 是「賭使用者願意主動測驗」的高風險投資；真正使用者已表達的痛點是「滑過沒存的找不回 + LLM 內容隔天就丟」。新的三大支柱：(1) 每日推播 (V1) (2) Library / 歷史頁 (3) Retention layer (quiz, 蓋在 Library 上)。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
-- **下一個大事**：Library 頁面 PR-A（純讀，看自己會不會回去翻）。設計提案見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)。
+- **Library 頁面已實作並 commit（2026-04-26）**：原 roadmap 拆 PR-A/B/C，實作時 A+B+C 併成一發。新增 `GET /api/library`（Hono read-only，3 表 JS-join）、`POST /api/unsave`（Edge Runtime）、`web/src/Library.tsx`（filter / 日期分組 / collapsed-expanded row / Notion sync 狀態 / AskSheet 整合）、pathname routing (`web/src/router.ts`)、TopChrome 書架 icon。`library/` prototype 已刪，source of truth 是 code + docs。Commits: `0a61bad feat: add library page`, `ee694bb fix: enable library scrolling`。
+- **下一個大事**：Library 上 Vercel preview 真機驗 → 觀察 1–2 週看自己會不會回頭翻；不回頭翻就停在 stable 版，不急著疊 RSS 擴源 / quiz。
 
 ---
 
@@ -28,16 +29,20 @@ GitHub Actions cron (daily 台北 07:30)
        └─ notify/web-push.ts          # 對 push_subscriptions 全表發 Web Push
 
 Hono API (src/api/app.ts → api/index.ts on Vercel)
-  └─ GET  /api/feed?date=   # 從 Turso 讀當日文章（read-only；所有 POST 都搬去 Edge）
+  ├─ GET  /api/feed?date=   # 從 Turso 讀當日文章
+  └─ GET  /api/library      # 全歷史 + feedback / saved / notionSynced 三表 JS-join，read-only no-store
 
 Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
   ├─ POST /api/ask              # api/ask.ts — Haiku 4.5 SSE streaming 追問
   ├─ POST /api/push-subscribe   # api/push-subscribe.ts — 寫 push_subscriptions
   ├─ POST /api/save             # api/save.ts — 查 article + Notion 建 page + upsert saves
-  └─ POST /api/feedback         # api/feedback.ts — up/down（delete-then-insert，同 articleId 只留最新）
+  ├─ POST /api/feedback         # api/feedback.ts — up/down（delete-then-insert，同 articleId 只留最新）
+  └─ POST /api/unsave           # api/unsave.ts — DELETE saves 一筆（Notion page 不刪）
 
 React PWA (web/)
-  ├─ 滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration
+  ├─ /          滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration
+  ├─ /library   全歷史頁：所有歷史 tab（filter + 日期分組 + 展開 LLM 四段） / 收藏 tab（Notion sync stats）
+  ├─ pathname routing：web/src/main.tsx 監聽 popstate，web/src/router.ts navigate() helper
   └─ Splash gate：iOS standalone 第一次開啟 → 請求 notification permission → 寫 subscription
 ```
 
@@ -56,6 +61,7 @@ React PWA (web/)
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
 | 🔖 Notion 整合 | ✅ | `api/save.ts` Edge Runtime + raw fetch；Notion 失敗 graceful（saves 仍寫，notion_page_id null，下次 retry） |
+| Library 頁面（A+B+C 合併）| 🟡 已 commit，待 preview / 真機驗證 | `/library` route：filter（搜尋 + category chip + 反應 chip）、日期分組 sticky、展開顯示 4 段 LLM、saves tab + Notion sync stats、移除收藏（`/api/unsave` Edge）。本地 typecheck/build 過，scroll bug 已修 |
 | Quiz 生成 | ⏳ 未做 | `quizzes` table 已建 schema |
 | 晨間 Recall Quiz | ⏳ 未做 | 需先有 quiz 資料 |
 | Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
@@ -67,18 +73,20 @@ React PWA (web/)
 
 > 重排理由：覆盤後發現 quiz 是高風險賭注，Library 是已表達需求。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
 
-1. **Library / 歷史頁 PR-A**（純讀）— 按日期分組顯示所有歷史文章，點擊展開全部 LLM 生的內容。先沒搜尋／filter。設計提案見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)。觀察 1-2 週看自己有沒有真的回去翻，**有用再做 PR-B（filter）**。
-2. **Library PR-B**（filter + 搜尋）— category chip / 反應 chip / 標題 fuzzy search。
-3. **Library PR-C**（互動）— expanded 狀態下重新 👍👎 / 補 🔖。
-4. **收藏時生成 quiz (F5)** — 降為 Library 上的 retention layer。前置條件：Library PR-A ship 後觀察使用者真的有回去翻，再考慮蓋 quiz。配退場條件：「2 週連續 7 天沒答 quiz 就砍掉」。
-5. **Skill-tag 產出** — classifier 加 `skillTags` 欄位。可搭 Library filter chip 一起做才有意義（只存資料不可瀏覽 = 純技術自嗨）。
-6. **Notion 強化（v1.1）** — 失敗 backfill cron、conversations 寫回後塞進 page、筆記輸入 UI。
-7. **Classifier 偏好 v2**（跑一週後評估再動，**不要提早優化**）。
+1. **Library ship 驗證**（已 commit，待 preview / 真機）— push 到 Vercel preview，真機跑一遍：list 渲染、scroll、filter、展開 LLM 四段、🔖 收藏 / 移除收藏（`/api/unsave` 本地 404 屬預期，要 preview 才測得到）、AskSheet 觸發、進出 `/library` 路由。觀察 1–2 週看自己會不會真的回去翻；**沒回去翻就停在這版**，不疊新功能。產品定位見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)，設計 review 見 [docs/LIBRARY_DESIGN_REVIEW_v1.md](./docs/LIBRARY_DESIGN_REVIEW_v1.md)。
+2. **內容品質一輪**（Library 之後 — Library 越多源越值錢）：
+   - 2a. **RSS 源擴充**：新增 Anthropic news / OpenAI blog / Cloudflare blog / AWS ML blog。RSS URL 上線前要 `curl` 驗證仍有效（Anthropic / OpenAI 換過很多次）
+   - 2b. **觀察一週 keyword weight**：官方 blog 進來後是否被 PREFILTER 漏放或誤殺，視情況微調 `KEYWORD_WEIGHTS`
+   - 2c. **Skill-tag 產出**（原 V2 F6）：classifier 輸出 `skillTags` 陣列，Library filter chip 才有第三維度可用（目前 Library 已預留 `skillTags` 顯示，等 classifier 產就會自動有東西）
+   - **不要做的事**：AWS What's New（firehose）、Google AI Blog（行銷腔）、各家 changelog feeds（太細粒度）。詳見對話紀錄 2026-04-26 後段
+3. **Quiz (F5)** — 降為 Library 上的 retention layer。前置條件：Library ship 後使用者真的有回去翻。配退場條件：「2 週連續 7 天沒答 quiz 就砍掉」。
+4. **Notion 策略回看** — 不急著做 backfill / conversations 寫回 / 筆記 UI。先觀察 Library 是否已解決「歷史找回」需求；若 Notion 仍有價值，優先改成明確的 curated export，而不是擴大自動同步。
+5. **Classifier 偏好 v2**（feedback 累積一兩個月後評估再動，**不要提早優化**）。
 
 ## 觀察期 / 退場條件
 
 - **Notion 整合**（2026-04-25 ship）：到 2026-05-26 回看，如果 30 天內沒回 Notion 翻過 Sift Saves database 一次，重新評估是否該砍。
-- **Library PR-A**（待 ship）：上線後觀察 1-2 週，如果自己沒回頭翻過任何一次，PR-B/C 不做。
+- **Library**（2026-04-26 code 完成，待 push preview）：上線後觀察 1-2 週，如果自己沒回頭翻過任何一次，**內容品質一輪不做、Quiz 不做**，停在「每日推播 + Library」這個 stable 版本。
 
 ---
 
@@ -88,6 +96,8 @@ React PWA (web/)
 - [x] `/api/push-subscribe` 寫入 `push_subscriptions` table（Edge Runtime，已驗證 2026-04-25）
 - [x] GitHub Actions secrets 已設 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` + `VAPID_*`
 - [ ] 連續 3 天 07:30 自動觸發都能成功收到 Web Push（觀察一週）
+- [ ] Library 在 Vercel preview 真機跑一遍：`/library` 路由、filter、展開 LLM 四段、🔖 收藏 + 移除收藏（preview 才測得到 unsave）、AskSheet 觸發
+- [ ] Library `/api/library` GET 在 Vercel 正常回傳（含 feedback / saved / notionSynced 三欄）
 
 ---
 
@@ -109,19 +119,23 @@ src/
   notion/client.ts    # raw fetch Notion REST API（createSavePage）
   db/schema.ts        # articles / feedback / saves (article_id unique) / conversations / quizzes / push_subscriptions
   db/client.ts        # libSQL client (https://) + getRecentFeedback()
-  api/app.ts          # Hono app（/api/feed /api/feedback）
+  api/app.ts          # Hono app（GET /api/feed + GET /api/library，read-only）
   api/server.ts       # 本地 dev (port 3001)
 api/index.ts             # Vercel entry (hono/vercel handle)
 api/ask.ts               # Edge Runtime SSE for /api/ask
 api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
 api/save.ts              # Edge Runtime POST → Notion + Turso HTTP API（建 page + upsert saves）
 api/feedback.ts          # Edge Runtime POST → Turso HTTP API（delete-then-insert feedback）
+api/unsave.ts            # Edge Runtime POST → Turso HTTP API（DELETE saves；Notion page 不刪）
 vercel.json
 web/
   index.html
   public/manifest.json · apple-touch-icon.png · icon-512.svg
   public/sw.js          # push handler SW（push + notificationclick events）
-  src/App.tsx           # swipe 物理 + streak + push permission gate
+  src/main.tsx          # pathname routing：/library → Library，其他 → App
+  src/router.ts         # navigate(path) helper（pushState + popstate dispatch）
+  src/App.tsx           # 日報主畫面：swipe 物理 + streak + push permission gate
+  src/Library.tsx       # /library 頁面：filter / 日期分組 / 展開 LLM / saves tab
   src/push.ts           # isPushSupported / isStandalone / completeSubscription
   src/components/
     Card.tsx · Chrome.tsx · AskSheet.tsx · Celebration.tsx
@@ -129,9 +143,12 @@ web/
   vite.config.ts
 scripts/seed.ts
 docs/
-  PROPOSAL.md         # V1 spec
-  V2_DESIGN.md        # V2 產品藍圖 + phased rollout
-  FRONTEND_FIX_LOG.md # 前端 / mobile UI 修復史（先讀這份再動 UI）
+  PROPOSAL.md                       # V1 spec
+  V2_DESIGN.md                      # V2 產品藍圖 + phased rollout
+  FRONTEND_FIX_LOG.md               # 前端 / mobile UI 修復史（先讀這份再動 UI）
+  LIBRARY_PROPOSAL.md               # Library 產品定位 + 設計 brief
+  LIBRARY_DESIGN_REVIEW_v1.md       # Library 設計 v1 review + DB 可行性核對
+  PRODUCT_REVIEW_2026-04-26.md      # 產品方向校準（quiz 降級、Library 升級）
 .github/workflows/daily_sync.yml
 ```
 
@@ -198,6 +215,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - db-writer 的 conflict target 是 `articles.url`
 - `saves.articleId` 是 unique（一篇一筆）；`/api/save` handler 自己做 select-then-update / insert，不依賴 Drizzle upsert（Edge Runtime 用 raw Turso HTTP API）
 - Notion sync 失敗不阻斷收藏：寫 `saves` row 但 `notion_page_id = NULL`，回 `{ ok: true, notionSynced: false }`，下次同篇再點會 retry
+- `/api/unsave` 只刪 in-app `saves` row，**不刪 Notion page**。Notion 是外部 PKM，不可因 app 內移除收藏而誤刪使用者整理過的內容。未來若調整，優先考慮把 Notion 降級為明確的「送到 Notion」curated export，而不是每次 save 自動同步。
 
 **Classifier 偏好：**
 - Preference context **必須附加在 system prompt 尾端**（保 cache prefix，不要插中間／開頭）
@@ -209,10 +227,11 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/ask` → `api/ask.ts`（SSE streaming）
 - `/api/push-subscribe` → `api/push-subscribe.ts`（寫 Turso）
 - `/api/save` → `api/save.ts`（查 article、Notion 建 page、upsert saves）
+- `/api/unsave` → `api/unsave.ts`（刪 in-app saves row；不刪 Notion page）
 - `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
 - **背景**：Hono 的 body parser 在 `hono/vercel` Node.js adapter 上會 hang —— `c.req.json()` / `c.req.text()` 對某些 POST 永遠不 resolve，function 撐到 300s timeout 才回 504。GET 沒事，不是 DB / libSQL / drizzle / VAPID 的問題（全試過了）。**feedback 一開始留在 Hono，2026-04-26 也觀察到 504**（連續 3 次 timeout，body 大小不是 trigger），所以全搬完了。改用 Edge Runtime 的原生 `Request.json()` 就 OK。
-- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（只剩 `/api/feed` GET）。
-- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/push-subscribe`、`/api/save`、`/api/feedback` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
+- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/feed` + `/api/library` GET）。
+- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 
@@ -250,3 +269,60 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `nvm use 20` 先跑，再跑任何 npm 指令
 - 遇到前端 / mobile UI 問題，**先讀 `docs/FRONTEND_FIX_LOG.md`** 再動手
 - Commit 前先把 UI 結果描述給使用者，等他說 go 才動（Never commit proactively）
+
+---
+
+## [ADDED CONTENT] Mentor Engineering Workflow
+
+This section extends the project rules above. If there is tension, keep the
+original project-specific rule and use this workflow as clarification.
+
+### Default Collaboration Loop
+
+For non-trivial work, do not write code first. Start by helping the user reason:
+
+1. Restate the problem and identify the affected surface area.
+2. Ask only the questions needed to remove meaningful ambiguity.
+3. Propose 2-3 viable design options.
+4. Compare tradeoffs: complexity, failure modes, latency/cost, deploy risk, and fit with existing conventions.
+5. Recommend one option, but do not treat the recommendation as user approval.
+6. Wait for the user to choose before implementation.
+7. After approval, implement narrowly, verify, and report what changed.
+
+Small mechanical fixes may skip the full option matrix, but still state the
+assumption before editing. Emergency production fixes may prioritize mitigation,
+then document the design follow-up.
+
+### Review Checklist
+
+Before implementation and again before final response, review:
+
+- **Concurrency:** bounded parallelism, race conditions, duplicate writes, idempotency, retry behavior.
+- **Resource usage:** LLM tokens, provider rate limits, Turso query volume, memory use, bundle size, mobile battery/network cost.
+- **Failure handling:** partial failures, degraded behavior, retry safety, user-visible errors, GitHub Actions/Vercel failure signals.
+- **Scalability:** what changes at 10x articles, feedback rows, saves, push subscriptions, or daily users.
+- **Observability:** logs with enough context, clear action failure points, no secret leakage, source of truth for debugging.
+
+### Teaching Behavior
+
+Act as a mentor, not only a code generator:
+
+- Ask the user to choose between meaningful tradeoffs instead of silently choosing architecture.
+- Challenge assumptions when they conflict with product goals, operational constraints, or previous decisions.
+- Explain why a design is safer or cheaper before showing code.
+- Use short examples from this repo (`api/*.ts`, `src/index.ts`, `web/src/*`) when teaching.
+- Prefer guiding questions for system design, debugging, and review; give direct answers for simple factual or mechanical tasks.
+
+### Prevention Rules
+
+- No blind agreement. If a request risks breaking Web Push, PWA behavior, Edge routing, cache behavior, or cost controls, say so directly.
+- No direct coding for ambiguous features. Clarify scope, data flow, failure behavior, and verification first.
+- No broad rewrites when a narrow change preserves existing behavior.
+- No new unbounded loops, unbounded concurrency, or provider calls without explicit caps.
+- No new POST endpoint that reads a body in Hono; keep the existing Edge Runtime rule.
+
+### Go-Specific Note
+
+This is currently a TypeScript project, so Go rules do not apply. If Go is later
+introduced, require `context.Context` for request-scoped work, avoid unbounded
+goroutines, prefer worker pools for parallel jobs, and make cancellation paths explicit.
