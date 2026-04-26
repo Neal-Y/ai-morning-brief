@@ -8,9 +8,21 @@
 
 - **每日 pipeline**：GitHub Actions 07:30（台北）自動抓 RSS、LLM 分類、寫 Turso DB、Web Push 推播到 iPhone PWA
 - **Web PWA**：滑卡瀏覽、👍👎 回饋、💬 追問（Haiku streaming）、🔖 收藏、streak 計數
-- **Web Push (VAPID)**：iOS standalone PWA 支援，通知標題 = lead story headline（不是泛用 metadata）
+- **Web Push (VAPID)**：iOS standalone PWA 支援，通知標題 = lead story headline，body 第 1 行 = lead 文章的 `engineeringImpact`（讓 LLM 判斷直接上鎖屏，不只是頭條）
+- **🔖 → Notion 同步**：點收藏自動建 Notion page，Notion 失敗不阻斷收藏（下次點同篇 retry）
 - **Feedback loop**：Classifier 讀近 30 天 👍👎 回饋調整選文偏好（≥10 筆啟動）
 - **Provider alternation**：GPT-4o / Claude Sonnet 4.6 按日輪替
+
+## 產品方向
+
+> 2026-04-26 校準後，三大支柱：
+> 1. **每日推播 + 篩選**（V1，已 ship）
+> 2. **Library / 歷史頁**（下一優先項目）— 解決「滑過沒收藏的找不回 + LLM 內容隔天就丟」
+> 3. **Retention layer**（quiz / recall）— 蓋在 Library 上的再訪機制，視 Library 證明有用再做
+>
+> 設計原則與覆盤紀錄：[docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)
+> Library 設計提案：[docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)
+> V2 完整規劃：[docs/V2_DESIGN.md](./docs/V2_DESIGN.md)
 
 ## Quick Start
 
@@ -97,10 +109,10 @@ Notion sync 失敗不會阻擋 🔖 — `saves` row 仍會寫入（`notion_page_
 vercel deploy
 ```
 
-`api/index.ts`（Hono）+ `api/ask.ts`（Edge Runtime SSE）+ `api/push-subscribe.ts`（Edge Runtime → Turso HTTP API）分別部署為 Vercel Functions。`web/` 為靜態 React PWA。
+`api/index.ts`（Hono，現在只剩 `/api/feed` GET）+ `api/ask.ts` + `api/push-subscribe.ts` + `api/save.ts` + `api/feedback.ts`（皆 Edge Runtime）分別部署為 Vercel Functions。`web/` 為靜態 React PWA。
 
-> **為什麼 push-subscribe / ask 走 Edge Runtime 而不是 Hono？**
-> Hono 在 Vercel Node.js adapter 上 `c.req.json()` 對某些 POST 會 hang 到 5 分鐘 timeout。Edge Runtime 用原生 `Request.json()` 沒這問題。詳見 `CLAUDE.md` Conventions 段。
+> **為什麼所有 POST 都走 Edge Runtime？**
+> Hono 在 Vercel Node.js adapter 上 `c.req.json()` 對某些 POST 會 hang 到 5 分鐘 timeout（2026-04-26 在 `/api/feedback` 上重現過一次，body < 100 bytes 也會觸發）。Edge Runtime 用原生 `Request.json()` 沒這問題。Hono app 現在 read-only。詳見 `CLAUDE.md` Conventions 段。
 
 ## Cost
 
@@ -138,13 +150,13 @@ GitHub Actions cron (07:30 台北)
        └─ notify/web-push.ts   對 push_subscriptions 全表發 Web Push
 
 Hono API  (src/api/app.ts → api/index.ts on Vercel)
-  ├─ GET  /api/feed?date=      從 Turso 讀當日文章
-  └─ POST /api/feedback        👍👎 回饋（delete-then-insert）
+  └─ GET  /api/feed?date=      從 Turso 讀當日文章（read-only；所有 POST 都搬到 Edge）
 
 Edge Functions (Vercel 獨立路由，不走 Hono)
   ├─ POST /api/ask             api/ask.ts — Haiku 4.5 SSE streaming 追問（multi-turn）
   ├─ POST /api/push-subscribe  api/push-subscribe.ts — 寫 push_subscriptions（Turso HTTP API）
-  └─ POST /api/save            api/save.ts — 查 article + Notion 建 page + upsert saves
+  ├─ POST /api/save            api/save.ts — 查 article + Notion 建 page + upsert saves
+  └─ POST /api/feedback        api/feedback.ts — 👍👎 回饋（delete-then-insert，2026-04-26 從 Hono 搬出）
 
 React PWA (web/)
   ├─ 滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / streak

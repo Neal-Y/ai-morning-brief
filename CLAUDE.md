@@ -10,7 +10,8 @@
 - 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`；現在 SW (`web/public/sw.js`) 是真正的 push handler（`push` + `notificationclick` events，無 fetch cache）。
 - Classifier 已吃進 feedback（V2 Investment 環節核心），近 30 天 / 20 筆 / 門檻 10 筆。Anthropic cache 有拆 prefix（穩定部分跨天保留）。
 - **F4 Notion 整合（2026-04-25）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `saves.articleId` unique，Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。
-- **下一個大事**：收藏時順手生成 quiz（F5）。
+- **產品方向重新校準（2026-04-26）**：原本 V2_DESIGN.md 把 quiz (F5) 排第一，覆盤後發現 quiz 是「賭使用者願意主動測驗」的高風險投資；真正使用者已表達的痛點是「滑過沒存的找不回 + LLM 內容隔天就丟」。新的三大支柱：(1) 每日推播 (V1) (2) Library / 歷史頁 (3) Retention layer (quiz, 蓋在 Library 上)。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
+- **下一個大事**：Library 頁面 PR-A（純讀，看自己會不會回去翻）。設計提案見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)。
 
 ---
 
@@ -62,20 +63,22 @@ React PWA (web/)
 
 ---
 
-## 下一步（按優先順序）
+## 下一步（按優先順序，2026-04-26 重排）
 
-1. **收藏時生成 quiz (F5 起點)** — Haiku 順手產 QA pair，存 `quizzes` table。
-2. **晨間 recall quiz** — 打開 app 先答 3/7/14 天前的卡。
-3. **Skill-tag 產出** — classifier 加 `skillTags` 欄位。
-4. **Notion 強化（v1.1）** — 失敗 backfill cron、conversations 寫回後塞進 page、筆記輸入 UI。
-5. **通知文案再優化**（觀察一週通知品質後評估）：
-   - 目前 lead = `displayedItems[0].title`（最高分 HARD_TECH_AI 的 RSS 原標）
-   - 真實 case 看下來如果 lead 經常很弱，考慮讓 brief generator 多輸出一個 `lead: { articleId, headline }` 欄位（同一次 LLM call 改 schema，cost = 0）
-6. **Classifier 偏好 v2**（跑一週後評估再動，**不要提早優化**）：
-   - 明確 exploration slot（非 filler 副產品）
-   - `selectionReason` / `wasFiller` 欄位
-   - 前端 feedback undo
-   - 時間衰減權重
+> 重排理由：覆盤後發現 quiz 是高風險賭注，Library 是已表達需求。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
+
+1. **Library / 歷史頁 PR-A**（純讀）— 按日期分組顯示所有歷史文章，點擊展開全部 LLM 生的內容。先沒搜尋／filter。設計提案見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)。觀察 1-2 週看自己有沒有真的回去翻，**有用再做 PR-B（filter）**。
+2. **Library PR-B**（filter + 搜尋）— category chip / 反應 chip / 標題 fuzzy search。
+3. **Library PR-C**（互動）— expanded 狀態下重新 👍👎 / 補 🔖。
+4. **收藏時生成 quiz (F5)** — 降為 Library 上的 retention layer。前置條件：Library PR-A ship 後觀察使用者真的有回去翻，再考慮蓋 quiz。配退場條件：「2 週連續 7 天沒答 quiz 就砍掉」。
+5. **Skill-tag 產出** — classifier 加 `skillTags` 欄位。可搭 Library filter chip 一起做才有意義（只存資料不可瀏覽 = 純技術自嗨）。
+6. **Notion 強化（v1.1）** — 失敗 backfill cron、conversations 寫回後塞進 page、筆記輸入 UI。
+7. **Classifier 偏好 v2**（跑一週後評估再動，**不要提早優化**）。
+
+## 觀察期 / 退場條件
+
+- **Notion 整合**（2026-04-25 ship）：到 2026-05-26 回看，如果 30 天內沒回 Notion 翻過 Sift Saves database 一次，重新評估是否該砍。
+- **Library PR-A**（待 ship）：上線後觀察 1-2 週，如果自己沒回頭翻過任何一次，PR-B/C 不做。
 
 ---
 
@@ -223,7 +226,8 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - iOS Web Push **只在 standalone 模式下支援**（首頁捷徑開啟，不是 Safari 直接開網址）。所以 `App.tsx` 的 splash gate `permissionResolved` 初始判定要先過 `isStandalone()`。
 - `Notification.requestPermission()` 必須由 user gesture 觸發（按鈕 onClick），不能在 `useEffect` 內自動呼叫。
 - `Notification.permission` 已是 `granted` 時，App startup useEffect 會自動 call `completeSubscription()` 補寫 `push_subscriptions`（fire-and-forget，使用者無感）。
-- 當天有文章：通知標題 = `displayedItems[0].title`（lead story），副標 = active section labels（`Hard Tech AI／Signals`）。當天無文章：標題 = `AI Morning Brief {date}`、副標 = `今日無重大 AI 新聞`。
+- 當天有文章：通知標題 = `displayedItems[0].title`（lead story），body 兩行：第 1 行 = lead 文章的 `engineeringImpact`（讓 LLM 生的判斷上鎖屏，不只是頭條），第 2 行 = active section labels + 額外篇數（例：`Hard Tech AI · Signals · +2 篇`）。當天無文章：標題 = `AI Morning Brief {date}`、body = `今日無重大 AI 新聞`。
+- 通知格式 2026-04-26 重做過一次：拿掉「from Sift」（icon 已表示來源）、`／` 改 `·`、釋出空間放 lead 的 `engineeringImpact`。看 `src/index.ts` Stage 6 的 comment，不要回退。
 
 ---
 

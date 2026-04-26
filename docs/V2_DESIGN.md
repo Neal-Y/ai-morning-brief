@@ -1,6 +1,9 @@
 # AI Morning Brief V2 — Product & Engineering Design
 
-> **Status**: F1–F4 + Feedback loop + Web Push 已上線（Vercel + GitHub Actions）。**ntfy 已淘汰（2026-04-25）**，唯一推播管道為 Web Push。F4 Notion 整合已 ship（`api/save.ts` Edge Runtime + raw fetch），下一優先為 F5（收藏時生成 quiz）。
+> **Status**: F1–F4 + Feedback loop + Web Push 已上線（Vercel + GitHub Actions）。**ntfy 已淘汰（2026-04-25）**，唯一推播管道為 Web Push。F4 Notion 整合已 ship（`api/save.ts` Edge Runtime + raw fetch）。
+>
+> **2026-04-26 方向校準**：原本 F5 quiz 排第一，覆盤後發現 quiz 是高風險賭注（賭使用者願意主動測驗）。改由 **Library / 歷史頁** 取代 F5 成為下一個優先項目，quiz 降為 Library 上的 retention layer。詳見 [PRODUCT_REVIEW_2026-04-26.md](./PRODUCT_REVIEW_2026-04-26.md)。
+>
 > **Baseline**: [PROPOSAL.md](./PROPOSAL.md) (V1, 已被 V2 取代)。
 
 ---
@@ -40,6 +43,8 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
 ---
 
 ## 3. 功能清單 (Feature List)
+
+> **2026-04-26 重排**：F5 quiz 從第一順位降為 Library 上的 retention layer；新增 F8 Library 為下一優先項目。原 F1–F4 已 ship 不動。
 
 ### F1 — PWA 卡片介面 + Web Push（已替代 ntfy）✅
 - 每張卡一篇文章,swipe 切換
@@ -84,6 +89,16 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
 - 內容:本週讀了 N 篇、最常出現的技術、哪些 tag 你點最多、tag 共現矩陣
 - 自動寫入 Notion 週報頁,累積成長軌跡
 
+### F8 — Library / 歷史頁（2026-04-26 新增，**現為下一優先項目**）
+- 解決使用者親口說的痛點：「滑過沒收藏的找不回 + LLM 內容隔天就丟」
+- `/library` route，按日期 group 顯示所有歷史文章
+- 每筆 row 點擊展開全部 LLM 生的內容（summary / context / engineeringImpact / reason）+ 補做 reaction（👍👎🔖）
+- Filter：category chip / 反應 chip / fuzzy 搜尋
+- 兩個 tab：所有歷史 / 我的收藏（後者顯示 Notion sync 狀態）
+- **次要入口**：日報主畫面右上加圖示，不上 tab bar（避免取代日報「滑完就走」UX）
+- 詳細設計提案見 [LIBRARY_PROPOSAL.md](./LIBRARY_PROPOSAL.md)
+- F5 quiz 改成蓋在 F8 上的功能（從 Library 選 N 天前的卡出題），不再獨立。配退場條件：「2 週連續 7 天沒答 quiz 就砍掉」。
+
 ### 明確不做 (Rejected)
 | 功能 | 理由 |
 |---|---|
@@ -93,6 +108,8 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
 | Bun runtime | 生態相容性風險 > 學習報酬 |
 | Cloudflare Workers + D1 | 單人 app 不需要 edge,D1 的 SQL 限制反而綁手綁腳 |
 | Go 後端 | 你已熟 Go = 零學習報酬;LLM SDK 生態 TS 先行;現有 code 全是 TS |
+| Provider alternation v2（exploration slot, 時間衰減）| 連 baseline 都還沒量過就在規劃 v2，過早優化（[PRODUCT_REVIEW](./PRODUCT_REVIEW_2026-04-26.md) §「先量再優化」） |
+| Quiz 作為獨立 product line | 賭使用者願意主動測驗，假設不成立。改成 Library 上的 retention layer，視 Library 有用再做 |
 
 ---
 
@@ -229,15 +246,25 @@ quizzes = {
 - [ ] Skill-tag 加到 classifier 輸出（待做）
 - **Result**: 滑卡、追問、feedback loop、Web Push 全部上線
 
-### Week 3 — Investment Layer（進行中）
+### Week 3 — Investment Layer ✅
 - [x] **Notion API 整合（F4）**：`🔖` → 自動建 page（2026-04-25 上線；`api/save.ts` Edge Runtime + raw fetch，Notion 失敗不阻斷收藏）
-- [ ] 收藏時 Haiku 生成 quiz QA pair，存到 `quizzes`
-- [ ] 基本 dashboard：streak（已有 localStorage 版）、本週讀了幾篇
-- [ ] 通知文案再優化：lead 標題品質觀察一週後，視情況讓 brief generator 多輸出 `lead` 欄位
-- **Demo goal**: 每收藏一篇，Notion 就長一篇，完全不用手動整理
+- [x] **`/api/feedback` Edge migration**（2026-04-26）：原本在 Hono，觀察到 504 timeout 後搬到 Edge Runtime（`api/feedback.ts`）
+- [x] **通知文案重做**（2026-04-26）：拿掉「from Sift」冗餘行、`／` → `·`、釋出空間放 lead 文章的 `engineeringImpact` 當 teaser
+- **Demo goal achieved**: 每收藏一篇，Notion 就長一篇，完全不用手動整理
 
-### Week 4 — Retention Engine
-- [ ] 晨間 recall quiz flow（3/7/14 天前的卡，遮答案）
+### Week 3.5 — 方向校準（2026-04-26）
+- 觸發：F4 ship 後做了一次刻意的產品覆盤
+- 結論：Library / 歷史頁取代 quiz 成為下一優先項目（quiz 是賭注、Library 是已表達需求）
+- 產出：[PRODUCT_REVIEW_2026-04-26.md](./PRODUCT_REVIEW_2026-04-26.md)（覆盤紀錄 + 工作原則）+ [LIBRARY_PROPOSAL.md](./LIBRARY_PROPOSAL.md)（設計提案）
+
+### Week 4 — Library Layer（取代原 Retention Engine 計畫）
+- [ ] **F8 Library PR-A**（純讀）：`/library` 頁面 + 按日期分組列表 + 點擊展開全部 LLM 內容。先沒搜尋／filter
+- [ ] 觀察期：1-2 週看自己有沒有真的回去翻
+- [ ] 若 PR-A 證明有用 → PR-B（filter + 搜尋） → PR-C（補做 reaction）
+- **Demo goal**: 能找到「我昨天看到一篇 X 但沒收藏」的文章，不用開 DB console
+
+### Week 5+ — Retention Engine（前提：Library 證明有用）
+- [ ] 晨間 recall quiz flow（從 Library 選 3/7/14 天前的卡，遮答案）— 配退場條件
 - [ ] 週報 cron（週日 22:00，Sonnet 生成，同步 Notion）
 - **Demo goal**: 每天「先答 quiz → 再看新 brief」變成日常
 
