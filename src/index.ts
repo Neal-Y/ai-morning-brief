@@ -200,19 +200,32 @@ async function main(): Promise<void> {
     .flatMap((s) => s.items)
     .filter((item) => item.renderLevel !== 'OMIT');
 
-  // Web Push: title = lead story headline (the strongest reason to open),
-  // body = active section labels (gives a sense of today's mix).
-  const leadTitle = displayedItems[0]?.title ?? `AI Morning Brief ${date}`;
+  // Web Push composition (2026-04-26 redesign):
+  //   title = lead story headline (the strongest reason to open)
+  //   body  = lead.engineeringImpact  (the LLM-generated value, was "from Sift")
+  //         + section line with extras count
+  //
+  // iOS shows ~3 body lines, separated by \n. The previous "from Sift" line
+  // duplicated info already conveyed by the app icon and was dropped. The
+  // freed line now carries the lead article's engineering judgment so the
+  // notification reads as a teaser, not just a headline.
+  const lead = displayedItems[0];
+  const leadTitle = lead?.title ?? `AI Morning Brief ${date}`;
   const sectionLabel: Record<string, string> = {
     'Hard Tech AI': 'Hard Tech AI',
     'Important AI Signals': 'Signals',
   };
-  const subtitle = brief.sections
+  const activeSections = brief.sections
     .filter((s) => s.items.some((item) => item.renderLevel !== 'OMIT'))
-    .map((s) => sectionLabel[s.name] ?? s.name)
-    .join('／');
+    .map((s) => sectionLabel[s.name] ?? s.name);
+  const extraCount = Math.max(0, displayedItems.length - 1);
+  const sectionLine = extraCount > 0
+    ? `${activeSections.join(' · ')} · +${extraCount} 篇`
+    : activeSections.join(' · ');
+  const teaser = lead ? (lead.engineeringImpact || lead.summary || '') : '';
+  const body = teaser ? `${teaser}\n${sectionLine}` : sectionLine;
   try {
-    await sendWebPush(leadTitle, subtitle);
+    await sendWebPush(leadTitle, body);
   } catch (err) {
     console.error('[web-push] Failed:', err instanceof Error ? err.message : err);
     process.exit(1);
