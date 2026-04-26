@@ -826,7 +826,9 @@ export default function Library() {
         .lib-root ::-webkit-scrollbar { display: none; }
       `}</style>
       <div className="lib-root" style={{
-        maxWidth: 720, margin: '0 auto', minHeight: '100vh',
+        maxWidth: 720, margin: '0 auto', height: '100dvh',
+        overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+        overscrollBehavior: 'contain',
         display: 'flex', flexDirection: 'column',
         background: T.bg, fontFamily: T.sans,
         color: T.ink,
