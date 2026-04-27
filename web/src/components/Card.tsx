@@ -172,11 +172,7 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           borderRadius: 2,
           padding: '14px 16px',
           position: 'relative',
-          flex: 1,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          minHeight: 80,
+          marginTop: 'auto',
         }}>
           <div style={{
             position: 'absolute', top: -8, left: 12,
