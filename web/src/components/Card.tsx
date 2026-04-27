@@ -106,6 +106,8 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
           paddingBottom: bottomInset,
+          display: 'flex',
+          flexDirection: 'column',
         } as React.CSSProperties}
       >
         <div style={{ padding: '18px 24px 8px' }}>
@@ -170,6 +172,11 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           borderRadius: 2,
           padding: '14px 16px',
           position: 'relative',
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          minHeight: 80,
         }}>
           <div style={{
             position: 'absolute', top: -8, left: 12,
