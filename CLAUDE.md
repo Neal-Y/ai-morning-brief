@@ -11,7 +11,7 @@
 - Classifier 已吃進 feedback（V2 Investment 環節核心），近 30 天 / 20 筆 / 門檻 10 筆。Anthropic cache 有拆 prefix（穩定部分跨天保留）。
 - **F4 Notion 整合（2026-04-25）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `saves.articleId` unique，Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。
 - **產品方向重新校準（2026-04-26）**：原本 V2_DESIGN.md 把 quiz (F5) 排第一，覆盤後發現 quiz 是「賭使用者願意主動測驗」的高風險投資；真正使用者已表達的痛點是「滑過沒存的找不回 + LLM 內容隔天就丟」。新的三大支柱：(1) 每日推播 (V1) (2) Library / 歷史頁 (3) Retention layer (quiz, 蓋在 Library 上)。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
-- **Library 頁面已實作並 commit（2026-04-26）**：原 roadmap 拆 PR-A/B/C，實作時 A+B+C 併成一發。新增 `GET /api/library`（Hono read-only，3 表 JS-join）、`POST /api/unsave`（Edge Runtime）、`web/src/Library.tsx`（filter / 日期分組 / collapsed-expanded row / Notion sync 狀態 / AskSheet 整合）、pathname routing (`web/src/router.ts`)、TopChrome 書架 icon。`library/` prototype 已刪，source of truth 是 code + docs。Commits: `0a61bad feat: add library page`, `ee694bb fix: enable library scrolling`。
+- **Library 頁面已 ship（2026-04-26，commit `0a61bad` / `ee694bb`）**：原 roadmap PR-A/B/C 一發併出。細節見系統架構 + 功能狀態 + Conventions。
 - **下一個大事**：Library 上 Vercel preview 真機驗 → 觀察 1–2 週看自己會不會回頭翻；不回頭翻就停在 stable 版，不急著疊 RSS 擴源 / quiz。
 
 ---
@@ -60,8 +60,8 @@ React PWA (web/)
 | 👍👎 → DB | ✅ | delete-then-insert 防誤按；Edge Runtime（2026-04-26 從 Hono 搬出，原本 504 timeout） |
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
-| 🔖 Notion 整合 | ✅ | `api/save.ts` Edge Runtime + raw fetch；Notion 失敗 graceful（saves 仍寫，notion_page_id null，下次 retry） |
-| Library 頁面（A+B+C 合併）| 🟡 已 commit，待 preview / 真機驗證 | `/library` route：filter（搜尋 + category chip + 反應 chip）、日期分組 sticky、展開顯示 4 段 LLM、saves tab + Notion sync stats、移除收藏（`/api/unsave` Edge）。本地 typecheck/build 過，scroll bug 已修 |
+| 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful（規則見 Conventions Pipeline/DB） |
+| Library 頁面 | 🟡 已 commit，待 preview / 真機驗證 | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。本地 build 過 |
 | Quiz 生成 | ⏳ 未做 | `quizzes` table 已建 schema |
 | 晨間 Recall Quiz | ⏳ 未做 | 需先有 quiz 資料 |
 | Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
@@ -73,7 +73,7 @@ React PWA (web/)
 
 > 重排理由：覆盤後發現 quiz 是高風險賭注，Library 是已表達需求。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
 
-1. **Library ship 驗證**（已 commit，待 preview / 真機）— push 到 Vercel preview，真機跑一遍：list 渲染、scroll、filter、展開 LLM 四段、🔖 收藏 / 移除收藏（`/api/unsave` 本地 404 屬預期，要 preview 才測得到）、AskSheet 觸發、進出 `/library` 路由。觀察 1–2 週看自己會不會真的回去翻；**沒回去翻就停在這版**，不疊新功能。產品定位見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)，設計 review 見 [docs/LIBRARY_DESIGN_REVIEW_v1.md](./docs/LIBRARY_DESIGN_REVIEW_v1.md)。
+1. **Library ship 驗證**（已 commit，待 preview / 真機）— push Vercel preview 真機跑一遍（`/library` 路由、filter、展開 LLM、🔖 / 移除收藏、AskSheet）。`/api/unsave` 本地 404 屬預期。**退場條件**：上線後 1–2 週若自己沒回頭翻過，內容品質一輪 / Quiz 都不做，停在「每日推播 + Library」stable 版。產品定位見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)，設計 review 見 [docs/LIBRARY_DESIGN_REVIEW_v1.md](./docs/LIBRARY_DESIGN_REVIEW_v1.md)。
 2. **內容品質一輪**（Library 之後 — Library 越多源越值錢）：
    - 2a. **RSS 源擴充**：新增 Anthropic news / OpenAI blog / Cloudflare blog / AWS ML blog。RSS URL 上線前要 `curl` 驗證仍有效（Anthropic / OpenAI 換過很多次）
    - 2b. **觀察一週 keyword weight**：官方 blog 進來後是否被 PREFILTER 漏放或誤殺，視情況微調 `KEYWORD_WEIGHTS`
@@ -83,21 +83,17 @@ React PWA (web/)
 4. **Notion 策略回看** — 不急著做 backfill / conversations 寫回 / 筆記 UI。先觀察 Library 是否已解決「歷史找回」需求；若 Notion 仍有價值，優先改成明確的 curated export，而不是擴大自動同步。
 5. **Classifier 偏好 v2**（feedback 累積一兩個月後評估再動，**不要提早優化**）。
 
-## 觀察期 / 退場條件
-
-- **Notion 整合**（2026-04-25 ship）：到 2026-05-26 回看，如果 30 天內沒回 Notion 翻過 Sift Saves database 一次，重新評估是否該砍。
-- **Library**（2026-04-26 code 完成，待 push preview）：上線後觀察 1-2 週，如果自己沒回頭翻過任何一次，**內容品質一輪不做、Quiz 不做**，停在「每日推播 + Library」這個 stable 版本。
-
 ---
 
-## 待確認（真機 / 部署）
+## 待確認 / 觀察中
 
 - [x] `/api/feed?date=...` 在 Vercel 上正常回傳
 - [x] `/api/push-subscribe` 寫入 `push_subscriptions` table（Edge Runtime，已驗證 2026-04-25）
 - [x] GitHub Actions secrets 已設 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` + `VAPID_*`
 - [ ] 連續 3 天 07:30 自動觸發都能成功收到 Web Push（觀察一週）
-- [ ] Library 在 Vercel preview 真機跑一遍：`/library` 路由、filter、展開 LLM 四段、🔖 收藏 + 移除收藏（preview 才測得到 unsave）、AskSheet 觸發
-- [ ] Library `/api/library` GET 在 Vercel 正常回傳（含 feedback / saved / notionSynced 三欄）
+- [ ] Library 在 Vercel preview 真機跑一遍（`/library` 路由、filter、展開 LLM、🔖 / 移除收藏、AskSheet）
+- [ ] Library `/api/library` GET 在 Vercel 正常回傳（feedback / saved / notionSynced 三欄）
+- [ ] **Notion 30 天回看**（到 2026-05-26）：30 天內若沒回 Notion 翻過 Sift Saves 一次，重新評估是否該砍
 
 ---
 
@@ -229,7 +225,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/save` → `api/save.ts`（查 article、Notion 建 page、upsert saves）
 - `/api/unsave` → `api/unsave.ts`（刪 in-app saves row；不刪 Notion page）
 - `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
-- **背景**：Hono 的 body parser 在 `hono/vercel` Node.js adapter 上會 hang —— `c.req.json()` / `c.req.text()` 對某些 POST 永遠不 resolve，function 撐到 300s timeout 才回 504。GET 沒事，不是 DB / libSQL / drizzle / VAPID 的問題（全試過了）。**feedback 一開始留在 Hono，2026-04-26 也觀察到 504**（連續 3 次 timeout，body 大小不是 trigger），所以全搬完了。改用 Edge Runtime 的原生 `Request.json()` 就 OK。
+- **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。
 - **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/feed` + `/api/library` GET）。
 - `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
@@ -272,7 +268,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 
 ---
 
-## [ADDED CONTENT] Mentor Engineering Workflow
+## Mentor Engineering Workflow
 
 This section extends the project rules above. If there is tension, keep the
 original project-specific rule and use this workflow as clarification.
@@ -320,9 +316,3 @@ Act as a mentor, not only a code generator:
 - No broad rewrites when a narrow change preserves existing behavior.
 - No new unbounded loops, unbounded concurrency, or provider calls without explicit caps.
 - No new POST endpoint that reads a body in Hono; keep the existing Edge Runtime rule.
-
-### Go-Specific Note
-
-This is currently a TypeScript project, so Go rules do not apply. If Go is later
-introduced, require `context.Context` for request-scoped work, avoid unbounded
-goroutines, prefer worker pools for parallel jobs, and make cancellation paths explicit.
