@@ -91,8 +91,8 @@ React PWA (web/)
 - [x] `/api/push-subscribe` 寫入 `push_subscriptions` table（Edge Runtime，已驗證 2026-04-25）
 - [x] GitHub Actions secrets 已設 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` + `VAPID_*`
 - [ ] 連續 3 天 07:30 自動觸發都能成功收到 Web Push（觀察一週）
-- [ ] Library 在 Vercel preview 真機跑一遍（`/library` 路由、filter、展開 LLM、🔖 / 移除收藏、AskSheet）
-- [ ] Library `/api/library` GET 在 Vercel 正常回傳（feedback / saved / notionSynced 三欄）
+- [x] Library 在 Vercel preview 真機跑一遍（2026-04-27 — `/library` 路由、filter、展開 LLM、🔖 / 移除收藏、AskSheet 改 full-screen，「原文」改 link 樣式）
+- [x] Library `/api/library` GET 在 Vercel 正常回傳（feedback / saved / notionSynced 三欄）
 - [ ] **Notion 30 天回看**（到 2026-05-26）：30 天內若沒回 Notion 翻過 Sift Saves 一次，重新評估是否該砍
 
 ---

@@ -62,7 +62,7 @@ Every non-OMIT article must have all four content fields filled. Do not leave th
 
 - **summary**：One concrete sentence stating what happened — the announcement, release, change, or event itself. No background, no interpretation.
 - **context**：One to five sentences of background. What existed before, what changed, what the broader shift is. Make it informative, not padding.
-- **engineeringImpact**：One concrete sentence on what engineers need to do differently, or what specifically changes in systems, APIs, latency, cost, or tooling. If engineering impact is genuinely low, say so directly.
+- **engineeringImpact**：One concrete declarative sentence on what specifically changes — what engineers need to do differently, or what shifts in APIs, latency, cost, or tooling. Write as a direct statement. Do NOT open with conditional framings like "若你正在 X，本文提供 Y" or "對於正在 X 的工程師，本文..." — that describes the article instead of stating the impact. Do NOT tail with hedge phrases like "需自行驗證...", "需搭配實際測試", "缺乏 X，需 Y" — these add no engineering signal. If impact is genuinely low, write directly: 工程直接價值低.
 - **reason**：One sentence. Why read now vs. later. What specific decision this informs. Be direct.
 
 Write at a depth suitable for a senior engineer who has 30 seconds. Each field adds information the previous one did not. Do not collapse fields together.
@@ -173,7 +173,12 @@ Return JSON only (no markdown fence):
 
 Forbidden style:
 Do not produce: 值得關注, 有潛在影響, 對業界有啟發, 有助於了解趨勢, 對未來發展有幫助
-Unless followed by a specific engineering consequence.`;
+Unless followed by a specific engineering consequence.
+
+Do not produce conditional / hedge engineeringImpact:
+- Conditional opener: "若你正在...，本文提供...", "對於正在...的工程師，本文..."
+- Hedge tail: "需自行驗證...", "需搭配實際測試", "缺乏 X，需 Y"
+State the engineering impact directly. If genuinely none, write 工程直接價值低.`;
 
 function buildBriefUserPrompt(articles: ClassifiedArticle[], date: string): string {
   const payload = articles.map((a) => ({
