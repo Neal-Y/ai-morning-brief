@@ -17,6 +17,7 @@ interface AskSheetProps {
   article: Article
   visible: boolean
   onClose: () => void
+  fullScreen?: boolean
 }
 
 const SUGGESTIONS = [
@@ -25,7 +26,7 @@ const SUGGESTIONS = [
   '對我的 backend 架構影響最大的點是？',
 ]
 
-export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
+export function AskSheet({ theme, article, visible, onClose, fullScreen = false }: AskSheetProps) {
   const [mounted, setMounted] = useState(false)
   const [entered, setEntered] = useState(false)
   const [messages, setMessages] = useState<Message[]>([
@@ -221,23 +222,28 @@ export function AskSheet({ theme, article, visible, onClose }: AskSheetProps) {
     <div style={{
       position: 'absolute',
       left: 0, right: 0, bottom: 0,
-      height: '82%',
+      height: fullScreen ? '100dvh' : '82%',
       background: theme.card,
-      borderTopLeftRadius: 16, borderTopRightRadius: 16,
-      borderTop: `2px solid ${theme.ink}`,
+      borderTopLeftRadius: fullScreen ? 0 : 16,
+      borderTopRightRadius: fullScreen ? 0 : 16,
+      borderTop: fullScreen ? 'none' : `2px solid ${theme.ink}`,
       overflow: 'hidden',
       transform: entered ? 'translateY(0)' : 'translateY(100%)',
       transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
       zIndex: 30,
       display: 'flex', flexDirection: 'column',
-      boxShadow: entered ? '0 -12px 40px rgba(26,22,18,0.18)' : 'none',
+      boxShadow: !fullScreen && entered ? '0 -12px 40px rgba(26,22,18,0.18)' : 'none',
     }}>
-      <div style={{ padding: '8px 0 2px', display: 'flex', justifyContent: 'center' }}>
-        <div style={{ width: 32, height: 3, background: theme.ruleSoft }} />
-      </div>
+      {!fullScreen && (
+        <div style={{ padding: '8px 0 2px', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: 32, height: 3, background: theme.ruleSoft }} />
+        </div>
+      )}
 
       <div style={{
-        padding: '8px 20px 12px',
+        padding: fullScreen
+          ? 'calc(env(safe-area-inset-top, 0px) + 12px) 20px 12px'
+          : '8px 20px 12px',
         borderBottom: `1px solid ${theme.ruleSoft}`,
         display: 'flex', alignItems: 'center', gap: 10,
       }}>

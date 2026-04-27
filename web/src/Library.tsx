@@ -966,15 +966,23 @@ export default function Library() {
         <div style={{ height: 'env(safe-area-inset-bottom, 16px)' }} />
 
         {askArticle && (
-          <>
-            {askVisible && (
-              <div
-                onClick={closeAsk}
-                style={{ position: 'fixed', inset: 0, background: 'rgba(26,22,18,0.35)', zIndex: 25 }}
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 30,
+            display: 'flex', justifyContent: 'center',
+            pointerEvents: 'auto',
+          }}>
+            <div style={{
+              position: 'relative', width: '100%', maxWidth: 720, height: '100%',
+            }}>
+              <AskSheet
+                theme={T}
+                article={askArticle}
+                visible={askVisible}
+                onClose={closeAsk}
+                fullScreen
               />
-            )}
-            <AskSheet theme={T} article={askArticle} visible={askVisible} onClose={closeAsk} />
-          </>
+            </div>
+          </div>
         )}
       </div>
     </>
