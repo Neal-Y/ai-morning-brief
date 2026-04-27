@@ -1,5 +1,21 @@
 export const config = { runtime: 'edge' }
 
+interface TursoPipelineItemResult {
+  type: 'ok' | 'error'
+  error?: { message: string }
+}
+
+interface TursoPipelineResponse {
+  results: TursoPipelineItemResult[]
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 })
@@ -29,20 +45,19 @@ export default async function handler(req: Request): Promise<Response> {
     if (!res.ok) {
       const body = await res.text()
       console.error('[push-subscribe] Turso error:', res.status, body)
-      return new Response(JSON.stringify({ ok: false }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return jsonResponse({ ok: false }, 500)
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { 'Content-Type': 'application/json' },
-    })
+    const json = (await res.json()) as TursoPipelineResponse
+    for (const item of json.results) {
+      if (item.type === 'error') {
+        throw new Error(`Turso pipeline item error: ${item.error?.message ?? 'unknown'}`)
+      }
+    }
+
+    return jsonResponse({ ok: true })
   } catch (err) {
     console.error('[push-subscribe] Failed:', err)
-    return new Response(JSON.stringify({ ok: false }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })
+    return jsonResponse({ ok: false }, 500)
   }
 }
