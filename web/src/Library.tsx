@@ -601,14 +601,23 @@ function ExpandedBody({ article, onToggleSave, onAsk, variant }: {
           label="追問" icon="chat"
           onClick={(e) => { e.stopPropagation(); onAsk(article) }}
         />
-        <ActionButton
-          label="原文" icon="externalLink"
-          tone="muted"
+        <button
           onClick={(e) => {
             e.stopPropagation()
             window.open(article.url, '_blank', 'noopener,noreferrer')
           }}
-        />
+          style={{
+            display: 'flex', alignItems: 'center', gap: 5,
+            fontFamily: T.mono, fontSize: 10, fontWeight: 600,
+            letterSpacing: 0.5, textTransform: 'uppercase',
+            padding: '7px 4px', cursor: 'pointer',
+            background: 'transparent', color: T.inkMuted,
+            border: 'none',
+          }}
+        >
+          <Icon name="externalLink" size={11} color={T.inkMuted} strokeWidth={2} />
+          原文
+        </button>
       </div>
     </div>
   )
@@ -619,7 +628,7 @@ function ActionButton({ label, icon, filled, active, tone, onClick }: {
   icon: IconName
   filled?: boolean
   active?: boolean
-  tone?: 'muted' | 'negative'
+  tone?: 'negative'
   onClick: (e: React.MouseEvent) => void
 }) {
   let color = T.ink
@@ -629,9 +638,6 @@ function ActionButton({ label, icon, filled, active, tone, onClick }: {
     color = '#fff'
     background = T.accent
     borderColor = T.accent
-  } else if (tone === 'muted') {
-    color = T.inkFaint
-    borderColor = 'rgba(242,237,228,0.15)'
   } else if (tone === 'negative') {
     color = T.negative
     borderColor = T.negative
