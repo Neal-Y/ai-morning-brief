@@ -138,14 +138,20 @@ export default function App() {
 
   const toggleSave = async () => {
     if (!curArticle) return
-    const next = !saved[curArticle.id]
-    setSaved(s => ({ ...s, [curArticle.id]: next }))
-    if (next) {
-      await fetch('/api/save', {
+    const articleId = curArticle.id
+    const prev = saved[articleId] ?? false
+    const next = !prev
+    setSaved(s => ({ ...s, [articleId]: next }))
+    try {
+      const res = await fetch(next ? '/api/save' : '/api/unsave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleId: curArticle.id }),
-      }).catch(() => {})
+        body: JSON.stringify({ articleId }),
+      })
+      const data = await res.json().catch(() => ({})) as { ok?: boolean }
+      if (!res.ok || !data.ok) throw new Error(`save toggle failed (${res.status})`)
+    } catch {
+      setSaved(s => ({ ...s, [articleId]: prev }))
     }
   }
 
