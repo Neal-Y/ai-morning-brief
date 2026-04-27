@@ -668,6 +668,7 @@ export default function Library() {
   const [error, setError] = useState<string | null>(null)
   const [askArticle, setAskArticle] = useState<Article | null>(null)
   const [askVisible, setAskVisible] = useState(false)
+  const askUnmountTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -736,14 +737,25 @@ export default function Library() {
     }
   }
 
+  function clearAskUnmountTimer() {
+    if (askUnmountTimerRef.current === null) return
+    clearTimeout(askUnmountTimerRef.current)
+    askUnmountTimerRef.current = null
+  }
+
   function openAsk(article: UiArticle) {
+    clearAskUnmountTimer()
     setAskArticle(article.asArticle)
     setAskVisible(true)
   }
   function closeAsk() {
+    clearAskUnmountTimer()
     setAskVisible(false)
     // delay unmounting to let the sheet animate out
-    setTimeout(() => setAskArticle(null), 300)
+    askUnmountTimerRef.current = window.setTimeout(() => {
+      askUnmountTimerRef.current = null
+      setAskArticle(null)
+    }, 300)
   }
 
   const hasAnyFilter = query.length > 0 || activeCategories.length > 0 || activeFeedback.length > 0
@@ -816,6 +828,8 @@ export default function Library() {
     document.documentElement.style.background = T.bg
     document.body.style.background = T.bg
   }, [])
+
+  useEffect(() => () => clearAskUnmountTimer(), [])
 
   return (
     <>
