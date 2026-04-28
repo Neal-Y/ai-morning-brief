@@ -265,7 +265,7 @@ Current interpretation:
 Latest change under test:
 
 - `web/src/App.tsx` now treats the footer as a fixed chrome layer again, with no negative safe-area offset and no extra bottom shelf element
-- the button row uses fixed positioning with `bottom: 12px`
+- the button row uses fixed positioning with `bottom: calc(12px - env(safe-area-inset-bottom, 0px))`; this is intentionally targeted at the physical screen bottom because real-device validation showed `bottom: 12px` still left the buttons above the standalone safe-area band
 - `ArticleCard` receives a measured bottom inset again, but applies it only when the card body is tall enough that the fixed buttons could cover content
 - this avoids the previous `Math.max(..., 96)` reserve that could create visible empty card space under short content
 
@@ -307,7 +307,8 @@ This issue consumed several rounds of experiments. Record them explicitly so the
   - status: superseded by the fixed chrome counter-offset approach
 - local working-tree experiment on 2026-04-28, current
   - restores fixed footer ownership without negative safe-area offsets
-  - positions the button row with `bottom: 12px`
+  - positions the button row with `bottom: calc(12px - env(safe-area-inset-bottom, 0px))`
+  - this supersedes the intermediate `bottom: 12px` attempt, which still left the visible empty band in the installed PWA
   - avoids the earlier failed pattern where negative safe-area offset plus compensating padding either cancelled itself out or risked clipping the controls
   - restores measured card bottom reserve via `feedbackBarHeight`, but `ArticleCard` only applies it when content would otherwise collide with the fixed footer
   - status: build passed; still needs installed iPhone PWA validation
