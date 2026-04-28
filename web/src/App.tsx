@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { THEME_DARK, ACCENT_PRESETS } from './theme.ts'
 import type { Theme } from './theme.ts'
 import { ArticleCard } from './components/Card.tsx'
@@ -51,6 +51,7 @@ export default function App() {
   const [accent] = useState<string>(
     () => localStorage.getItem('accent') ?? ACCENT_PRESETS[0]!.value
   )
+  const [feedbackBarHeight, setFeedbackBarHeight] = useState(0)
   const [permissionResolved, setPermissionResolved] = useState(() => {
     if (!isPushSupported() || !isStandalone()) return true
     return Notification.permission !== 'default'
@@ -61,6 +62,7 @@ export default function App() {
   const dragStart = useRef<{ x: number; y: number; axis: 'x' | 'y' | null } | null>(null)
   const velocity = useRef<{ vx: number; lastX: number; lastT: number }>({ vx: 0, lastX: 0, lastT: 0 })
   const flyRotRef = useRef(12)
+  const feedbackBarRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (isPushSupported() && isStandalone() && Notification.permission === 'granted') {
@@ -241,6 +243,24 @@ export default function App() {
 
   const dateLabel = formatBriefDateLong(briefDate)
   const showFeedbackBar = !!curArticle && !showAsk
+  const cardBottomInset = showFeedbackBar && feedbackBarHeight > 0 ? `${feedbackBarHeight + 24}px` : '0px'
+
+  useLayoutEffect(() => {
+    if (!showFeedbackBar || !feedbackBarRef.current) {
+      setFeedbackBarHeight(0)
+      return
+    }
+    const el = feedbackBarRef.current
+    const updateHeight = () => setFeedbackBarHeight(el.getBoundingClientRect().height)
+    updateHeight()
+    const ro = new ResizeObserver(updateHeight)
+    ro.observe(el)
+    window.addEventListener('resize', updateHeight)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', updateHeight)
+    }
+  }, [showFeedbackBar, curArticle?.id])
 
   if (loading || error || articles.length === 0 || !permissionResolved) {
     return (
@@ -410,7 +430,7 @@ export default function App() {
                   borderRadius: 2,
                   overflow: 'hidden',
                 }}>
-                  <ArticleCard article={articles[idx + 1]!} theme={T} swipeX={0} />
+                  <ArticleCard article={articles[idx + 1]!} theme={T} swipeX={0} bottomInset={cardBottomInset} />
                 </div>
               )}
 
@@ -433,7 +453,7 @@ export default function App() {
                   ? `0 ${8 + Math.abs(swipeX) * 0.1}px ${24 + Math.abs(swipeX) * 0.2}px rgba(0,0,0,0.4)`
                   : '0 2px 8px rgba(0,0,0,0.2)',
               }}>
-                <ArticleCard article={curArticle} theme={T} swipeX={swipeX} />
+                <ArticleCard article={curArticle} theme={T} swipeX={swipeX} bottomInset={cardBottomInset} />
               </div>
             </>
           ) : null}
@@ -458,25 +478,27 @@ export default function App() {
 
         {showFeedbackBar && (
           <div
+            ref={feedbackBarRef}
             style={{
-              flexShrink: 0,
-              background: T.bg,
-              paddingBottom: 4,
-              display: 'flex', justifyContent: 'center',
+              position: 'fixed',
+              left: '50%',
+              bottom: 12,
+              width: '100%',
+              maxWidth: 480,
+              transform: 'translateX(-50%)',
+              zIndex: 20,
             }}
           >
-            <div style={{ width: '100%', maxWidth: 480 }}>
-              <FeedbackBar
-                theme={T}
-                feedback={feedback[curArticle!.id]}
-                saved={saved[curArticle!.id] ?? false}
-                onLike={() => registerFeedback('up')}
-                onDislike={() => registerFeedback('down')}
-                onAsk={() => setShowAsk(true)}
-                onSave={toggleSave}
-                onOpen={() => window.open(curArticle!.url, '_blank')}
-              />
-            </div>
+            <FeedbackBar
+              theme={T}
+              feedback={feedback[curArticle!.id]}
+              saved={saved[curArticle!.id] ?? false}
+              onLike={() => registerFeedback('up')}
+              onDislike={() => registerFeedback('down')}
+              onAsk={() => setShowAsk(true)}
+              onSave={toggleSave}
+              onOpen={() => window.open(curArticle!.url, '_blank')}
+            />
           </div>
         )}
 

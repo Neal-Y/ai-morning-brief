@@ -1,6 +1,7 @@
 import type { Article } from '../types.ts'
 import type { Theme } from '../theme.ts'
 import { TAG_COLORS } from '../theme.ts'
+import { useLayoutEffect, useRef, useState } from 'react'
 
 interface CategoryTagProps {
   tag: string
@@ -29,11 +30,32 @@ interface ArticleCardProps {
   article: Article
   theme: Theme
   swipeX?: number
+  bottomInset?: string
 }
 
-export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
+export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }: ArticleCardProps) {
   const tintOpacity = Math.min(Math.abs(swipeX) / 200, 0.35)
   const tintColor = swipeX > 0 ? theme.positive : theme.negative
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const [needsBottomInset, setNeedsBottomInset] = useState(false)
+
+  useLayoutEffect(() => {
+    const el = bodyRef.current
+    if (!el) return
+    const inset = parseFloat(bottomInset) || 0
+    const update = () => {
+      setNeedsBottomInset(el.scrollHeight > el.clientHeight - inset + 1)
+    }
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    window.addEventListener('resize', update)
+    return () => {
+      ro.disconnect()
+      window.removeEventListener('resize', update)
+    }
+  }, [article.id, bottomInset])
 
   return (
     <div style={{
@@ -99,11 +121,13 @@ export function ArticleCard({ article, theme, swipeX = 0 }: ArticleCardProps) {
 
       {/* Scrollable body — Engineering Impact lives inside so extra space falls below it */}
       <div
+        ref={bodyRef}
         style={{
           flex: 1,
           minHeight: 0,
           overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
+          paddingBottom: needsBottomInset ? bottomInset : 0,
         } as React.CSSProperties}
       >
         <div style={{ padding: '18px 24px 8px' }}>

@@ -264,8 +264,10 @@ Current interpretation:
 
 Latest change under test:
 
-- `web/src/App.tsx` now removes standalone footer safe-area preservation and leaves only a minimal `4px` bottom pad so the controls can drop lower
-- this is an intentional tradeoff: it may overlap more aggressively with the home-indicator gesture area
+- `web/src/App.tsx` now treats the footer as a fixed chrome layer again, with no negative safe-area offset and no extra bottom shelf element
+- the button row uses fixed positioning with `bottom: 12px`
+- `ArticleCard` receives a measured bottom inset again, but applies it only when the card body is tall enough that the fixed buttons could cover content
+- this avoids the previous `Math.max(..., 96)` reserve that could create visible empty card space under short content
 
 ### Experiment Timeline / Pitfalls
 
@@ -299,10 +301,16 @@ This issue consumed several rounds of experiments. Record them explicitly so the
   - reduced explicit safe-area preservation and added a downward shift
   - result: some movement, but still not enough to count as fixed from the product point of view
   - lesson: partial sinking can change the background more than it changes the perceived button position
-- local working-tree experiment on 2026-04-28
+- local working-tree experiment on 2026-04-28, earlier
   - removes footer safe-area preservation almost entirely and leaves `paddingBottom: 4`
   - goal: stop merely painting the lower area and actually place the controls into it
-  - status: under device validation, not yet accepted as final
+  - status: superseded by the fixed chrome counter-offset approach
+- local working-tree experiment on 2026-04-28, current
+  - restores fixed footer ownership without negative safe-area offsets
+  - positions the button row with `bottom: 12px`
+  - avoids the earlier failed pattern where negative safe-area offset plus compensating padding either cancelled itself out or risked clipping the controls
+  - restores measured card bottom reserve via `feedbackBarHeight`, but `ArticleCard` only applies it when content would otherwise collide with the fixed footer
+  - status: build passed; still needs installed iPhone PWA validation
 
 ### Wrong Assumptions Already Debunked
 
