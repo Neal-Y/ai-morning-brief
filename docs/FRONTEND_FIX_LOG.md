@@ -270,7 +270,7 @@ Latest change under test:
 - the button row is rendered outside the inner app shell that has `overflow: hidden`
 - a non-interactive dock surface sits behind the button row with a subtle top rule, restoring the visual separation between card content and bottom chrome
 - the button row now uses absolute positioning in the extended outer app layer with `bottom: 56px`, instead of fixed positioning against the clipped dynamic viewport
-- `FeedbackBar` buttons now use a uniform 48px minimum height, slightly tighter radius, and a deep inactive fill so they read as dock controls instead of floating outline buttons
+- `FeedbackBar` buttons now use a uniform 44px minimum height, tighter radius, softer 1px border, and a deep inactive fill so they read as dock controls instead of oversized floating outline buttons
 - `ArticleCard` receives a measured bottom inset again, but applies it only when the card body is tall enough that the fixed buttons could cover content
 - this avoids the previous `Math.max(..., 96)` reserve that could create visible empty card space under short content
 
@@ -316,7 +316,7 @@ This issue consumed several rounds of experiments. Record them explicitly so the
   - moves outer app ownership from `position: fixed; inset: 0` to an absolute full-height app layer
   - adds a `pointerEvents: none` dock surface behind the footer with a subtle top border
   - positions the button row as `position: absolute; bottom: 56px` inside that extended outer layer
-  - tunes `FeedbackBar` button styling for a more dock-like control row: uniform height, smaller radius, and deep inactive fill
+  - tunes `FeedbackBar` button styling for a more dock-like control row: uniform 44px height, smaller radius, softer border, and deep inactive fill
   - `bottom: 12px` successfully entered the bottom area but sat too low on the real device; `24px` improved but still felt low; `48px` was close, and real-device tuning settled on `56px` to avoid the rounded screen corner clipping feeling
   - this supersedes fixed-position attempts, which either stopped at the top of the bottom band or clipped when moved below it
   - avoids the earlier failed pattern where negative safe-area offset plus compensating padding either cancelled itself out or risked clipping the controls
