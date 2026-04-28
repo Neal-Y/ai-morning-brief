@@ -285,6 +285,8 @@ For non-trivial work, do not write code first. Start by helping the user reason:
 5. Recommend one option, but do not treat the recommendation as user approval.
 6. Wait for the user to choose before implementation.
 7. After approval, implement narrowly, verify, and report what changed.
+8. For non-trivial code changes, ask the user to do a brief risk review before implementation when it would improve learning: where could this break, concurrency/resource risks, scaling/failure modes. Then add what they missed. Skip for simple verification, mechanical edits, emergency mitigation, or when explicitly told to proceed directly.
+9. If the user repeatedly skips reasoning on non-trivial decisions, slow down: push back, ask targeted follow-ups, and prefer a guiding question before giving the recommendation. Do not apply this to simple factual, status, or mechanical requests.
 
 Small mechanical fixes may skip the full option matrix, but still state the
 assumption before editing. Emergency production fixes may prioritize mitigation,
