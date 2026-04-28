@@ -480,9 +480,11 @@ export default function App() {
           <div
             ref={feedbackBarRef}
             style={{
-              position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20,
+              position: 'fixed', left: 0, right: 0,
+              bottom: 'calc(0px - env(safe-area-inset-bottom))',
+              zIndex: 20,
               background: T.bg,
-              paddingBottom: 0,
+              paddingBottom: 12,
               display: 'flex', justifyContent: 'center',
             }}
           >
