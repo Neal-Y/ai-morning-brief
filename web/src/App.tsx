@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { THEME_DARK, ACCENT_PRESETS } from './theme.ts'
 import type { Theme } from './theme.ts'
 import { ArticleCard } from './components/Card.tsx'
@@ -51,7 +51,6 @@ export default function App() {
   const [accent] = useState<string>(
     () => localStorage.getItem('accent') ?? ACCENT_PRESETS[0]!.value
   )
-  const [feedbackBarHeight, setFeedbackBarHeight] = useState(0)
   const [permissionResolved, setPermissionResolved] = useState(() => {
     if (!isPushSupported() || !isStandalone()) return true
     return Notification.permission !== 'default'
@@ -62,7 +61,6 @@ export default function App() {
   const dragStart = useRef<{ x: number; y: number; axis: 'x' | 'y' | null } | null>(null)
   const velocity = useRef<{ vx: number; lastX: number; lastT: number }>({ vx: 0, lastX: 0, lastT: 0 })
   const flyRotRef = useRef(12)
-  const feedbackBarRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (isPushSupported() && isStandalone() && Notification.permission === 'granted') {
@@ -243,24 +241,6 @@ export default function App() {
 
   const dateLabel = formatBriefDateLong(briefDate)
   const showFeedbackBar = !!curArticle && !showAsk
-  const cardBottomInset = showFeedbackBar ? `${feedbackBarHeight}px` : '0px'
-
-  useLayoutEffect(() => {
-    if (!showFeedbackBar || !feedbackBarRef.current) {
-      setFeedbackBarHeight(0)
-      return
-    }
-    const el = feedbackBarRef.current
-    const updateHeight = () => setFeedbackBarHeight(el.getBoundingClientRect().height)
-    updateHeight()
-    const ro = new ResizeObserver(updateHeight)
-    ro.observe(el)
-    window.addEventListener('resize', updateHeight)
-    return () => {
-      ro.disconnect()
-      window.removeEventListener('resize', updateHeight)
-    }
-  }, [showFeedbackBar, curArticle?.id])
 
   if (loading || error || articles.length === 0 || !permissionResolved) {
     return (
@@ -405,7 +385,7 @@ export default function App() {
         )}
 
         <div
-          style={{ flex: 1, overflow: 'hidden', position: 'relative', touchAction: 'pan-y', perspective: '1200px' }}
+          style={{ flex: 1, minHeight: 0, overflow: 'hidden', position: 'relative', touchAction: 'pan-y', perspective: '1200px' }}
           onMouseDown={onPointerDown}
           onMouseMove={dragStart.current ? onPointerMove : undefined}
           onMouseUp={onPointerUp}
@@ -430,7 +410,7 @@ export default function App() {
                   borderRadius: 2,
                   overflow: 'hidden',
                 }}>
-                  <ArticleCard article={articles[idx + 1]!} theme={T} swipeX={0} bottomInset={cardBottomInset} />
+                  <ArticleCard article={articles[idx + 1]!} theme={T} swipeX={0} />
                 </div>
               )}
 
@@ -453,7 +433,7 @@ export default function App() {
                   ? `0 ${8 + Math.abs(swipeX) * 0.1}px ${24 + Math.abs(swipeX) * 0.2}px rgba(0,0,0,0.4)`
                   : '0 2px 8px rgba(0,0,0,0.2)',
               }}>
-                <ArticleCard article={curArticle} theme={T} swipeX={swipeX} bottomInset={cardBottomInset} />
+                <ArticleCard article={curArticle} theme={T} swipeX={swipeX} />
               </div>
             </>
           ) : null}
@@ -478,13 +458,10 @@ export default function App() {
 
         {showFeedbackBar && (
           <div
-            ref={feedbackBarRef}
             style={{
-              position: 'fixed', left: 0, right: 0,
-              bottom: 'calc(0px - env(safe-area-inset-bottom))',
-              zIndex: 20,
+              flexShrink: 0,
               background: T.bg,
-              paddingBottom: 'calc(env(safe-area-inset-bottom) + 4px)',
+              paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
               display: 'flex', justifyContent: 'center',
             }}
           >
