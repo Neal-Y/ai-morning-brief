@@ -479,29 +479,46 @@ export default function App() {
 
       </div>
       {showFeedbackBar && (
-        <div
-          ref={feedbackBarRef}
-          style={{
-            position: 'absolute',
-            left: '50%',
-            bottom: 56,
-            width: '100%',
-            maxWidth: 480,
-            transform: 'translateX(-50%)',
-            zIndex: 40,
-          }}
-        >
-          <FeedbackBar
-            theme={T}
-            feedback={feedback[curArticle!.id]}
-            saved={saved[curArticle!.id] ?? false}
-            onLike={() => registerFeedback('up')}
-            onDislike={() => registerFeedback('down')}
-            onAsk={() => setShowAsk(true)}
-            onSave={toggleSave}
-            onOpen={() => window.open(curArticle!.url, '_blank')}
+        <>
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              bottom: 0,
+              width: '100%',
+              maxWidth: 480,
+              height: 112,
+              transform: 'translateX(-50%)',
+              background: T.bg,
+              borderTop: `1px solid ${T.ruleSoft}`,
+              zIndex: 30,
+              pointerEvents: 'none',
+            }}
           />
-        </div>
+          <div
+            ref={feedbackBarRef}
+            style={{
+              position: 'absolute',
+              left: '50%',
+              bottom: 56,
+              width: '100%',
+              maxWidth: 480,
+              transform: 'translateX(-50%)',
+              zIndex: 40,
+            }}
+          >
+            <FeedbackBar
+              theme={T}
+              feedback={feedback[curArticle!.id]}
+              saved={saved[curArticle!.id] ?? false}
+              onLike={() => registerFeedback('up')}
+              onDislike={() => registerFeedback('down')}
+              onAsk={() => setShowAsk(true)}
+              onSave={toggleSave}
+              onOpen={() => window.open(curArticle!.url, '_blank')}
+            />
+          </div>
+        </>
       )}
     </div>
     </>
