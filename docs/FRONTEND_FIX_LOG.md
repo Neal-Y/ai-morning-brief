@@ -265,8 +265,9 @@ Current interpretation:
 Latest change under test:
 
 - `web/src/App.tsx` now treats the footer as a fixed chrome layer again, with no negative safe-area offset and no extra bottom shelf element
-- the button row is rendered outside the inner app shell that has `overflow: hidden`, so the bottom safe-area band sits behind it instead of clipping it
-- the button row uses fixed positioning with `bottom: max(0px, calc(12px - env(safe-area-inset-bottom, 0px)))`; this is the lowest tested position that keeps the controls inside the root viewport instead of clipping them
+- `web/src/index.css` extends the root height to `calc(100dvh + env(safe-area-inset-bottom, 0px))`, because real-device screenshots showed `100dvh` stopped at the top of the bottom black band
+- the button row is rendered outside the inner app shell that has `overflow: hidden`
+- the button row now uses absolute positioning in the extended outer app layer with `bottom: 12px`, instead of fixed positioning against the clipped dynamic viewport
 - `ArticleCard` receives a measured bottom inset again, but applies it only when the card body is tall enough that the fixed buttons could cover content
 - this avoids the previous `Math.max(..., 96)` reserve that could create visible empty card space under short content
 
@@ -307,9 +308,10 @@ This issue consumed several rounds of experiments. Record them explicitly so the
   - goal: stop merely painting the lower area and actually place the controls into it
   - status: superseded by the fixed chrome counter-offset approach
 - local working-tree experiment on 2026-04-28, current
-  - restores fixed footer ownership outside the inner app shell with `overflow: hidden`
-  - positions the button row with `bottom: max(0px, calc(12px - env(safe-area-inset-bottom, 0px)))`
-  - this supersedes the intermediate `bottom: 12px` attempt, which still left the visible empty band, and the full `12px - safe-area` attempts, which clipped the controls in the installed PWA even after moving the footer outside the inner shell
+  - extends `html` height to `100dvh + env(safe-area-inset-bottom)`
+  - moves outer app ownership from `position: fixed; inset: 0` to an absolute full-height app layer
+  - positions the button row as `position: absolute; bottom: 12px` inside that extended outer layer
+  - this supersedes fixed-position attempts, which either stopped at the top of the bottom band or clipped when moved below it
   - avoids the earlier failed pattern where negative safe-area offset plus compensating padding either cancelled itself out or risked clipping the controls
   - restores measured card bottom reserve via `feedbackBarHeight`, but `ArticleCard` only applies it when content would otherwise collide with the fixed footer
   - status: build passed; still needs installed iPhone PWA validation

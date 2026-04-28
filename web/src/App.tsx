@@ -379,7 +379,8 @@ export default function App() {
       />
     )}
     <div style={{
-      position: 'fixed', inset: 0,
+      position: 'absolute', top: 0, left: 0, right: 0,
+      height: '100%',
       background: atCelebration ? T.card : T.bg,
       display: 'flex',
       justifyContent: 'center',
@@ -481,9 +482,9 @@ export default function App() {
         <div
           ref={feedbackBarRef}
           style={{
-            position: 'fixed',
+            position: 'absolute',
             left: '50%',
-            bottom: 'max(0px, calc(12px - env(safe-area-inset-bottom, 0px)))',
+            bottom: 12,
             width: '100%',
             maxWidth: 480,
             transform: 'translateX(-50%)',
