@@ -483,7 +483,7 @@ export default function App() {
           style={{
             position: 'fixed',
             left: '50%',
-            bottom: 'calc(12px - env(safe-area-inset-bottom, 0px))',
+            bottom: 'max(0px, calc(12px - env(safe-area-inset-bottom, 0px)))',
             width: '100%',
             maxWidth: 480,
             transform: 'translateX(-50%)',
