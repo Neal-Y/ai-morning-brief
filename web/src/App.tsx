@@ -10,6 +10,10 @@ import { Celebration } from './components/Celebration.tsx'
 import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
 import type { Article, FeedResponse } from './types.ts'
 
+const FEEDBACK_BAR_BOTTOM = 56
+const FEEDBACK_DOCK_HEIGHT = 112
+const FEEDBACK_CONTENT_GAP = 16
+
 function parsePublishedAgo(classifiedAt: number | string | null | undefined): string {
   if (!classifiedAt) return ''
   const ts = typeof classifiedAt === 'string' ? new Date(classifiedAt).getTime() : Number(classifiedAt)
@@ -243,7 +247,9 @@ export default function App() {
 
   const dateLabel = formatBriefDateLong(briefDate)
   const showFeedbackBar = !!curArticle && !showAsk
-  const cardBottomInset = showFeedbackBar && feedbackBarHeight > 0 ? `${feedbackBarHeight + 24}px` : '0px'
+  const cardBottomInset = showFeedbackBar && feedbackBarHeight > 0
+    ? `${feedbackBarHeight + FEEDBACK_BAR_BOTTOM + FEEDBACK_CONTENT_GAP}px`
+    : '0px'
 
   useLayoutEffect(() => {
     if (!showFeedbackBar || !feedbackBarRef.current) {
@@ -487,7 +493,7 @@ export default function App() {
               bottom: 0,
               width: '100%',
               maxWidth: 480,
-              height: 112,
+              height: FEEDBACK_DOCK_HEIGHT,
               transform: 'translateX(-50%)',
               background: T.bg,
               borderTop: `1px solid ${T.ruleSoft}`,
@@ -500,7 +506,7 @@ export default function App() {
             style={{
               position: 'absolute',
               left: '50%',
-              bottom: 56,
+              bottom: FEEDBACK_BAR_BOTTOM,
               width: '100%',
               maxWidth: 480,
               transform: 'translateX(-50%)',

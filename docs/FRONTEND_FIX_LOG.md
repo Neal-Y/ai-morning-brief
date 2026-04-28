@@ -248,31 +248,31 @@ The following were already tried:
 
 ### Current Status
 
-Unresolved as of 2026-04-28.
+Resolved on 2026-04-28 from installed iPhone PWA screenshots.
 
-Earlier we incorrectly marked this resolved. New device screenshots confirmed the remaining standalone PWA issue is real:
+Earlier we incorrectly marked this resolved, then reopened it after device screenshots showed the remaining standalone PWA issue was real:
 
-- the bottom area is painted with app background
-- but the action buttons still visually float above it
-- Safari and standalone PWA still do not match in a satisfying way
+- the bottom area was painted with app background
+- but the action buttons still visually floated above it
+- Safari and standalone PWA did not match in a satisfying way
 
-Current interpretation:
+Final accepted interpretation:
 
-- we can use the bottom area visually
-- we have not yet made the buttons occupy it the way the product wants
-- this bug should stay open until the installed iPhone PWA no longer shows a conspicuous empty band under the action buttons
+- `100dvh` in iOS standalone can stop at the top of the bottom black/safe-area band
+- fixed-position footers are bounded by that clipped dynamic viewport
+- pushing fixed controls below that boundary clips them
+- the working model is to extend the root app height by the bottom safe-area inset, then place the footer as an absolute layer inside that extended root
 
-Latest change under test:
+Final implementation:
 
-- `web/src/App.tsx` now treats the footer as a fixed chrome layer again, with no negative safe-area offset and no extra bottom shelf element
-- `web/src/index.css` extends the root height to `calc(100dvh + env(safe-area-inset-bottom, 0px))`, because real-device screenshots showed `100dvh` stopped at the top of the bottom black band
-- `#root` is now positioned relative, so the absolute app shell uses the extended root as its containing block instead of falling back to the initial viewport
-- the button row is rendered outside the inner app shell that has `overflow: hidden`
-- a non-interactive dock surface sits behind the button row with a subtle top rule, restoring the visual separation between card content and bottom chrome
-- the button row now uses absolute positioning in the extended outer app layer with `bottom: 56px`, instead of fixed positioning against the clipped dynamic viewport
-- `FeedbackBar` buttons now use a uniform 44px minimum height, tighter radius, softer 1px border at 0.7 opacity, and a deep inactive fill so they read as dock controls instead of oversized floating outline buttons
-- `ArticleCard` receives a measured bottom inset again, but applies it only when the card body is tall enough that the fixed buttons could cover content
-- this avoids the previous `Math.max(..., 96)` reserve that could create visible empty card space under short content
+- `web/src/index.css` extends root height to `calc(100dvh + env(safe-area-inset-bottom, 0px))`
+- `#root` is positioned relative, so the absolute app shell uses the extended root as its containing block
+- `web/src/App.tsx` uses an absolute full-height outer app layer instead of `position: fixed; inset: 0`
+- the button row renders outside the inner app shell that has `overflow: hidden`
+- a non-interactive dock surface sits behind the button row with a subtle top rule, restoring separation between card content and bottom chrome
+- the button row uses absolute positioning in the extended outer app layer with `FEEDBACK_BAR_BOTTOM = 56`
+- `FeedbackBar` buttons use a uniform 44px minimum height, tighter radius, softer 1px border at 0.7 opacity, and a deep inactive fill so they read as dock controls instead of oversized floating outline buttons
+- `ArticleCard` receives a measured bottom inset only when the card body is tall enough that footer controls could cover content; short content does not get artificial bottom padding
 
 ### Experiment Timeline / Pitfalls
 
@@ -309,19 +309,19 @@ This issue consumed several rounds of experiments. Record them explicitly so the
 - local working-tree experiment on 2026-04-28, earlier
   - removes footer safe-area preservation almost entirely and leaves `paddingBottom: 4`
   - goal: stop merely painting the lower area and actually place the controls into it
-  - status: superseded by the fixed chrome counter-offset approach
+  - status: superseded by the extended-root dock approach
 - local working-tree experiment on 2026-04-28, current
   - extends `html` height to `100dvh + env(safe-area-inset-bottom)`
   - sets `#root { position: relative; }` so absolute app positioning is anchored to the extended root
   - moves outer app ownership from `position: fixed; inset: 0` to an absolute full-height app layer
   - adds a `pointerEvents: none` dock surface behind the footer with a subtle top border
-  - positions the button row as `position: absolute; bottom: 56px` inside that extended outer layer
+  - positions the button row as `position: absolute; bottom: FEEDBACK_BAR_BOTTOM` inside that extended outer layer (`56px` after real-device tuning)
   - tunes `FeedbackBar` button styling for a more dock-like control row: uniform 44px height, smaller radius, softer 0.7-opacity border, and deep inactive fill
   - `bottom: 12px` successfully entered the bottom area but sat too low on the real device; `24px` improved but still felt low; `48px` was close, and real-device tuning settled on `56px` to avoid the rounded screen corner clipping feeling
   - this supersedes fixed-position attempts, which either stopped at the top of the bottom band or clipped when moved below it
   - avoids the earlier failed pattern where negative safe-area offset plus compensating padding either cancelled itself out or risked clipping the controls
-  - restores measured card bottom reserve via `feedbackBarHeight`, but `ArticleCard` only applies it when content would otherwise collide with the fixed footer
-  - status: build passed; still needs installed iPhone PWA validation
+  - restores measured card bottom reserve via `feedbackBarHeight`, but `ArticleCard` only applies it when content would otherwise collide with the footer
+  - status: accepted from installed iPhone PWA screenshots; build passed
 
 ### Wrong Assumptions Already Debunked
 
