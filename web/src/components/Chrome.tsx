@@ -104,11 +104,12 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
       className="btn-press"
       onClick={onClick}
       style={{
-        background: active ? (variant === 'like' ? theme.positive : theme.negative) : 'transparent',
+        background: active ? (variant === 'like' ? theme.positive : theme.negative) : theme.bgDeep,
         color: active ? theme.card : theme.ink,
         border: `1.5px solid ${theme.ink}`,
-        borderRadius: 8,
-        padding: '8px 0',
+        borderRadius: 6,
+        minHeight: 48,
+        padding: '0 2px',
         flex: 1,
         fontFamily: theme.mono, fontSize: 12, fontWeight: 700,
         letterSpacing: 0.5,
@@ -129,11 +130,12 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
       className="btn-press"
       onClick={onClick}
       style={{
-        background: active ? theme.ink : 'transparent',
+        background: active ? theme.ink : theme.bgDeep,
         color: active ? theme.card : theme.ink,
         border: `1.5px solid ${theme.ink}`,
-        borderRadius: 8,
-        padding: '6px 0',
+        borderRadius: 6,
+        minHeight: 48,
+        padding: '0 2px',
         flex: 1,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
         transition: 'all 0.15s',
@@ -147,8 +149,9 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
 
   return (
     <div style={{
-      padding: '4px 16px 0',
-      display: 'flex', gap: 5,
+      padding: '0 16px',
+      display: 'flex', gap: 7,
+      alignItems: 'stretch',
       flexShrink: 0,
     }}>
       {primaryBtn(onDislike, (
