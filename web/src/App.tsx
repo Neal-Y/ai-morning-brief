@@ -461,21 +461,21 @@ export default function App() {
             style={{
               flexShrink: 0,
               background: T.bg,
-              paddingBottom: 'calc(env(safe-area-inset-bottom) + 8px)',
+              paddingBottom: 'env(safe-area-inset-bottom)',
               display: 'flex', justifyContent: 'center',
             }}
           >
-            <div style={{ width: '100%', maxWidth: 480 }}>
-            <FeedbackBar
-              theme={T}
-              feedback={feedback[curArticle!.id]}
-              saved={saved[curArticle!.id] ?? false}
-              onLike={() => registerFeedback('up')}
-              onDislike={() => registerFeedback('down')}
-              onAsk={() => setShowAsk(true)}
-              onSave={toggleSave}
-              onOpen={() => window.open(curArticle!.url, '_blank')}
-            />
+            <div style={{ width: '100%', maxWidth: 480, transform: 'translateY(12px)' }}>
+              <FeedbackBar
+                theme={T}
+                feedback={feedback[curArticle!.id]}
+                saved={saved[curArticle!.id] ?? false}
+                onLike={() => registerFeedback('up')}
+                onDislike={() => registerFeedback('down')}
+                onAsk={() => setShowAsk(true)}
+                onSave={toggleSave}
+                onOpen={() => window.open(curArticle!.url, '_blank')}
+              />
             </div>
           </div>
         )}
