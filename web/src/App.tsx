@@ -482,7 +482,6 @@ export default function App() {
             style={{
               position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 20,
               background: T.bg,
-              borderTop: `1.5px solid ${T.ink}`,
               paddingBottom: 8,
               display: 'flex', justifyContent: 'center',
             }}
