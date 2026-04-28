@@ -1,5 +1,7 @@
 # Library 設計 v1 Review
 
+> **Status (2026-04-28)**：Library 已 ship（2026-04-26）。本文件為設計 review 當下紀錄，現況以 [CLAUDE.md](../CLAUDE.md) TL;DR + `web/src/Library.tsx` 為準。
+>
 > 對 claude-design 第一版 Library 頁面 mockup 的檢視紀錄 + 給設計師的回饋 prompt。
 >
 > **Date:** 2026-04-26

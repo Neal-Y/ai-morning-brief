@@ -1,5 +1,7 @@
 # Handoff — Web Push / ntfy Removal
 
+> **Status (2026-04-28)**：本文件為 2026-04-25 ntfy 拔除 / Web Push 切換當下的交接快照。後續產品方向（Library ship、quiz 降級等）以 [CLAUDE.md](../CLAUDE.md) TL;DR 為準，本文不再更新。
+
 Date: 2026-04-25
 
 ## Current State

@@ -1,5 +1,7 @@
 # Library 頁面設計提案
 
+> **Status (2026-04-28)**：已 ship（2026-04-26）。本文件為 ship 前的設計提案紀錄，現況以 [CLAUDE.md](../CLAUDE.md) TL;DR + `web/src/Library.tsx` 為準。
+>
 > 給設計用的 self-contained brief。讀完這份文件就能開始畫畫面，不需要再回去翻 codebase。
 >
 > 上下文背景：[PRODUCT_REVIEW_2026-04-26.md](./PRODUCT_REVIEW_2026-04-26.md) §「真正的第三格答案」。

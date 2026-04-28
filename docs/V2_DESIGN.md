@@ -89,7 +89,7 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
 - 內容:本週讀了 N 篇、最常出現的技術、哪些 tag 你點最多、tag 共現矩陣
 - 自動寫入 Notion 週報頁,累積成長軌跡
 
-### F8 — Library / 歷史頁（2026-04-26 新增，**現為下一優先項目**）
+### F8 — Library / 歷史頁（2026-04-26 新增，**已 ship 2026-04-26，觀察期至約 2026-05-11**）
 - 解決使用者親口說的痛點：「滑過沒收藏的找不回 + LLM 內容隔天就丟」
 - `/library` route，按日期 group 顯示所有歷史文章
 - 每筆 row 點擊展開全部 LLM 生的內容（summary / context / engineeringImpact / reason）+ 補做 reaction（👍👎🔖）
@@ -258,9 +258,9 @@ quizzes = {
 - 產出：[PRODUCT_REVIEW_2026-04-26.md](./PRODUCT_REVIEW_2026-04-26.md)（覆盤紀錄 + 工作原則）+ [LIBRARY_PROPOSAL.md](./LIBRARY_PROPOSAL.md)（設計提案）
 
 ### Week 4 — Library Layer（取代原 Retention Engine 計畫）
-- [ ] **F8 Library PR-A**（純讀）：`/library` 頁面 + 按日期分組列表 + 點擊展開全部 LLM 內容。先沒搜尋／filter
-- [ ] 觀察期：1-2 週看自己有沒有真的回去翻
-- [ ] 若 PR-A 證明有用 → PR-B（filter + 搜尋） → PR-C（補做 reaction）
+- [x] **F8 Library PR-A/B/C**（一次併出，2026-04-26 ship）：`/library` 頁面 + 日期分組 + 點擊展開全部 LLM 內容 + filter + saves tab + AskSheet 重用 + save/unsave
+- [x] 2026-04-27 Vercel preview 真機驗證
+- [ ] 觀察期進行中（至約 2026-05-11）：看自己有沒有真的回去翻；不回頭就停在 stable
 - **Demo goal**: 能找到「我昨天看到一篇 X 但沒收藏」的文章，不用開 DB console
 
 ### Week 5 — 內容品質一輪（Library 之後）

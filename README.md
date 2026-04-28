@@ -8,6 +8,7 @@
 
 - **每日 pipeline**：GitHub Actions 07:30（台北）自動抓 RSS、LLM 分類、寫 Turso DB、Web Push 推播到 iPhone PWA
 - **Web PWA**：滑卡瀏覽、👍👎 回饋、💬 追問（Haiku streaming）、🔖 收藏、streak 計數
+- **Library / 歷史頁** (`/library`)：所有歷史文章 + 收藏 tab、filter、日期分組、展開 LLM 四段內容、收藏／移除收藏、AskSheet 直接從歷史卡開追問
 - **Web Push (VAPID)**：iOS standalone PWA 支援，通知標題 = lead story headline，body 第 1 行 = lead 文章的 `engineeringImpact`（讓 LLM 判斷直接上鎖屏，不只是頭條）
 - **🔖 → Notion 同步**：點收藏自動建 Notion page，Notion 失敗不阻斷收藏（下次點同篇 retry）
 - **Feedback loop**：Classifier 讀近 30 天 👍👎 回饋調整選文偏好（≥10 筆啟動）
@@ -17,7 +18,7 @@
 
 > 2026-04-26 校準後，三大支柱：
 > 1. **每日推播 + 篩選**（V1，已 ship）
-> 2. **Library / 歷史頁**（下一優先項目）— 解決「滑過沒收藏的找不回 + LLM 內容隔天就丟」
+> 2. **Library / 歷史頁**（已 ship 2026-04-26，觀察期至約 2026-05-11）— 解決「滑過沒收藏的找不回 + LLM 內容隔天就丟」
 > 3. **Retention layer**（quiz / recall）— 蓋在 Library 上的再訪機制，視 Library 證明有用再做
 >
 > 設計原則與覆盤紀錄：[docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)
