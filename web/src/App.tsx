@@ -484,7 +484,7 @@ export default function App() {
               bottom: 'calc(0px - env(safe-area-inset-bottom))',
               zIndex: 20,
               background: T.bg,
-              paddingBottom: 'calc(env(safe-area-inset-bottom) + 12px)',
+              paddingBottom: 'calc(env(safe-area-inset-bottom) + 4px)',
               display: 'flex', justifyContent: 'center',
             }}
           >
