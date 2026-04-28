@@ -983,8 +983,6 @@ export default function Library() {
           </div>
         )}
 
-        <div style={{ height: 'env(safe-area-inset-bottom, 16px)' }} />
-
         {askArticle && (
           <div style={{
             position: 'fixed', inset: 0, zIndex: 30,
