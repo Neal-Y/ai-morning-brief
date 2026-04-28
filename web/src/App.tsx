@@ -476,33 +476,32 @@ export default function App() {
           />
         )}
 
-        {showFeedbackBar && (
-          <div
-            ref={feedbackBarRef}
-            style={{
-              position: 'fixed',
-              left: '50%',
-              bottom: 'calc(12px - env(safe-area-inset-bottom, 0px))',
-              width: '100%',
-              maxWidth: 480,
-              transform: 'translateX(-50%)',
-              zIndex: 20,
-            }}
-          >
-            <FeedbackBar
-              theme={T}
-              feedback={feedback[curArticle!.id]}
-              saved={saved[curArticle!.id] ?? false}
-              onLike={() => registerFeedback('up')}
-              onDislike={() => registerFeedback('down')}
-              onAsk={() => setShowAsk(true)}
-              onSave={toggleSave}
-              onOpen={() => window.open(curArticle!.url, '_blank')}
-            />
-          </div>
-        )}
-
       </div>
+      {showFeedbackBar && (
+        <div
+          ref={feedbackBarRef}
+          style={{
+            position: 'fixed',
+            left: '50%',
+            bottom: 'calc(12px - env(safe-area-inset-bottom, 0px))',
+            width: '100%',
+            maxWidth: 480,
+            transform: 'translateX(-50%)',
+            zIndex: 40,
+          }}
+        >
+          <FeedbackBar
+            theme={T}
+            feedback={feedback[curArticle!.id]}
+            saved={saved[curArticle!.id] ?? false}
+            onLike={() => registerFeedback('up')}
+            onDislike={() => registerFeedback('down')}
+            onAsk={() => setShowAsk(true)}
+            onSave={toggleSave}
+            onOpen={() => window.open(curArticle!.url, '_blank')}
+          />
+        </div>
+      )}
     </div>
     </>
   )
