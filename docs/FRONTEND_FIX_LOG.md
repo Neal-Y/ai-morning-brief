@@ -1,6 +1,6 @@
 # Frontend Fix Log
 
-Last updated: 2026-04-23 (evening)
+Last updated: 2026-04-28
 
 Purpose: give the next session a concrete handoff for the mobile/web issues already fixed, why they happened, and what still needs verification on a real phone.
 
@@ -215,11 +215,17 @@ Important distinction:
 
 Still not fully confirmed.
 
+What is confirmed now:
+
+- the bottom area is not a fake Safari gray strip; the app can paint into it
+- the remaining visual problem is specifically that the action buttons still sit too high inside the standalone PWA
+- this is not the earlier card-content spacing bug
+
 Current best hypothesis:
 
-- iOS standalone PWA is reporting / applying bottom viewport and safe-area behavior differently from in-browser Safari
-- the remaining gap is likely related to home-indicator safe area or standalone viewport composition
-- it is not fixed by simple root height changes alone
+- iOS standalone PWA bottom safe-area behavior is still constraining the footer layout in a way that differs from Safari-in-browser
+- some earlier fixes only changed the footer background, not the actual button position
+- `FeedbackBar` visual spacing and standalone safe-area behavior are interacting, so changing only one layer has not been enough
 
 ### Risk / User Impact
 
@@ -235,23 +241,119 @@ The following were already tried:
 - rolling the root app shell back to CSS `100dvh`
 - switching the app shell to `position: fixed; inset: 0`
 - tightening bottom safe-area padding for `FeedbackBar` and `AskSheet`
+- pushing a fixed footer downward with negative `bottom` offsets
+- extending the outer app wrapper past the bottom safe area
+- converting `FeedbackBar` from an overlay `position: fixed` footer into a normal in-flow layout footer
+- painting the bottom safe area while separately trying to sink the button row deeper into it
 
 ### Current Status
 
-Resolved as of 2026-04-23.
+Unresolved as of 2026-04-28.
 
-Screenshots from the user (Safari vs standalone side-by-side) confirmed FeedbackBar now sits at the true screen bottom in both modes. The gap that remained visible in standalone was actually the card-content gap (Issue 10 below), not an app-shell/footer bug. `position: fixed; inset: 0` was the correct root fix; safe-area padding on FeedbackBar and TopChrome covered the rest.
+Earlier we incorrectly marked this resolved. New device screenshots confirmed the remaining standalone PWA issue is real:
+
+- the bottom area is painted with app background
+- but the action buttons still visually float above it
+- Safari and standalone PWA still do not match in a satisfying way
+
+Current interpretation:
+
+- we can use the bottom area visually
+- we have not yet made the buttons occupy it the way the product wants
+- this bug should stay open until the installed iPhone PWA no longer shows a conspicuous empty band under the action buttons
+
+Latest change under test:
+
+- `web/src/App.tsx` now removes standalone footer safe-area preservation and leaves only a minimal `4px` bottom pad so the controls can drop lower
+- this is an intentional tradeoff: it may overlap more aggressively with the home-indicator gesture area
+
+### Experiment Timeline / Pitfalls
+
+This issue consumed several rounds of experiments. Record them explicitly so the next session does not repeat the same path.
+
+- `057cacd update borderTop`
+  - visual polish only
+  - removed some "separate floating panel" feeling from the footer
+  - did **not** solve the standalone PWA bottom-gap problem
+- `8cf55d4 test app bottom`
+  - outer app wrapper was extended past the bottom safe area
+  - useful as a diagnostic only
+  - result: changing the outer shell alone did not make the action buttons occupy the bottom space
+- `6d4583b test: negative bottom offset to push feedback bar past safe-area`
+  - tried the aggressive fixed-footer approach: negative `bottom` on the footer
+  - result: iOS did let the footer move, but the buttons could be pushed partly off-screen
+  - lesson: negative offset is real, but unsafe without compensating layout
+- `1dd8a98 test: pad bar bottom by safe-area + 12 to keep buttons on screen`
+  - compensated the negative offset with extra bottom padding
+  - result: the UI visually snapped back close to baseline
+  - lesson: this mostly repainted or rebalanced the footer instead of achieving the desired "buttons live lower" effect
+- `8481551 fix: remove app wrapper safe-area offset`
+  - removed an experimental outer-wrapper safe-area offset that had too much blast radius
+  - lesson: changing the app shell coordinate system without changing footer ownership is noisy and hard to reason about
+- `0da29a0 refactor: move app feedback bar into layout flow`
+  - major refactor: `FeedbackBar` stopped being `position: fixed` and became a normal in-flow footer
+  - removed the `feedbackBarHeight` / `ResizeObserver` / `bottomInset` plumbing that only existed to support an overlay footer
+  - result: cleaner layout model, but the installed PWA still showed the buttons visually too high
+  - lesson: the issue is not only "fixed vs in-flow"; the footer's own spacing still matters
+- `36a8451 tweak: sink app feedback bar deeper into safe area`
+  - reduced explicit safe-area preservation and added a downward shift
+  - result: some movement, but still not enough to count as fixed from the product point of view
+  - lesson: partial sinking can change the background more than it changes the perceived button position
+- local working-tree experiment on 2026-04-28
+  - removes footer safe-area preservation almost entirely and leaves `paddingBottom: 4`
+  - goal: stop merely painting the lower area and actually place the controls into it
+  - status: under device validation, not yet accepted as final
+
+### Wrong Assumptions Already Debunked
+
+- "This is just the old card-content gap again."
+  - false. The card-content gap and the bottom action-bar float are separate issues.
+- "If the bottom area is painted, the controls are already using it."
+  - false. We proved the app can paint that area while the buttons still sit visibly above it.
+- "Changing only `paddingBottom` on a fixed footer should be enough."
+  - false. Several rounds showed footer padding alone mostly changes the background relationship, not the product-perceived button position.
+- "Changing only the outer app wrapper should drag the footer with it."
+  - false in any useful sense. The footer behavior has to be reasoned about directly.
+- "This was resolved on 2026-04-23."
+  - false. That resolution was based on an incorrect read of screenshots and must not be trusted.
+
+### Related Refactors
+
+These changes were part of the investigation and should be remembered, even if the visual bug remains open:
+
+- footer ownership moved from overlay/fixed to in-flow layout in `web/src/App.tsx`
+- the old card/footer coupling was simplified by removing:
+  - `feedbackBarHeight`
+  - `feedbackBarRef`
+  - `ResizeObserver` used only for footer overlay spacing
+  - `bottomInset` passed into `ArticleCard`
+- `web/src/components/Card.tsx` is therefore cleaner now, even though the visual PWA footer bug is still unresolved
+
+### Next Session Guardrails
+
+Before trying new code, keep these constraints in mind:
+
+- judge success only from the installed iPhone PWA launched from the home screen
+- Safari-in-browser is useful as a comparison reference, but not the acceptance target
+- do not mark this fixed just because the bottom area is painted
+- acceptance condition is stricter:
+  - the action buttons must no longer read as floating above a conspicuous empty band
+  - the installed PWA should look materially closer to a native bottom bar
+- if a change only alters background color or shell height while the perceived button position stays the same, count it as a non-fix
 
 ### Changed Files
 
 - `web/src/App.tsx`
 - `web/src/components/Chrome.tsx`
 - `web/src/components/AskSheet.tsx`
+- `web/src/components/Card.tsx`
+- `docs/FRONTEND_FIX_LOG.md`
 
 ### Validation
 
-- Safari vs standalone screenshots confirmed FeedbackBar at screen bottom
-- build validation passed
+- multiple Safari vs standalone screenshots reproduced the issue after earlier "resolved" assumptions
+- current status is based on real installed iPhone PWA screenshots from 2026-04-28
+- `cd web && npm run build` passed after each footer experiment
 
 ## Issue 7: Header date should match the brief date, not device-local "now"
 

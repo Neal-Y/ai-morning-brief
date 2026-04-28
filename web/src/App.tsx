@@ -461,11 +461,11 @@ export default function App() {
             style={{
               flexShrink: 0,
               background: T.bg,
-              paddingBottom: 'env(safe-area-inset-bottom)',
+              paddingBottom: 4,
               display: 'flex', justifyContent: 'center',
             }}
           >
-            <div style={{ width: '100%', maxWidth: 480, transform: 'translateY(12px)' }}>
+            <div style={{ width: '100%', maxWidth: 480 }}>
               <FeedbackBar
                 theme={T}
                 feedback={feedback[curArticle!.id]}
