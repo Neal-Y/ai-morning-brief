@@ -268,7 +268,7 @@ Latest change under test:
 - `web/src/index.css` extends the root height to `calc(100dvh + env(safe-area-inset-bottom, 0px))`, because real-device screenshots showed `100dvh` stopped at the top of the bottom black band
 - `#root` is now positioned relative, so the absolute app shell uses the extended root as its containing block instead of falling back to the initial viewport
 - the button row is rendered outside the inner app shell that has `overflow: hidden`
-- the button row now uses absolute positioning in the extended outer app layer with `bottom: 48px`, instead of fixed positioning against the clipped dynamic viewport
+- the button row now uses absolute positioning in the extended outer app layer with `bottom: 56px`, instead of fixed positioning against the clipped dynamic viewport
 - `ArticleCard` receives a measured bottom inset again, but applies it only when the card body is tall enough that the fixed buttons could cover content
 - this avoids the previous `Math.max(..., 96)` reserve that could create visible empty card space under short content
 
@@ -312,8 +312,8 @@ This issue consumed several rounds of experiments. Record them explicitly so the
   - extends `html` height to `100dvh + env(safe-area-inset-bottom)`
   - sets `#root { position: relative; }` so absolute app positioning is anchored to the extended root
   - moves outer app ownership from `position: fixed; inset: 0` to an absolute full-height app layer
-  - positions the button row as `position: absolute; bottom: 48px` inside that extended outer layer
-  - `bottom: 12px` successfully entered the bottom area but sat too low on the real device; `24px` improved but still felt low, so it was raised to `48px`
+  - positions the button row as `position: absolute; bottom: 56px` inside that extended outer layer
+  - `bottom: 12px` successfully entered the bottom area but sat too low on the real device; `24px` improved but still felt low; `48px` was close, and real-device tuning settled on `56px` to avoid the rounded screen corner clipping feeling
   - this supersedes fixed-position attempts, which either stopped at the top of the bottom band or clipped when moved below it
   - avoids the earlier failed pattern where negative safe-area offset plus compensating padding either cancelled itself out or risked clipping the controls
   - restores measured card bottom reserve via `feedbackBarHeight`, but `ArticleCard` only applies it when content would otherwise collide with the fixed footer
