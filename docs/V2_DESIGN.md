@@ -1,6 +1,6 @@
 # AI Morning Brief V2 — Product & Engineering Design
 
-> **Status**: F1–F4 + Feedback loop + Web Push 已上線（Vercel + GitHub Actions）。**ntfy 已淘汰（2026-04-25）**，唯一推播管道為 Web Push。F4 Notion 整合已 ship（`api/save.ts` Edge Runtime + raw fetch）。
+> **Status**: F1–F4 + Feedback loop + Web Push 已上線（Vercel + GitHub Actions）。**ntfy 已淘汰（2026-04-25）**，唯一推播管道為 Web Push。F4 Notion 整合已 ship（`api/save.ts` Edge Runtime + raw fetch）。**F8 Library 已 ship（2026-04-26，2026-04-27 真機驗證完成）。**
 >
 > **2026-04-26 方向校準**：原本 F5 quiz 排第一，覆盤後發現 quiz 是高風險賭注（賭使用者願意主動測驗）。改由 **Library / 歷史頁** 取代 F5 成為下一個優先項目，quiz 降為 Library 上的 retention layer。詳見 [PRODUCT_REVIEW_2026-04-26.md](./PRODUCT_REVIEW_2026-04-26.md)。
 >
@@ -89,7 +89,7 @@ V2 的目標不是「更漂亮的 ntfy」,而是**重新定義消費模式**:從
 - 內容:本週讀了 N 篇、最常出現的技術、哪些 tag 你點最多、tag 共現矩陣
 - 自動寫入 Notion 週報頁,累積成長軌跡
 
-### F8 — Library / 歷史頁（2026-04-26 新增，**已 ship 2026-04-26，觀察期至約 2026-05-11**）
+### F8 — Library / 歷史頁（**✅ 已 ship 2026-04-26**）
 - 解決使用者親口說的痛點：「滑過沒收藏的找不回 + LLM 內容隔天就丟」
 - `/library` route，按日期 group 顯示所有歷史文章
 - 每筆 row 點擊展開全部 LLM 生的內容（summary / context / engineeringImpact / reason）+ 補做 reaction（👍👎🔖）

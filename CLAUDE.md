@@ -13,7 +13,7 @@
 - **F4 Notion 整合（2026-04-25）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `saves.articleId` unique，Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。
 - **產品方向重新校準（2026-04-26）**：原本 V2_DESIGN.md 把 quiz (F5) 排第一，覆盤後發現 quiz 是「賭使用者願意主動測驗」的高風險投資；真正使用者已表達的痛點是「滑過沒存的找不回 + LLM 內容隔天就丟」。新的三大支柱：(1) 每日推播 (V1) (2) Library / 歷史頁 (3) Retention layer (quiz, 蓋在 Library 上)。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
 - **Library 頁面已 ship（2026-04-26，commit `0a61bad` / `ee694bb`）**：原 roadmap PR-A/B/C 一發併出。細節見系統架構 + 功能狀態 + Conventions。
-- **下一個大事**：Library 觀察期（2026-04-27 真機驗完，觀察至約 2026-05-11）— 看自己會不會回頭翻；不回頭翻就停在 stable 版，不急著疊 RSS 擴源 / quiz。
+- **下一步決策 gate**（觀察期至約 2026-05-11）：看自己會不會回頭翻 `/library`；不回頭翻就停在 stable 版，不急著疊 RSS 擴源 / quiz。
 
 ---
 
@@ -74,7 +74,7 @@ React PWA (web/)
 
 > 重排理由：覆盤後發現 quiz 是高風險賭注，Library 是已表達需求。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
 
-1. **Library 觀察期**（2026-04-27 真機驗證完成，觀察至約 2026-05-11）— 觀察自己是否真的會回頭翻 `/library`。**退場條件**：1–2 週若自己沒回頭翻過，內容品質一輪 / Quiz 都不做，停在「每日推播 + Library」stable 版。產品定位見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)，設計 review 見 [docs/LIBRARY_DESIGN_REVIEW_v1.md](./docs/LIBRARY_DESIGN_REVIEW_v1.md)。
+1. **下一步決策 gate**（觀察期至約 2026-05-11）— 觀察自己是否真的會回頭翻 `/library`。**退場條件**：1–2 週若自己沒回頭翻過，內容品質一輪 / Quiz 都不做，停在「每日推播 + Library」stable 版。產品定位見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)，設計 review 見 [docs/LIBRARY_DESIGN_REVIEW_v1.md](./docs/LIBRARY_DESIGN_REVIEW_v1.md)。
 2. **內容品質一輪**（Library 之後 — Library 越多源越值錢）：
    - 2a. **RSS 源擴充**：新增 Anthropic news / OpenAI blog / Cloudflare blog / AWS ML blog。RSS URL 上線前要 `curl` 驗證仍有效（Anthropic / OpenAI 換過很多次）
    - 2b. **觀察一週 keyword weight**：官方 blog 進來後是否被 PREFILTER 漏放或誤殺，視情況微調 `KEYWORD_WEIGHTS`

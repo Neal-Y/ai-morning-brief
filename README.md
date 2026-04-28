@@ -18,7 +18,7 @@
 
 > 2026-04-26 校準後，三大支柱：
 > 1. **每日推播 + 篩選**（V1，已 ship）
-> 2. **Library / 歷史頁**（已 ship 2026-04-26，觀察期至約 2026-05-11）— 解決「滑過沒收藏的找不回 + LLM 內容隔天就丟」
+> 2. **Library / 歷史頁**（✅ 已 ship 2026-04-26）— 解決「滑過沒收藏的找不回 + LLM 內容隔天就丟」
 > 3. **Retention layer**（quiz / recall）— 蓋在 Library 上的再訪機制，視 Library 證明有用再做
 >
 > 設計原則與覆盤紀錄：[docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)
