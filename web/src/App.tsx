@@ -484,7 +484,7 @@ export default function App() {
           style={{
             position: 'absolute',
             left: '50%',
-            bottom: 48,
+            bottom: 52,
             width: '100%',
             maxWidth: 480,
             transform: 'translateX(-50%)',
