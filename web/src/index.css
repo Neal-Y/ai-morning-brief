@@ -13,6 +13,8 @@ body, #root {
   -moz-osx-font-smoothing: grayscale;
 }
 
+#root { position: relative; }
+
 body { overflow: hidden; }
 
 input, button { font-family: inherit; }

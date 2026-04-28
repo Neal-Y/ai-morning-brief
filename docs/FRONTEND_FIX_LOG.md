@@ -266,6 +266,7 @@ Latest change under test:
 
 - `web/src/App.tsx` now treats the footer as a fixed chrome layer again, with no negative safe-area offset and no extra bottom shelf element
 - `web/src/index.css` extends the root height to `calc(100dvh + env(safe-area-inset-bottom, 0px))`, because real-device screenshots showed `100dvh` stopped at the top of the bottom black band
+- `#root` is now positioned relative, so the absolute app shell uses the extended root as its containing block instead of falling back to the initial viewport
 - the button row is rendered outside the inner app shell that has `overflow: hidden`
 - the button row now uses absolute positioning in the extended outer app layer with `bottom: 12px`, instead of fixed positioning against the clipped dynamic viewport
 - `ArticleCard` receives a measured bottom inset again, but applies it only when the card body is tall enough that the fixed buttons could cover content
@@ -309,6 +310,7 @@ This issue consumed several rounds of experiments. Record them explicitly so the
   - status: superseded by the fixed chrome counter-offset approach
 - local working-tree experiment on 2026-04-28, current
   - extends `html` height to `100dvh + env(safe-area-inset-bottom)`
+  - sets `#root { position: relative; }` so absolute app positioning is anchored to the extended root
   - moves outer app ownership from `position: fixed; inset: 0` to an absolute full-height app layer
   - positions the button row as `position: absolute; bottom: 12px` inside that extended outer layer
   - this supersedes fixed-position attempts, which either stopped at the top of the bottom band or clipped when moved below it
