@@ -10,7 +10,8 @@
 - 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`；現在 SW (`web/public/sw.js`) 是真正的 push handler（`push` + `notificationclick` events，無 fetch cache）。
 - **iPhone standalone PWA footer gap 已收斂（2026-04-28）**：最終解是延伸 root height 到 `100dvh + safe-area-inset-bottom`，再把 bottom dock 作為 extended root 內的 absolute layer。不要回到 fixed footer / negative safe-area offset；細節見 `docs/FRONTEND_FIX_LOG.md` Issue 6。
 - Classifier 已吃進 feedback（V2 Investment 環節核心），近 30 天 / 20 筆 / 門檻 10 筆。Anthropic cache 有拆 prefix（穩定部分跨天保留）。
-- **F4 Notion 整合（2026-04-25）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `saves.articleId` unique，Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。
+- **F4 Notion 整合（2026-04-25，dedupe 強化 2026-05-06）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `saves.articleId` unique。Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。dedupe：先查 Notion `Article ID` property + DB sync lock（`notion_syncing_at`），有舊 page 就 reuse；`/api/unsave` 改成 soft-hide（`saves.deleted_at`），row 與 `notion_page_id` 都保留，下次再 save 直接掛回同一 Notion page。
+- **追問歷史（2026-05-06）**：每篇文章一條 `conversations` row（`messages` JSON + `message_count`），`api/ask-history.ts` Edge Runtime 提供 GET/POST upsert。AskSheet 開啟時 hydrate 過往對話、每完成一個 user→assistant turn 就保存；Library 顯示 low-key ask message count，點開可帶歷史回到 AskSheet。`/api/library` JOIN 時只取 `message_count`，**不**載 messages JSON。
 - **產品方向重新校準（2026-04-26）**：原本 V2_DESIGN.md 把 quiz (F5) 排第一，覆盤後發現 quiz 是「賭使用者願意主動測驗」的高風險投資；真正使用者已表達的痛點是「滑過沒存的找不回 + LLM 內容隔天就丟」。新的三大支柱：(1) 每日推播 (V1) (2) Library / 歷史頁 (3) Retention layer (quiz, 蓋在 Library 上)。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
 - **Library 頁面已 ship（2026-04-26，commit `0a61bad` / `ee694bb`）**：原 roadmap PR-A/B/C 一發併出。細節見系統架構 + 功能狀態 + Conventions。
 - **下一步決策 gate**（觀察期至約 2026-05-11）：看自己會不會回頭翻 `/library`；不回頭翻就停在 stable 版，不急著疊 RSS 擴源 / quiz。
@@ -31,14 +32,15 @@ GitHub Actions cron (daily 台北 07:30)
 
 Hono API (src/api/app.ts → api/index.ts on Vercel)
   ├─ GET  /api/feed?date=   # 從 Turso 讀當日文章
-  └─ GET  /api/library      # 全歷史 + feedback / saved / notionSynced 三表 JS-join，read-only no-store
+  └─ GET  /api/library      # 全歷史 + feedback / saved / notionSynced + ask message_count 多表 JS-join（不撈 messages JSON），read-only no-store
 
 Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
-  ├─ POST /api/ask              # api/ask.ts — Haiku 4.5 SSE streaming 追問
-  ├─ POST /api/push-subscribe   # api/push-subscribe.ts — 寫 push_subscriptions
-  ├─ POST /api/save             # api/save.ts — 查 article + Notion 建 page + upsert saves
-  ├─ POST /api/feedback         # api/feedback.ts — up/down（delete-then-insert，同 articleId 只留最新）
-  └─ POST /api/unsave           # api/unsave.ts — DELETE saves 一筆（Notion page 不刪）
+  ├─ POST     /api/ask           # api/ask.ts — Haiku 4.5 SSE streaming 追問
+  ├─ GET/POST /api/ask-history   # api/ask-history.ts — per-article conversations 讀 / upsert messages JSON
+  ├─ POST     /api/push-subscribe# api/push-subscribe.ts — 寫 push_subscriptions
+  ├─ POST     /api/save          # api/save.ts — 查 article + Notion dedupe（Article ID lookup + DB sync lock）+ upsert saves
+  ├─ POST     /api/feedback      # api/feedback.ts — up/down（delete-then-insert，同 articleId 只留最新）
+  └─ POST     /api/unsave        # api/unsave.ts — soft-hide saves（set deleted_at；row、notion_page_id、Notion page 都不動）
 
 React PWA (web/)
   ├─ /          滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration
@@ -56,12 +58,13 @@ React PWA (web/)
 | RSS → 分類 → 寫 Turso | ✅ | V1 遺留，穩定 |
 | Web Push 推播 | ✅ | 標題 = lead story title, body = 「Hard Tech AI／Signals」section labels |
 | Turso DB 寫入 | ✅ | article id = SHA-256(url).slice(0,16)；client 用 `https://` 而非 `libsql://`（serverless friendly） |
-| Vercel 部署 | ✅ | `api/index.ts` (Hono) + `api/ask.ts` & `api/push-subscribe.ts` (Edge) |
+| Vercel 部署 | ✅ | `api/index.ts` (Hono read-only) + Edge：`ask` / `ask-history` / `push-subscribe` / `save` / `unsave` / `feedback` |
 | PWA 卡片 UI | ✅ | iPhone standalone 已穩定，細節見 FRONTEND_FIX_LOG |
 | 👍👎 → DB | ✅ | delete-then-insert 防誤按；Edge Runtime（2026-04-26 從 Hono 搬出，原本 504 timeout） |
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
+| 💬 追問歷史 | ✅ | `api/ask-history.ts` Edge：GET hydrate / POST upsert；`conversations` 一篇一 row；AskSheet 開啟還原、turn 完成保存；Library 顯示 ask message count |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
-| 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful（規則見 Conventions Pipeline/DB） |
+| 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful；2026-05-06 加 dedupe（Notion Article ID lookup + DB sync lock）+ unsave 改 soft-hide（規則見 Conventions Pipeline/DB） |
 | Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。2026-04-27 Vercel preview 真機驗證完成 |
 | Quiz 生成 | ⏳ 未做 | `quizzes` table 已建 schema |
 | 晨間 Recall Quiz | ⏳ 未做 | 需先有 quiz 資料 |
@@ -114,16 +117,17 @@ src/
   notify/web-push.ts  # web-push 函式庫，對 push_subscriptions 全表發送
   notify/db-writer.ts # Turso upsert
   notion/client.ts    # raw fetch Notion REST API（createSavePage）
-  db/schema.ts        # articles / feedback / saves (article_id unique) / conversations / quizzes / push_subscriptions
+  db/schema.ts        # articles / feedback / saves (article_id unique, deleted_at soft-hide, notion_syncing_at lock) / conversations (article_id unique, messages JSON + message_count) / quizzes / push_subscriptions
   db/client.ts        # libSQL client (https://) + getRecentFeedback()
-  api/app.ts          # Hono app（GET /api/feed + GET /api/library，read-only）
+  api/app.ts          # Hono app（GET /api/feed + GET /api/library，read-only；library 只 select conversations.message_count，不撈 messages JSON）
   api/server.ts       # 本地 dev (port 3001)
 api/index.ts             # Vercel entry (hono/vercel handle)
 api/ask.ts               # Edge Runtime SSE for /api/ask
+api/ask-history.ts       # Edge Runtime GET/POST → Turso HTTP API（per-article conversations upsert / fetch）
 api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
-api/save.ts              # Edge Runtime POST → Notion + Turso HTTP API（建 page + upsert saves）
+api/save.ts              # Edge Runtime POST → Notion dedupe (Article ID lookup + DB sync lock) + Turso HTTP API（upsert saves，clears deleted_at）
 api/feedback.ts          # Edge Runtime POST → Turso HTTP API（delete-then-insert feedback）
-api/unsave.ts            # Edge Runtime POST → Turso HTTP API（DELETE saves；Notion page 不刪）
+api/unsave.ts            # Edge Runtime POST → Turso HTTP API（soft-hide via deleted_at；row、notion_page_id、Notion page 都保留）
 vercel.json
 web/
   index.html
@@ -210,9 +214,11 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - Infra 錯誤不送 Web Push：RSS 全掛、config/provider 錯誤、DB 寫入失敗、Web Push 全部發送失敗都要 `exit(1)`，讓 GitHub Actions failed；Actions log 是錯誤診斷 source of truth。
 - DB upsert 一律用 `onConflictDoUpdate`（用 `onConflictDoNothing` 會讓 count log 誤報）
 - db-writer 的 conflict target 是 `articles.url`
-- `saves.articleId` 是 unique（一篇一筆）；`/api/save` handler 自己做 select-then-update / insert，不依賴 Drizzle upsert（Edge Runtime 用 raw Turso HTTP API）
+- `saves.articleId` 是 unique（一篇一筆）；`/api/save` handler 自己做 upsert（`ON CONFLICT(article_id) DO UPDATE`，順便清掉 `deleted_at`），不依賴 Drizzle upsert（Edge Runtime 用 raw Turso HTTP API）
 - Notion sync 失敗不阻斷收藏：寫 `saves` row 但 `notion_page_id = NULL`，回 `{ ok: true, notionSynced: false }`，下次同篇再點會 retry
-- `/api/unsave` 只刪 in-app `saves` row，**不刪 Notion page**。Notion 是外部 PKM，不可因 app 內移除收藏而誤刪使用者整理過的內容。未來若調整，優先考慮把 Notion 降級為明確的「送到 Notion」curated export，而不是每次 save 自動同步。
+- **Notion dedupe 三層防線（2026-05-06）**：再次按 🔖 同一篇時 (a) 既有 `saves.notion_page_id` 不為 NULL → 直接 reuse，不打 Notion；(b) 沒 page id → 用 `saves.notion_syncing_at` 當 10 分鐘 sync lock（CAS update where IS NULL or stale），搶到 lock 才呼叫 Notion，搶不到回 `{ notionSyncing: true }`；(c) 真的要建 page 前先 `findSavePageByArticleId(articleId)` query Notion 上是否已有同 `Article ID`，有就 reuse、沒有才 `createSavePage`。三層都是為了避免 unsave→re-save 又生第二張 Notion page。
+- `/api/unsave` 是 **soft-hide**（`UPDATE saves SET deleted_at = ?`）：**不刪 row、不動 notion_page_id、不刪 Notion page**。保留 row 是為了讓 re-save 走上面 dedupe (a) 直接掛回原本那張 Notion page；不刪 Notion page 是因為 Notion 是外部 PKM，使用者可能已經整理過內容。未來若調整，優先考慮把 Notion 降級為明確的「送到 Notion」curated export，而不是每次 save 自動同步。
+- `conversations` 是「一個 articleId 一 row」：`messages` JSON、`message_count`、`model`、`created_at`、`updated_at`。`/api/ask-history` POST 是整段覆寫（不 append diff），AskSheet 在每個 user→assistant turn 完成後送一次。`/api/library` JOIN 時只 select `message_count`，**不要**載入 messages JSON（library payload 別變大）；要看完整對話走 `/api/ask-history?articleId=` GET。
 
 **Classifier 偏好：**
 - Preference context **必須附加在 system prompt 尾端**（保 cache prefix，不要插中間／開頭）
@@ -220,15 +226,16 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - Cold-start 門檻 10 筆，低於門檻一律不注入（防過擬合）
 - 👎 per-category 要 ≥ 2 次才算負訊號（單一 👎 可能只是當天心情，別當真）
 
-**Edge Runtime endpoints（POST 一律走這裡，不要進 Hono）：**
+**Edge Runtime endpoints（POST 一律走這裡，不要進 Hono；GET 視情況也可走 Edge）：**
 - `/api/ask` → `api/ask.ts`（SSE streaming）
+- `/api/ask-history` → `api/ask-history.ts`（GET 讀 / POST upsert per-article conversations row）
 - `/api/push-subscribe` → `api/push-subscribe.ts`（寫 Turso）
-- `/api/save` → `api/save.ts`（查 article、Notion 建 page、upsert saves）
-- `/api/unsave` → `api/unsave.ts`（刪 in-app saves row；不刪 Notion page）
+- `/api/save` → `api/save.ts`（查 article、Notion dedupe lookup、upsert saves，sync lock 防併發 double-create）
+- `/api/unsave` → `api/unsave.ts`（soft-hide saves via deleted_at；不刪 row、不動 notion_page_id、不刪 Notion page）
 - `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
 - **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。
 - **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/feed` + `/api/library` GET）。
-- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
+- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 

@@ -4,7 +4,7 @@
 
 - `src/` holds the scheduled backend pipeline: RSS ingestion, AI classification, brief generation, Turso access, Notion sync, and push.
 - `src/api/` contains the local Hono API. It is read-oriented: `GET /api/feed` and `GET /api/library` live in `src/api/app.ts`.
-- Root `api/*.ts` files are Vercel routes. Body-reading POST endpoints are Edge functions: `ask`, `push-subscribe`, `save`, `unsave`, and `feedback`.
+- Root `api/*.ts` files are Vercel routes. Body-reading POST endpoints are Edge functions: `ask`, `ask-history`, `push-subscribe`, `save`, `unsave`, and `feedback`.
 - `web/` is the React PWA: source in `web/src/`, assets and service worker in `web/public/`.
 - `web/src/Library.tsx` is the implemented `/library` page; `web/src/router.ts` provides the lightweight pathname router.
 - `scripts/` contains helpers like `scripts/seed.ts`.
@@ -14,8 +14,9 @@
 
 - V1 daily brief pipeline is live: GitHub Actions runs the RSS -> LLM -> Turso -> Web Push flow.
 - Web Push replaced ntfy. Do not reintroduce ntfy or generated service workers.
-- Notion save sync is live via `api/save.ts`; failures should not block in-app saves.
-- Library is no longer only a plan: `/library`, `/api/library`, filters, expanded rows, AskSheet reuse, save, and unsave are implemented.
+- Notion save sync is live via `api/save.ts`; failures should not block in-app saves. Saves are soft-hidden on unsave, and Notion sync uses `Article ID` lookup plus a DB sync lock to avoid duplicate pages.
+- Library is no longer only a plan: `/library`, `/api/library`, filters, expanded rows, AskSheet reuse, save, unsave, Ask count, and per-article Ask history restore are implemented.
+- Ask history is persisted in Turso `conversations`: one row per article, capped message JSON, plus `message_count` for lightweight Library indicators. Do not load full conversation bodies in `/api/library`.
 - Quiz and skill-tag generation remain future work. Do not prioritize them before validating Library usage.
 
 ## Build, Test, and Development Commands
@@ -40,7 +41,7 @@ For new API routes, keep GET/read endpoints in Hono only when they do not read a
 
 There is no dedicated test runner yet. Before submitting changes, run `npm run typecheck` and the relevant build. For frontend work, also run `cd web && npm run build`. If adding tests, place `*.test.ts` or `*.test.tsx` near the changed module and add an npm script.
 
-For Library changes, verify `/api/library` shape, `/library` routing, expanded-row content, save/unsave optimistic updates, mobile safe-area behavior, and AskSheet opening from an expanded row.
+For Library changes, verify `/api/library` shape, `/library` routing, expanded-row content, save/unsave optimistic updates, mobile safe-area behavior, Ask count display, and AskSheet opening/restoring history from an expanded row.
 
 ## Commit & Pull Request Guidelines
 
@@ -54,7 +55,8 @@ Do not commit `.env`, `.env.local`, API keys, VAPID private keys, Turso tokens, 
 
 ## Known Constraints & Review Risks
 
-- `/api/library` currently loads all articles, feedback, and saves, then joins in JS. This is acceptable while data is small; revisit pagination or date windows before 10x history growth.
+- `/api/library` currently loads all articles, feedback, saves, and conversation message counts, then joins in JS. This is acceptable while data is small; revisit pagination or date windows before 10x history growth. Do not add full `conversations.messages` to this endpoint.
+- `saves.deleted_at` means unsaved items are hidden in-app but retain `notion_page_id`; do not change unsave back to row deletion unless you also redesign Notion dedupe/re-save behavior.
 - Classifier concurrency is intentionally capped for provider limits. Do not add unbounded LLM calls or retries.
 - The service worker in `web/public/sw.js` is only for push and notification click handling. Do not add fetch caching without revisiting the PWA cache history.
 - Web Push should only fire after DB persistence succeeds; failed infrastructure should fail the workflow rather than notify stale or missing content.

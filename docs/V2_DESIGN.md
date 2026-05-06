@@ -1,6 +1,6 @@
 # AI Morning Brief V2 — Product & Engineering Design
 
-> **Status**: F1–F4 + Feedback loop + Web Push 已上線（Vercel + GitHub Actions）。**ntfy 已淘汰（2026-04-25）**，唯一推播管道為 Web Push。F4 Notion 整合已 ship（`api/save.ts` Edge Runtime + raw fetch）。**F8 Library 已 ship（2026-04-26，2026-04-27 真機驗證完成）。**
+> **Status**: F1–F4 + Feedback loop + Web Push 已上線（Vercel + GitHub Actions）。**ntfy 已淘汰（2026-04-25）**，唯一推播管道為 Web Push。F4 Notion 整合已 ship（`api/save.ts` Edge Runtime + raw fetch）。**F8 Library 已 ship（2026-04-26，2026-04-27 真機驗證完成）。Ask history persistence + Notion save dedupe 已 ship（2026-05-06）。**
 >
 > **2026-04-26 方向校準**：原本 F5 quiz 排第一，覆盤後發現 quiz 是高風險賭注（賭使用者願意主動測驗）。改由 **Library / 歷史頁** 取代 F5 成為下一個優先項目，quiz 降為 Library 上的 retention layer。詳見 [PRODUCT_REVIEW_2026-04-26.md](./PRODUCT_REVIEW_2026-04-26.md)。
 >
@@ -205,15 +205,20 @@ saves = {
   articleId: fk
   userNote: string | null
   notionPageId: string | null  // after Notion write
+  notionSyncingAt: timestamp | null
   createdAt: timestamp
+  updatedAt: timestamp | null
+  deletedAt: timestamp | null  // soft-hide in-app save; keep Notion link for re-save dedupe
 }
 
 conversations = {
   id: pk
-  articleId: fk
-  messages: json               // [{role, content, ts}]
-  model: 'haiku' | 'sonnet'
+  articleId: fk unique
+  messages: json               // [{role, content}]
+  messageCount: number         // lightweight Library indicator
+  model: 'haiku'
   createdAt: timestamp
+  updatedAt: timestamp | null
 }
 
 quizzes = {
@@ -242,15 +247,16 @@ quizzes = {
 - [x] 👍👎 寫回 DB
 - [x] Classifier 吃進 feedback prompt（近 30 天 / 20 筆 / 門檻 10）
 - [x] 💬 追問：SSE streaming，Haiku 4.5（`api/ask.ts` Edge Function，非 Hono）
+- [x] 💬 Ask history 持久化（2026-05-06）：`api/ask-history.ts` Edge Function，`conversations` 一篇一筆；AskSheet 開啟時恢復歷史，Library 只顯示 `messageCount` 不載 full messages
 - [x] **Web Push 全鏈路上線**：VAPID 生成、`api/push-subscribe.ts` Edge Function 寫 `push_subscriptions`、pipeline 先 persist 再 `notify/web-push.ts` 推送到所有訂閱者、ntfy 退役（2026-04-25）
 - [ ] Skill-tag 加到 classifier 輸出（待做）
 - **Result**: 滑卡、追問、feedback loop、Web Push 全部上線
 
 ### Week 3 — Investment Layer ✅
-- [x] **Notion API 整合（F4）**：`🔖` → 自動建 page（2026-04-25 上線；`api/save.ts` Edge Runtime + raw fetch，Notion 失敗不阻斷收藏）
+- [x] **Notion API 整合（F4）**：`🔖` → 自動同步 page（2026-04-25 上線；`api/save.ts` Edge Runtime + raw fetch，Notion 失敗不阻斷收藏；2026-05-06 加上 `Article ID` 查重、sync lock、soft unsave 保留 `notion_page_id`）
 - [x] **`/api/feedback` Edge migration**（2026-04-26）：原本在 Hono，觀察到 504 timeout 後搬到 Edge Runtime（`api/feedback.ts`）
 - [x] **通知文案重做**（2026-04-26）：拿掉「from Sift」冗餘行、`／` → `·`、釋出空間放 lead 文章的 `engineeringImpact` 當 teaser
-- **Demo goal achieved**: 每收藏一篇，Notion 就長一篇，完全不用手動整理
+- **Demo goal achieved**: 收藏文章會同步到 Notion，且同一篇 re-save / double-tap 不應再新增 duplicate page
 
 ### Week 3.5 — 方向校準（2026-04-26）
 - 觸發：F4 ship 後做了一次刻意的產品覆盤
@@ -260,6 +266,7 @@ quizzes = {
 ### Week 4 — Library Layer（取代原 Retention Engine 計畫）
 - [x] **F8 Library PR-A/B/C**（一次併出，2026-04-26 ship）：`/library` 頁面 + 日期分組 + 點擊展開全部 LLM 內容 + filter + saves tab + AskSheet 重用 + save/unsave
 - [x] 2026-04-27 Vercel preview 真機驗證
+- [x] 2026-05-06：Library 可從文章 row 看到 Ask count，打開 AskSheet 可接續該篇歷史對話
 - [ ] 觀察期進行中（至約 2026-05-11）：看自己有沒有真的回去翻；不回頭就停在 stable
 - **Demo goal**: 能找到「我昨天看到一篇 X 但沒收藏」的文章，不用開 DB console
 
