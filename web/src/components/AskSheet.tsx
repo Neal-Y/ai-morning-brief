@@ -1,4 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { Theme } from '../theme.ts'
 import type { Article } from '../types.ts'
 
@@ -18,6 +20,18 @@ interface AskSheetProps {
   visible: boolean
   onClose: () => void
   fullScreen?: boolean
+  onHistorySaved?: (articleId: string, messageCount: number) => void
+}
+
+interface AskHistoryResponse {
+  ok?: boolean
+  messages?: ApiMessage[]
+  messageCount?: number
+}
+
+const INTRO_MESSAGE: Message = {
+  role: 'assistant',
+  text: '讀完這篇，有幾個後端工程師視角的追問想跟你聊：',
 }
 
 const SUGGESTIONS = [
@@ -26,20 +40,138 @@ const SUGGESTIONS = [
   '對我的 backend 架構影響最大的點是？',
 ]
 
-export function AskSheet({ theme, article, visible, onClose, fullScreen = false }: AskSheetProps) {
+function AssistantMarkdown({ text, theme }: { text: string; theme: Theme }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => (
+          <p style={{ margin: '0 0 10px' }}>{children}</p>
+        ),
+        h1: ({ children }) => (
+          <h2 style={{
+            margin: '0 0 10px',
+            fontFamily: theme.serif,
+            fontSize: 17,
+            lineHeight: 1.35,
+            fontWeight: 700,
+          }}>{children}</h2>
+        ),
+        h2: ({ children }) => (
+          <h3 style={{
+            margin: '14px 0 8px',
+            fontFamily: theme.serif,
+            fontSize: 15,
+            lineHeight: 1.35,
+            fontWeight: 700,
+          }}>{children}</h3>
+        ),
+        h3: ({ children }) => (
+          <h4 style={{
+            margin: '12px 0 6px',
+            fontFamily: theme.sans,
+            fontSize: 14,
+            lineHeight: 1.35,
+            fontWeight: 700,
+          }}>{children}</h4>
+        ),
+        ul: ({ children }) => (
+          <ul style={{ margin: '0 0 10px', paddingLeft: 18 }}>{children}</ul>
+        ),
+        ol: ({ children }) => (
+          <ol style={{ margin: '0 0 10px', paddingLeft: 18 }}>{children}</ol>
+        ),
+        li: ({ children }) => (
+          <li style={{ marginBottom: 5, paddingLeft: 2 }}>{children}</li>
+        ),
+        strong: ({ children }) => (
+          <strong style={{ fontWeight: 750 }}>{children}</strong>
+        ),
+        hr: () => (
+          <div style={{ height: 1, background: theme.ruleSoft, margin: '12px 0' }} />
+        ),
+        a: ({ children, href }) => (
+          <a href={href} target="_blank" rel="noreferrer" style={{ color: theme.accent }}>
+            {children}
+          </a>
+        ),
+        code: ({ children }) => (
+          <code style={{
+            fontFamily: theme.mono,
+            fontSize: '0.92em',
+            background: theme.card,
+            border: `1px solid ${theme.ruleSoft}`,
+            borderRadius: 3,
+            padding: '1px 4px',
+          }}>{children}</code>
+        ),
+        pre: ({ children }) => (
+          <pre style={{
+            margin: '0 0 10px',
+            overflowX: 'auto',
+            whiteSpace: 'pre',
+            WebkitOverflowScrolling: 'touch',
+          }}>{children}</pre>
+        ),
+        table: ({ children }) => (
+          <div style={{
+            overflowX: 'auto',
+            margin: '0 0 10px',
+            WebkitOverflowScrolling: 'touch',
+          }}>
+            <table style={{ borderCollapse: 'collapse', minWidth: '100%' }}>{children}</table>
+          </div>
+        ),
+        th: ({ children }) => (
+          <th style={{
+            border: `1px solid ${theme.ruleSoft}`,
+            padding: '5px 7px',
+            textAlign: 'left',
+            fontWeight: 700,
+          }}>{children}</th>
+        ),
+        td: ({ children }) => (
+          <td style={{
+            border: `1px solid ${theme.ruleSoft}`,
+            padding: '5px 7px',
+            verticalAlign: 'top',
+          }}>{children}</td>
+        ),
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  )
+}
+
+function historyToMessages(history: ApiMessage[]): Message[] {
+  return [
+    INTRO_MESSAGE,
+    ...history.map((m): Message => ({ role: m.role, text: m.content })),
+  ]
+}
+
+export function AskSheet({
+  theme,
+  article,
+  visible,
+  onClose,
+  fullScreen = false,
+  onHistorySaved,
+}: AskSheetProps) {
   const [mounted, setMounted] = useState(false)
   const [entered, setEntered] = useState(false)
-  const [messages, setMessages] = useState<Message[]>([
-    { role: 'assistant', text: '讀完這篇，有幾個後端工程師視角的追問想跟你聊：' },
-  ])
+  const [messages, setMessages] = useState<Message[]>([INTRO_MESSAGE])
   const [apiHistory, setApiHistory] = useState<ApiMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
   const messageListRef = useRef<HTMLDivElement>(null)
   const shouldStickToBottomRef = useRef(true)
   const streamedAssistantTextRef = useRef('')
   const flushFrameRef = useRef<number | null>(null)
   const activeRequestRef = useRef<AbortController | null>(null)
+  const historyLoadedArticleRef = useRef<string | null>(null)
 
   const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
     const el = messageListRef.current
@@ -126,15 +258,66 @@ export function AskSheet({ theme, article, visible, onClose, fullScreen = false 
     return () => cancelAnimationFrame(id)
   }, [visible])
 
+  const persistHistory = async (articleId: string, history: ApiMessage[]) => {
+    if (history.length === 0) return
+    try {
+      const response = await fetch('/api/ask-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId, messages: history }),
+      })
+      const data = await response.json().catch(() => ({})) as AskHistoryResponse
+      if (response.ok && data.ok) {
+        onHistorySaved?.(articleId, data.messageCount ?? history.length)
+      }
+    } catch {
+      // Ask still works if history persistence is temporarily unavailable.
+    }
+  }
+
   // Reset state when article changes
   useEffect(() => {
     stopActiveRequest()
-    setMessages([{ role: 'assistant', text: '讀完這篇，有幾個後端工程師視角的追問想跟你聊：' }])
+    setMessages([INTRO_MESSAGE])
     setApiHistory([])
     setInput('')
     setLoading(false)
+    setHistoryLoading(false)
+    historyLoadedArticleRef.current = null
     shouldStickToBottomRef.current = true
   }, [article.id])
+
+  useEffect(() => {
+    if (!visible || historyLoadedArticleRef.current === article.id) return
+
+    let cancelled = false
+    const articleId = article.id
+    setHistoryLoading(true)
+    fetch(`/api/ask-history?articleId=${articleId}`)
+      .then(async response => {
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        return response.json() as Promise<AskHistoryResponse>
+      })
+      .then(data => {
+        if (cancelled || article.id !== articleId) return
+        historyLoadedArticleRef.current = articleId
+        const history = Array.isArray(data.messages) ? data.messages : []
+        setHistoryLoading(false)
+        if (history.length === 0) return
+        setApiHistory(prev => prev.length > 0 ? prev : history)
+        setMessages(prev => prev.some(m => m.role === 'user') ? prev : historyToMessages(history))
+        onHistorySaved?.(articleId, data.messageCount ?? history.length)
+      })
+      .catch(() => {
+        if (!cancelled) historyLoadedArticleRef.current = articleId
+        if (!cancelled) setHistoryLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+      setHistoryLoading(false)
+    }
+  }, [article.id, visible, onHistorySaved])
 
   useEffect(() => () => stopActiveRequest(), [])
 
@@ -143,7 +326,7 @@ export function AskSheet({ theme, article, visible, onClose, fullScreen = false 
   const hasConversation = messages.some(m => m.role === 'user')
 
   const sendMessage = async (text: string) => {
-    if (loading || !text.trim()) return
+    if (loading || historyLoading || !text.trim()) return
 
     const newApiHistory: ApiMessage[] = [...apiHistory, { role: 'user', content: text }]
     streamedAssistantTextRef.current = ''
@@ -204,7 +387,12 @@ export function AskSheet({ theme, article, visible, onClose, fullScreen = false 
       if (activeRequestRef.current === controller) {
         activeRequestRef.current = null
       }
-      setApiHistory(prev => [...prev, { role: 'assistant', content: streamedAssistantTextRef.current }])
+      const completedHistory: ApiMessage[] = [
+        ...newApiHistory,
+        { role: 'assistant', content: streamedAssistantTextRef.current },
+      ]
+      setApiHistory(completedHistory)
+      void persistHistory(article.id, completedHistory)
     } catch (error) {
       cancelScheduledFlush()
       if ((error as Error).name === 'AbortError') return
@@ -301,16 +489,18 @@ export function AskSheet({ theme, article, visible, onClose, fullScreen = false 
           return (
             <div key={i} style={{
               alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
-              maxWidth: '85%',
+              maxWidth: m.role === 'user' ? '85%' : '92%',
               background: m.role === 'user' ? theme.ink : theme.bg,
               color: m.role === 'user' ? theme.card : theme.ink,
               padding: '10px 14px',
               borderRadius: 2,
               fontFamily: theme.sans, fontSize: 14, lineHeight: 1.5,
               border: m.role === 'user' ? 'none' : `1px solid ${theme.ruleSoft}`,
-              whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
             }}>
-              {m.text}
+              {m.role === 'assistant'
+                ? <AssistantMarkdown text={m.text} theme={theme} />
+                : m.text}
             </div>
           )
         })}
@@ -344,8 +534,8 @@ export function AskSheet({ theme, article, visible, onClose, fullScreen = false 
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !loading && sendMessage(input.trim())}
-          placeholder={loading ? '思考中…' : '繼續追問…'}
-          disabled={loading}
+          placeholder={historyLoading ? '載入對話…' : loading ? '思考中…' : '繼續追問…'}
+          disabled={loading || historyLoading}
           style={{
             flex: 1, background: theme.bg,
             border: `1px solid ${theme.ruleSoft}`, borderRadius: 8,
@@ -356,14 +546,14 @@ export function AskSheet({ theme, article, visible, onClose, fullScreen = false 
         />
         <button
           onClick={() => sendMessage(input.trim())}
-          disabled={loading || !input.trim()}
+          disabled={loading || historyLoading || !input.trim()}
           style={{
             background: theme.ink, color: theme.card,
             border: 'none', borderRadius: 8,
             padding: '0 16px',
             fontFamily: theme.mono, fontSize: 11, fontWeight: 600,
             letterSpacing: 0.5, cursor: loading ? 'not-allowed' : 'pointer',
-            opacity: loading || !input.trim() ? 0.5 : 1,
+            opacity: loading || historyLoading || !input.trim() ? 0.5 : 1,
           }}
         >SEND</button>
       </div>

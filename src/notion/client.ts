@@ -33,6 +33,10 @@ export interface CreateSavePageResult {
   pageId: string
 }
 
+export interface FindSavePageResult {
+  pageId: string | null
+}
+
 function envOrThrow(): { apiKey: string; databaseId: string } {
   const apiKey = process.env['NOTION_API_KEY']
   const databaseId = process.env['NOTION_DATABASE_ID']
@@ -159,4 +163,32 @@ export async function createSavePage(input: CreateSavePageInput): Promise<Create
   const json = (await res.json()) as { id?: string }
   if (!json.id) throw new Error('Notion API returned no page id')
   return { pageId: json.id }
+}
+
+export async function findSavePageByArticleId(articleId: string): Promise<FindSavePageResult> {
+  const { apiKey, databaseId } = envOrThrow()
+
+  const res = await fetch(`${NOTION_API_BASE}/databases/${databaseId}/query`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Notion-Version': NOTION_VERSION,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      page_size: 1,
+      filter: {
+        property: 'Article ID',
+        rich_text: { equals: articleId },
+      },
+    }),
+  })
+
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(`Notion query error ${res.status}: ${text}`)
+  }
+
+  const json = (await res.json()) as { results?: Array<{ id?: string }> }
+  return { pageId: json.results?.[0]?.id ?? null }
 }

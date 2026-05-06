@@ -3,6 +3,7 @@
   "outputDirectory": "web/dist",
   "rewrites": [
     { "source": "/api/ask", "destination": "/api/ask" },
+    { "source": "/api/ask-history", "destination": "/api/ask-history" },
     { "source": "/api/push-subscribe", "destination": "/api/push-subscribe" },
     { "source": "/api/save", "destination": "/api/save" },
     { "source": "/api/feedback", "destination": "/api/feedback" },

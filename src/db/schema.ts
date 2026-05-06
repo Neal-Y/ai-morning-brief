@@ -31,15 +31,20 @@ export const saves = sqliteTable('saves', {
   articleId: text('article_id').notNull().unique().references(() => articles.id),
   userNote: text('user_note'),
   notionPageId: text('notion_page_id'),
+  notionSyncingAt: integer('notion_syncing_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }),
+  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
 })
 
 export const conversations = sqliteTable('conversations', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
-  articleId: text('article_id').notNull().references(() => articles.id),
+  articleId: text('article_id').notNull().unique().references(() => articles.id),
   messages: text('messages').notNull().default('[]'),
+  messageCount: integer('message_count').notNull().default(0),
   model: text('model').notNull().default('haiku'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+  updatedAt: integer('updated_at', { mode: 'timestamp' }),
 })
 
 export const quizzes = sqliteTable('quizzes', {

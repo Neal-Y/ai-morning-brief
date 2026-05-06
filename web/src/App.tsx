@@ -67,6 +67,7 @@ export default function App() {
   const velocity = useRef<{ vx: number; lastX: number; lastT: number }>({ vx: 0, lastX: 0, lastT: 0 })
   const flyRotRef = useRef(12)
   const feedbackBarRef = useRef<HTMLDivElement | null>(null)
+  const saveInFlightRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (isPushSupported() && isStandalone() && Notification.permission === 'granted') {
@@ -143,6 +144,8 @@ export default function App() {
   const toggleSave = async () => {
     if (!curArticle) return
     const articleId = curArticle.id
+    if (saveInFlightRef.current.has(articleId)) return
+    saveInFlightRef.current.add(articleId)
     const prev = saved[articleId] ?? false
     const next = !prev
     setSaved(s => ({ ...s, [articleId]: next }))
@@ -156,6 +159,8 @@ export default function App() {
       if (!res.ok || !data.ok) throw new Error(`save toggle failed (${res.status})`)
     } catch {
       setSaved(s => ({ ...s, [articleId]: prev }))
+    } finally {
+      saveInFlightRef.current.delete(articleId)
     }
   }
 

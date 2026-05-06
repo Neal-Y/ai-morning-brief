@@ -39,7 +39,11 @@ export default async function handler(req: Request): Promise<Response> {
 文章：「${articleTitle}」
 摘要：${articleSummary}${articleContext ? `\n脈絡：${articleContext}` : ''}
 
-請用繁體中文回答，聚焦工程實務視角，簡潔有力（150字以內）。`
+請用繁體中文回答，聚焦工程實務視角，簡潔有力（150字以內）。
+輸出要適合手機 bottom sheet 閱讀：
+- 可以使用簡短 Markdown 小標題、粗體與條列。
+- 不要使用 Markdown table、程式碼區塊或過長段落。
+- 若比較多個方案，改用分段條列，不要用表格。`
 
   const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',

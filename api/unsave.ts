@@ -59,15 +59,20 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   // We don't archive the Notion page here. The user's PKM workflow lives in
-  // Notion; deleting the saves row only severs the in-app link. If they want
-  // to re-sync, re-saving from the Library will create a fresh page.
+  // Notion; unsaving only hides the item in-app. Keeping the row preserves the
+  // Notion page id so a later re-save can reattach instead of creating a duplicate.
   try {
+    const now = String(Math.floor(Date.now() / 1000))
     await tursoPipeline([
       {
         type: 'execute',
         stmt: {
-          sql: 'DELETE FROM saves WHERE article_id = ?',
-          args: [{ type: 'text', value: articleId }],
+          sql: 'UPDATE saves SET deleted_at = ?, updated_at = ? WHERE article_id = ?',
+          args: [
+            { type: 'integer', value: now },
+            { type: 'integer', value: now },
+            { type: 'text', value: articleId },
+          ],
         },
       },
     ])

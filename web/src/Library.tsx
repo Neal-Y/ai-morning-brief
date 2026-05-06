@@ -15,6 +15,7 @@ interface LibraryArticle extends Omit<Article, 'skillTags' | 'publishedAgo'> {
   feedback: 'up' | 'down' | null
   saved: boolean
   notionSynced: boolean
+  askMessageCount: number
 }
 
 interface LibraryResponse {
@@ -38,6 +39,7 @@ interface UiArticle {
   feedback: 'up' | 'down' | null
   saved: boolean
   notionSynced: boolean
+  askMessageCount: number
   // Cached Article for AskSheet
   asArticle: Article
 }
@@ -114,6 +116,7 @@ function toUi(row: LibraryArticle): UiArticle {
     feedback: row.feedback,
     saved: row.saved,
     notionSynced: row.notionSynced,
+    askMessageCount: row.askMessageCount ?? 0,
     asArticle,
   }
 }
@@ -136,6 +139,20 @@ function reactionIcon(article: UiArticle): ReactionMark | null {
   if (article.feedback === 'up') return { icon: 'thumbUp', color: T.positive }
   if (article.feedback === 'down') return { icon: 'thumbDown', color: T.negative }
   return null
+}
+
+function AskCountMark({ count }: { count: number }) {
+  if (count <= 0) return null
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 3,
+      color: T.inkFaint, fontFamily: T.mono, fontSize: 9,
+      letterSpacing: 0.4, whiteSpace: 'nowrap',
+    }}>
+      <Icon name="chat" size={10} color={T.inkFaint} strokeWidth={2} />
+      {count}
+    </span>
+  )
 }
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -444,6 +461,7 @@ function ArticleRow({ article, onToggleSave, onAsk }: {
                   filled={reaction.icon === 'bookmark'} />
               </span>
             )}
+            <AskCountMark count={article.askMessageCount} />
           </div>
         </div>
       </div>
@@ -499,6 +517,7 @@ function SavesRow({ article, onToggleSave, onAsk }: {
                 color: synced ? T.positive : T.inkFaint, textTransform: 'uppercase',
               }}>{synced ? 'Notion' : '待同步'}</span>
             </span>
+            <AskCountMark count={article.askMessageCount} />
           </div>
         </div>
       </div>
@@ -669,6 +688,7 @@ export default function Library() {
   const [askArticle, setAskArticle] = useState<Article | null>(null)
   const [askVisible, setAskVisible] = useState(false)
   const askUnmountTimerRef = useRef<number | null>(null)
+  const saveInFlightRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     let cancelled = false
@@ -701,6 +721,8 @@ export default function Library() {
   }
 
   async function handleToggleSave(article: UiArticle) {
+    if (saveInFlightRef.current.has(article.id)) return
+    saveInFlightRef.current.add(article.id)
     const next = !article.saved
     // Optimistic update — flip immediately; reconcile on response. notionSynced
     // resets on unsave (no Notion page anymore) and stays false on a new save
@@ -734,6 +756,8 @@ export default function Library() {
       setArticles(prev => prev.map(a => a.id === article.id
         ? { ...a, saved: article.saved, notionSynced: article.notionSynced }
         : a))
+    } finally {
+      saveInFlightRef.current.delete(article.id)
     }
   }
 
@@ -756,6 +780,9 @@ export default function Library() {
       askUnmountTimerRef.current = null
       setAskArticle(null)
     }, 300)
+  }
+  function handleAskHistorySaved(articleId: string, messageCount: number) {
+    setArticles(prev => prev.map(a => a.id === articleId ? { ...a, askMessageCount: messageCount } : a))
   }
 
   const hasAnyFilter = query.length > 0 || activeCategories.length > 0 || activeFeedback.length > 0
@@ -998,6 +1025,7 @@ export default function Library() {
                 visible={askVisible}
                 onClose={closeAsk}
                 fullScreen
+                onHistorySaved={handleAskHistorySaved}
               />
             </div>
           </div>
