@@ -47,6 +47,9 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response('Method Not Allowed', { status: 405 })
   }
 
+  const deviceId = req.headers.get('X-Device-Id')
+  if (!deviceId) return jsonResponse({ ok: false, error: 'missing_device_id' }, 400)
+
   let articleId: string
   try {
     const body = (await req.json()) as { articleId?: unknown }
@@ -59,20 +62,15 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   // We don't archive the Notion page here. The user's PKM workflow lives in
-  // Notion; unsaving only hides the item in-app. Keeping the row preserves the
-  // Notion page id so a later re-save can reattach instead of creating a duplicate.
+  // Notion; deleting the saves row only severs the in-app link. If they want
+  // to re-sync, re-saving from the Library will create a fresh page.
   try {
-    const now = String(Math.floor(Date.now() / 1000))
     await tursoPipeline([
       {
         type: 'execute',
         stmt: {
-          sql: 'UPDATE saves SET deleted_at = ?, updated_at = ? WHERE article_id = ?',
-          args: [
-            { type: 'integer', value: now },
-            { type: 'integer', value: now },
-            { type: 'text', value: articleId },
-          ],
+          sql: 'DELETE FROM saves WHERE article_id = ? AND device_id = ?',
+          args: [{ type: 'text', value: articleId }, { type: 'text', value: deviceId }],
         },
       },
     ])

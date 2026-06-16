@@ -1,8 +1,4 @@
-import {
-  createSavePage,
-  findSavePageByArticleId,
-  type NotionArticleInput,
-} from '../src/notion/client.js'
+import { createSavePage, type NotionArticleInput } from '../src/notion/client.js'
 
 export const config = { runtime: 'edge' }
 
@@ -71,11 +67,6 @@ function rowToObject(cols: TursoColumn[], row: TursoExecuteRow[]): Record<string
   return obj
 }
 
-function affectedCount(result: TursoPipelineResponse['results'][number] | undefined): number {
-  if (!result || result.type !== 'ok') return 0
-  return result.response.result.affected_row_count ?? 0
-}
-
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -87,6 +78,9 @@ export default async function handler(req: Request): Promise<Response> {
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 })
   }
+
+  const deviceId = req.headers.get('X-Device-Id')
+  if (!deviceId) return jsonResponse({ ok: false, error: 'missing_device_id' }, 400)
 
   let articleId: string
   let userNote: string | null = null
@@ -122,11 +116,19 @@ export default async function handler(req: Request): Promise<Response> {
           args: [{ type: 'text', value: articleId }],
         },
       },
+      {
+        type: 'execute',
+        stmt: {
+          sql: 'SELECT id, notion_page_id FROM saves WHERE article_id = ? AND device_id = ? LIMIT 1',
+          args: [{ type: 'text', value: articleId }, { type: 'text', value: deviceId }],
+        },
+      },
     ])
 
     // tursoPipeline throws on item errors, so any item here is { type: 'ok' }.
     const articleRes = lookup.results[0]
-    if (!articleRes || articleRes.type !== 'ok') {
+    const saveRes = lookup.results[1]
+    if (!articleRes || articleRes.type !== 'ok' || !saveRes || saveRes.type !== 'ok') {
       console.error('[save] Turso lookup unexpected shape')
       return jsonResponse({ ok: false, error: 'db_error' }, 500)
     }
@@ -136,6 +138,15 @@ export default async function handler(req: Request): Promise<Response> {
       return jsonResponse({ ok: false, error: 'article_not_found' }, 404)
     }
     const article = rowToObject(articleRes.response.result.cols, articleRow)
+
+    const existingSaveRow = saveRes.response.result.rows[0]
+    const existingSave = existingSaveRow
+      ? rowToObject(saveRes.response.result.cols, existingSaveRow)
+      : null
+
+    if (existingSave?.notion_page_id) {
+      return jsonResponse({ ok: true, notionSynced: true, notionPageId: existingSave.notion_page_id })
+    }
 
     const articleInput: NotionArticleInput = {
       id: article['id'] ?? articleId,
@@ -152,101 +163,50 @@ export default async function handler(req: Request): Promise<Response> {
       shortJudgment: article['short_judgment'] ?? null,
     }
 
-    const nowSeconds = Math.floor(Date.now() / 1000)
-    const now = String(nowSeconds)
-
-    await tursoPipeline([
-      {
-        type: 'execute',
-        stmt: {
-          sql:
-            'INSERT INTO saves (article_id, user_note, notion_page_id, created_at, updated_at, deleted_at) VALUES (?, ?, NULL, ?, ?, NULL) ' +
-            'ON CONFLICT(article_id) DO UPDATE SET user_note = excluded.user_note, deleted_at = NULL, updated_at = excluded.updated_at',
-          args: [
-            { type: 'text', value: articleId },
-            userNote === null ? { type: 'null' } : { type: 'text', value: userNote },
-            { type: 'integer', value: now },
-            { type: 'integer', value: now },
-          ],
-        },
-      },
-    ])
-
-    const saveLookup = await tursoPipeline([
-      {
-        type: 'execute',
-        stmt: {
-          sql: 'SELECT notion_page_id FROM saves WHERE article_id = ? LIMIT 1',
-          args: [{ type: 'text', value: articleId }],
-        },
-      },
-    ])
-    const saveRes = saveLookup.results[0]
-    if (!saveRes || saveRes.type !== 'ok') {
-      console.error('[save] Save lookup unexpected shape')
-      return jsonResponse({ ok: false, error: 'db_error' }, 500)
-    }
-    const existingSaveRow = saveRes.response.result.rows[0]
-    const existingSave = existingSaveRow
-      ? rowToObject(saveRes.response.result.cols, existingSaveRow)
-      : null
-
-    if (existingSave?.notion_page_id) {
-      return jsonResponse({ ok: true, notionSynced: true, notionPageId: existingSave.notion_page_id })
-    }
-
-    const staleSyncBefore = String(nowSeconds - 10 * 60)
-    const lock = await tursoPipeline([
-      {
-        type: 'execute',
-        stmt: {
-          sql:
-            'UPDATE saves SET notion_syncing_at = ?, updated_at = ? ' +
-            'WHERE article_id = ? AND notion_page_id IS NULL ' +
-            'AND (notion_syncing_at IS NULL OR notion_syncing_at < ?)',
-          args: [
-            { type: 'integer', value: now },
-            { type: 'integer', value: now },
-            { type: 'text', value: articleId },
-            { type: 'integer', value: staleSyncBefore },
-          ],
-        },
-      },
-    ])
-
-    if (affectedCount(lock.results[0]) === 0) {
-      return jsonResponse({ ok: true, notionSynced: false, notionSyncing: true })
-    }
-
     let notionPageId: string | null = null
     let notionSynced = false
     try {
-      const existingPage = await findSavePageByArticleId(articleId)
-      if (existingPage.pageId) {
-        notionPageId = existingPage.pageId
-      } else {
-        const result = await createSavePage({ article: articleInput, userNote })
-        notionPageId = result.pageId
-      }
+      const result = await createSavePage({ article: articleInput, userNote })
+      notionPageId = result.pageId
       notionSynced = true
     } catch (err) {
       console.error('[save] Notion create failed:', err)
     }
 
-    await tursoPipeline([
-      {
-        type: 'execute',
-        stmt: {
-          sql:
-            'UPDATE saves SET notion_page_id = ?, notion_syncing_at = NULL, updated_at = ? WHERE article_id = ?',
-          args: [
-            notionPageId === null ? { type: 'null' } : { type: 'text', value: notionPageId },
-            { type: 'integer', value: String(Math.floor(Date.now() / 1000)) },
-            { type: 'text', value: articleId },
-          ],
+    const now = String(Math.floor(Date.now() / 1000))
+    if (existingSave) {
+      await tursoPipeline([
+        {
+          type: 'execute',
+          stmt: {
+            sql: 'UPDATE saves SET user_note = ?, notion_page_id = ? WHERE article_id = ? AND device_id = ?',
+            args: [
+              userNote === null ? { type: 'null' } : { type: 'text', value: userNote },
+              notionPageId === null ? { type: 'null' } : { type: 'text', value: notionPageId },
+              { type: 'text', value: articleId },
+              { type: 'text', value: deviceId },
+            ],
+          },
         },
-      },
-    ])
+      ])
+    } else {
+      await tursoPipeline([
+        {
+          type: 'execute',
+          stmt: {
+            sql:
+              'INSERT INTO saves (article_id, device_id, user_note, notion_page_id, created_at) VALUES (?, ?, ?, ?, ?)',
+            args: [
+              { type: 'text', value: articleId },
+              { type: 'text', value: deviceId },
+              userNote === null ? { type: 'null' } : { type: 'text', value: userNote },
+              notionPageId === null ? { type: 'null' } : { type: 'text', value: notionPageId },
+              { type: 'integer', value: now },
+            ],
+          },
+        },
+      ])
+    }
 
     return jsonResponse({ ok: true, notionSynced, notionPageId })
   } catch (err) {

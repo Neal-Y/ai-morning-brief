@@ -67,7 +67,7 @@ export const RSS_SOURCES: ReadonlyArray<RssSource> = Object.freeze([
 ]);
 
 export const WINDOW_HOURS = 24;
-export const CLASSIFIER_CAP = 12;      // top-N by keyword score sent to LLM classifier
+export const CLASSIFIER_CAP = 18;      // top-N by keyword score sent to LLM classifier
 export const HARD_TECH_MAX = 2;        // max articles from HARD_TECH_AI bucket
 export const SIGNALS_MAX = 1;          // max articles from IMPORTANT_AI_SIGNALS bucket
 export const BRIEF_MAX = 3;            // hard cap: number of articles per brief

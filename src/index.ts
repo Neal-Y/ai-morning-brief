@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { isNotNull } from 'drizzle-orm';
 import { loadConfig, CLASSIFIER_CAP, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
 import { getTodaysArticles } from './rss/feed.js';
 import { OpenAIProvider } from './ai/openai.js';
@@ -8,8 +9,82 @@ import { classifyArticles, buildPreferenceContext } from './ai/classifier.js';
 import { generateBrief, buildDegradedBrief } from './ai/brief.js';
 import { sendWebPush } from './notify/web-push.js';
 import { writeArticlesToDB } from './notify/db-writer.js';
-import { getRecentFeedback } from './db/client.js';
+import { db, getRecentFeedback } from './db/client.js';
+import type { FeedbackRow } from './db/client.js';
+import { pushSubscriptions } from './db/schema.js';
 import { getTaipeiDateString } from './date.js';
+
+const BUCKET_LABEL: Record<string, string> = {
+  HARD_TECH_AI: 'Hard Tech AI',
+  IMPORTANT_AI_SIGNALS: 'Signals',
+}
+
+/** Adjust classification scores based on per-user feedback history. */
+function applyFeedbackBoost(
+  classified: ClassifiedArticle[],
+  feedbackRows: FeedbackRow[],
+): ClassifiedArticle[] {
+  if (feedbackRows.length === 0) return classified
+  const upCats = new Map<string, number>()
+  const downCats = new Map<string, number>()
+  for (const f of feedbackRows) {
+    if (f.signal === 'up') upCats.set(f.categoryTag, (upCats.get(f.categoryTag) ?? 0) + 1)
+    else downCats.set(f.categoryTag, (downCats.get(f.categoryTag) ?? 0) + 1)
+  }
+  return classified.map((a) => {
+    const cat = a.classification.category
+    const boost = (upCats.get(cat) ?? 0) * 0.5 - (downCats.get(cat) ?? 0) * 0.5
+    if (boost === 0) return a
+    return { ...a, classification: { ...a.classification, score: a.classification.score + boost } }
+  })
+}
+
+/**
+ * Select up to BRIEF_MAX articles from the classified pool for one user.
+ * Applies feedback-based score boost before bucket-ranked selection.
+ */
+function selectForUser(
+  allClassified: ClassifiedArticle[],
+  feedbackRows: FeedbackRow[],
+): ClassifiedArticle[] {
+  const reranked = applyFeedbackBoost(allClassified, feedbackRows)
+  const nonDrop = reranked.filter(
+    (a) => a.classification.bucket !== 'DROP' && a.classification.renderLevel !== 'OMIT',
+  )
+  const byScore = (a: ClassifiedArticle, b: ClassifiedArticle) =>
+    b.classification.score - a.classification.score
+
+  const hardTech = nonDrop
+    .filter((a) => a.classification.bucket === 'HARD_TECH_AI')
+    .sort(byScore)
+    .slice(0, HARD_TECH_MAX)
+  const signalsMax = Math.max(SIGNALS_MAX, BRIEF_MAX - hardTech.length)
+  const signals = nonDrop
+    .filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS')
+    .sort(byScore)
+    .slice(0, signalsMax)
+
+  const primaryCount = hardTech.length + signals.length
+  const fillerCount = BRIEF_MAX - primaryCount
+  const fillers: ClassifiedArticle[] =
+    fillerCount > 0
+      ? reranked
+          .filter((a) => a.classification.bucket === 'DROP')
+          .sort(byScore)
+          .slice(0, fillerCount)
+          .map((a) => ({
+            ...a,
+            classification: {
+              ...a.classification,
+              bucket: 'IMPORTANT_AI_SIGNALS' as const,
+              renderLevel: 'LIGHT' as const,
+              recommendation: 'SKIM' as const,
+            },
+          }))
+      : []
+
+  return [...hardTech, ...signals, ...fillers].slice(0, BRIEF_MAX)
+}
 
 /** Day-of-year (1-based) in Taipei timezone. */
 function getTaipeiDayOfYear(): number {
@@ -143,36 +218,61 @@ async function main(): Promise<void> {
   const bucketSummary = `${nonDrop.filter((a) => a.classification.bucket === 'HARD_TECH_AI').length} HARD_TECH + ${nonDrop.filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS').length} SIGNALS`;
   console.log(`[classifier] Kept ${nonDrop.length}/${toClassify.length} articles — ${bucketSummary}`);
 
-  // ── Stage 3: Rank within each bucket, compose selection ──────────────────
-  const byScore = (a: ClassifiedArticle, b: ClassifiedArticle) =>
-    b.classification.score - a.classification.score;
+  // ── Stage 3: Per-user selection ───────────────────────────────────────────
+  // Fetch all known device IDs from push_subscriptions. When device IDs exist,
+  // each user gets their own top-3 reranked by feedback. The union of all
+  // selections is written to DB and used for brief generation.
+  // When no device IDs exist (legacy / pre-migration state), fall back to the
+  // global selection that was used before multi-user support.
+  let perUserSelections: Map<string, ClassifiedArticle[]> | null = null
+  let selected: ClassifiedArticle[]
 
-  const hardTech = nonDrop
-    .filter((a) => a.classification.bucket === 'HARD_TECH_AI')
-    .sort(byScore)
-    .slice(0, HARD_TECH_MAX);
+  try {
+    const deviceRows = await db
+      .selectDistinct({ deviceId: pushSubscriptions.deviceId })
+      .from(pushSubscriptions)
+      .where(isNotNull(pushSubscriptions.deviceId))
+    const deviceIds = deviceRows.map((r) => r.deviceId).filter((id): id is string => id !== null)
 
-  // SIGNALS fills remaining slots up to BRIEF_MAX
-  const signalsMax = Math.max(SIGNALS_MAX, BRIEF_MAX - hardTech.length);
-  const signals = nonDrop
-    .filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS')
-    .sort(byScore)
-    .slice(0, signalsMax);
+    if (deviceIds.length > 0) {
+      perUserSelections = new Map()
+      for (const deviceId of deviceIds) {
+        let deviceFeedback: FeedbackRow[] = []
+        try {
+          deviceFeedback = await getRecentFeedback(deviceId)
+        } catch (err) {
+          console.warn(`[main] Failed to load feedback for device ${deviceId.slice(0, 8)}…:`, err instanceof Error ? err.message : err)
+        }
+        const userSelected = selectForUser(allClassified, deviceFeedback)
+        perUserSelections.set(deviceId, userSelected)
+        const logFeedback = deviceFeedback.length > 0 ? ` (${deviceFeedback.length} feedback signals)` : ' (no feedback)'
+        console.log(`[main] Device ${deviceId.slice(0, 8)}… → ${userSelected.length} articles${logFeedback}`)
+      }
 
-  // If still under BRIEF_MAX, fill remaining slots with best-scoring DROP articles (renderLevel forced to LIGHT).
-  const primaryCount = hardTech.length + signals.length;
-  const fillerCount = BRIEF_MAX - primaryCount;
-  const fillers: ClassifiedArticle[] = fillerCount > 0
-    ? allClassified
-        .filter((a) => a.classification.bucket === 'DROP')
-        .sort(byScore)
-        .slice(0, fillerCount)
-        .map((a) => ({ ...a, classification: { ...a.classification, bucket: 'IMPORTANT_AI_SIGNALS' as const, renderLevel: 'LIGHT' as const, recommendation: 'SKIM' as const } }))
-    : [];
+      // Union of all users' selections, deduped by URL (article id is DB-side)
+      const seenLinks = new Set<string>()
+      selected = []
+      for (const userArticles of perUserSelections.values()) {
+        for (const a of userArticles) {
+          if (!seenLinks.has(a.link)) {
+            seenLinks.add(a.link)
+            selected.push(a)
+          }
+        }
+      }
+      console.log(`[main] ${perUserSelections.size} users → ${selected.length} unique articles for brief`)
+    } else {
+      console.log('[main] No device IDs found in push_subscriptions — using global selection (fallback)')
+      selected = selectForUser(allClassified, [])
+    }
+  } catch (err) {
+    console.warn('[main] Device ID query failed, falling back to global selection:', err instanceof Error ? err.message : err)
+    selected = selectForUser(allClassified, [])
+  }
 
-  const selected = [...hardTech, ...signals, ...fillers].slice(0, BRIEF_MAX);
-  const fillerLabel = fillers.length > 0 ? ` + ${fillers.length} filler` : '';
-  console.log(`[main] Selected ${hardTech.length} HARD_TECH + ${signals.length} SIGNALS${fillerLabel} for brief (cap ${BRIEF_MAX})`);
+  const globalHardTech = selected.filter((a) => a.classification.bucket === 'HARD_TECH_AI').length
+  const globalSignals = selected.filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS').length
+  console.log(`[main] Selected ${globalHardTech} HARD_TECH + ${globalSignals} SIGNALS for brief (total ${selected.length})`);
 
   // ── Stage 4: Brief generator LLM ─────────────────────────────────────────
   const brief = await generateBrief(provider, selected, date).catch((err) => {
@@ -196,39 +296,55 @@ async function main(): Promise<void> {
   }
 
   // ── Stage 6: Push ────────────────────────────────────────────────────────
-  const displayedItems = brief.sections
-    .flatMap((s) => s.items)
-    .filter((item) => item.renderLevel !== 'OMIT');
-
   // Web Push composition (2026-04-26 redesign):
   //   title = lead story headline (the strongest reason to open)
-  //   body  = lead.engineeringImpact  (the LLM-generated value, was "from Sift")
-  //         + section line with extras count
+  //   body  = lead.engineeringImpact + section line with extras count
   //
-  // iOS shows ~3 body lines, separated by \n. The previous "from Sift" line
-  // duplicated info already conveyed by the app icon and was dropped. The
-  // freed line now carries the lead article's engineering judgment so the
-  // notification reads as a teaser, not just a headline.
-  const lead = displayedItems[0];
-  const leadTitle = lead?.title ?? `AI Morning Brief ${date}`;
-  const sectionLabel: Record<string, string> = {
-    'Hard Tech AI': 'Hard Tech AI',
-    'Important AI Signals': 'Signals',
-  };
-  const activeSections = brief.sections
-    .filter((s) => s.items.some((item) => item.renderLevel !== 'OMIT'))
-    .map((s) => sectionLabel[s.name] ?? s.name);
-  const extraCount = Math.max(0, displayedItems.length - 1);
-  const sectionLine = extraCount > 0
-    ? `${activeSections.join(' · ')} · +${extraCount} 篇`
-    : activeSections.join(' · ');
-  const teaser = lead ? (lead.engineeringImpact || lead.summary || '') : '';
-  const body = teaser ? `${teaser}\n${sectionLine}` : sectionLine;
-  try {
-    await sendWebPush(leadTitle, body);
-  } catch (err) {
-    console.error('[web-push] Failed:', err instanceof Error ? err.message : err);
-    process.exit(1);
+  // In per-user mode: each device gets a push built from THEIR lead article
+  // (the top article from their personal selection), sent only to THEIR
+  // push_subscriptions rows. This prevents the "被詐騙" UX where the
+  // notification headline doesn't match what the user sees in the app.
+  //
+  // Fallback (no device IDs or query failure): global push to all subscriptions.
+
+  function buildPushContent(userArticles: ClassifiedArticle[]): { title: string; body: string } {
+    const lead = userArticles[0]
+    const title = lead?.title ?? `AI Morning Brief ${date}`
+    const teaser = lead ? (lead.classification.engineeringImpact || lead.classification.summary || '') : ''
+    const activeBuckets = [...new Set(userArticles.map((a) => a.classification.bucket))]
+    const activeSectionNames = activeBuckets.map((b) => BUCKET_LABEL[b] ?? b)
+    const extraCount = Math.max(0, userArticles.length - 1)
+    const sectionLine = extraCount > 0
+      ? `${activeSectionNames.join(' · ')} · +${extraCount} 篇`
+      : activeSectionNames.join(' · ')
+    const body = teaser ? `${teaser}\n${sectionLine}` : sectionLine
+    return { title, body }
+  }
+
+  if (perUserSelections && perUserSelections.size > 0) {
+    let pushOk = 0
+    for (const [deviceId, userArticles] of perUserSelections) {
+      const { title, body } = buildPushContent(userArticles)
+      try {
+        await sendWebPush(title, body, deviceId)
+        pushOk++
+      } catch (err) {
+        console.error(`[web-push] Failed for device ${deviceId.slice(0, 8)}…:`, err instanceof Error ? err.message : err)
+      }
+    }
+    if (pushOk === 0) {
+      console.error('[web-push] All per-user pushes failed')
+      process.exit(1)
+    }
+  } else {
+    // Fallback: no per-user device IDs — send to all subscriptions globally
+    const { title, body } = buildPushContent(selected)
+    try {
+      await sendWebPush(title, body)
+    } catch (err) {
+      console.error('[web-push] Failed:', err instanceof Error ? err.message : err)
+      process.exit(1)
+    }
   }
 }
 

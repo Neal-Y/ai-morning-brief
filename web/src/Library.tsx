@@ -3,6 +3,7 @@ import { THEME_DARK, TAG_COLORS } from './theme.ts'
 import { navigate } from './router.ts'
 import { AskSheet } from './components/AskSheet.tsx'
 import type { Article } from './types.ts'
+import { apiFetch } from './api.ts'
 
 const T = THEME_DARK
 // Lighter rule for filter-row separators only — keeps the filter bar visually
@@ -692,7 +693,7 @@ export default function Library() {
 
   useEffect(() => {
     let cancelled = false
-    fetch('/api/library')
+    apiFetch('/api/library')
       .then(async r => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json() as Promise<LibraryResponse>
@@ -732,7 +733,7 @@ export default function Library() {
       : a))
     try {
       if (next) {
-        const res = await fetch('/api/save', {
+        const res = await apiFetch('/api/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ articleId: article.id }),
@@ -743,7 +744,7 @@ export default function Library() {
           ? { ...a, notionSynced: !!data.notionSynced }
           : a))
       } else {
-        const res = await fetch('/api/unsave', {
+        const res = await apiFetch('/api/unsave', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ articleId: article.id }),

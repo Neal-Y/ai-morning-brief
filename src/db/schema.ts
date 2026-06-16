@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core'
+import { sqliteTable, text, integer, unique } from 'drizzle-orm/sqlite-core'
 
 export const articles = sqliteTable('articles', {
   id: text('id').primaryKey(),
@@ -23,28 +23,28 @@ export const feedback = sqliteTable('feedback', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
   articleId: text('article_id').notNull().references(() => articles.id),
   signal: text('signal').notNull(),
+  deviceId: text('device_id'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 })
 
 export const saves = sqliteTable('saves', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
-  articleId: text('article_id').notNull().unique().references(() => articles.id),
+  articleId: text('article_id').notNull().references(() => articles.id),
+  deviceId: text('device_id'),
   userNote: text('user_note'),
   notionPageId: text('notion_page_id'),
-  notionSyncingAt: integer('notion_syncing_at', { mode: 'timestamp' }),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }),
-  deletedAt: integer('deleted_at', { mode: 'timestamp' }),
-})
+}, (table) => ({
+  deviceArticleUnique: unique().on(table.deviceId, table.articleId),
+}))
 
 export const conversations = sqliteTable('conversations', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
-  articleId: text('article_id').notNull().unique().references(() => articles.id),
+  articleId: text('article_id').notNull().references(() => articles.id),
+  deviceId: text('device_id'),
   messages: text('messages').notNull().default('[]'),
-  messageCount: integer('message_count').notNull().default(0),
   model: text('model').notNull().default('haiku'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  updatedAt: integer('updated_at', { mode: 'timestamp' }),
 })
 
 export const quizzes = sqliteTable('quizzes', {
@@ -62,5 +62,6 @@ export const pushSubscriptions = sqliteTable('push_subscriptions', {
   endpoint: text('endpoint').notNull().unique(),
   p256dh: text('p256dh').notNull(),
   auth: text('auth').notNull(),
+  deviceId: text('device_id'),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
 })

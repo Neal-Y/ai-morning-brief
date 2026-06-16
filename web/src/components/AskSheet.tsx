@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Theme } from '../theme.ts'
 import type { Article } from '../types.ts'
+import { apiFetch } from '../api.ts'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -341,7 +342,7 @@ export function AskSheet({
       const controller = new AbortController()
       activeRequestRef.current = controller
 
-      const response = await fetch('/api/ask', {
+      const response = await apiFetch('/api/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,

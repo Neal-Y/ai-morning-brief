@@ -9,6 +9,7 @@ import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
 import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
 import type { Article, FeedResponse } from './types.ts'
+import { apiFetch } from './api.ts'
 
 const FEEDBACK_BAR_BOTTOM = 56
 const FEEDBACK_DOCK_HEIGHT = 112
@@ -91,7 +92,7 @@ export default function App() {
   useEffect(() => {
     const today = getTaipeiDateString()
     setBriefDate(today)
-    fetch(`/api/feed?date=${today}`)
+    apiFetch(`/api/feed?date=${today}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`)
         return r.json() as Promise<FeedResponse>
@@ -133,7 +134,7 @@ export default function App() {
     flyRotRef.current = Math.min(Math.abs(velocity.current.vx) * 30 + 12, 28)
     setSwipeX(signal === 'up' ? 120 : -120)
     setFeedback(f => ({ ...f, [curArticle.id]: signal }))
-    fetch('/api/feedback', {
+    apiFetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ articleId: curArticle.id, signal }),
@@ -150,7 +151,7 @@ export default function App() {
     const next = !prev
     setSaved(s => ({ ...s, [articleId]: next }))
     try {
-      const res = await fetch(next ? '/api/save' : '/api/unsave', {
+      const res = await apiFetch(next ? '/api/save' : '/api/unsave', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ articleId }),

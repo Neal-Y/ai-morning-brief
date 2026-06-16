@@ -47,6 +47,9 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response('Method Not Allowed', { status: 405 })
   }
 
+  const deviceId = req.headers.get('X-Device-Id')
+  if (!deviceId) return jsonResponse({ ok: false, error: 'missing_device_id' }, 400)
+
   let articleId: string
   let signal: 'up' | 'down'
   try {
@@ -69,17 +72,18 @@ export default async function handler(req: Request): Promise<Response> {
       {
         type: 'execute',
         stmt: {
-          sql: 'DELETE FROM feedback WHERE article_id = ?',
-          args: [{ type: 'text', value: articleId }],
+          sql: 'DELETE FROM feedback WHERE article_id = ? AND device_id = ?',
+          args: [{ type: 'text', value: articleId }, { type: 'text', value: deviceId }],
         },
       },
       {
         type: 'execute',
         stmt: {
-          sql: 'INSERT INTO feedback (article_id, signal, created_at) VALUES (?, ?, ?)',
+          sql: 'INSERT INTO feedback (article_id, signal, device_id, created_at) VALUES (?, ?, ?, ?)',
           args: [
             { type: 'text', value: articleId },
             { type: 'text', value: signal },
+            { type: 'text', value: deviceId },
             { type: 'integer', value: now },
           ],
         },
