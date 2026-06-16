@@ -110,14 +110,16 @@ export default async function handler(req: Request): Promise<Response> {
   if (req.method === 'GET') {
     const articleId = parseArticleIdFromUrl(req)
     if (!articleId) return jsonResponse({ ok: false, error: 'invalid_article_id' }, 400)
+    const deviceId = req.headers.get('X-Device-Id')
+    if (!deviceId) return jsonResponse({ ok: false, error: 'missing_device_id' }, 400)
 
     try {
       const lookup = await tursoPipeline([
         {
           type: 'execute',
           stmt: {
-            sql: 'SELECT messages, message_count, updated_at FROM conversations WHERE article_id = ? LIMIT 1',
-            args: [{ type: 'text', value: articleId }],
+            sql: 'SELECT messages, message_count, updated_at FROM conversations WHERE article_id = ? AND device_id = ? LIMIT 1',
+            args: [{ type: 'text', value: articleId }, { type: 'text', value: deviceId }],
           },
         },
       ])
@@ -141,6 +143,9 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   if (req.method === 'POST') {
+    const deviceId = req.headers.get('X-Device-Id')
+    if (!deviceId) return jsonResponse({ ok: false, error: 'missing_device_id' }, 400)
+
     let articleId: string
     let messages: AskMessage[]
     try {
@@ -163,10 +168,11 @@ export default async function handler(req: Request): Promise<Response> {
           type: 'execute',
           stmt: {
             sql:
-              'INSERT INTO conversations (article_id, messages, message_count, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?) ' +
-              'ON CONFLICT(article_id) DO UPDATE SET messages = excluded.messages, message_count = excluded.message_count, model = excluded.model, updated_at = excluded.updated_at',
+              'INSERT INTO conversations (article_id, device_id, messages, message_count, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) ' +
+              'ON CONFLICT(article_id, device_id) DO UPDATE SET messages = excluded.messages, message_count = excluded.message_count, model = excluded.model, updated_at = excluded.updated_at',
             args: [
               { type: 'text', value: articleId },
+              { type: 'text', value: deviceId },
               { type: 'text', value: JSON.stringify(messages) },
               { type: 'integer', value: String(messages.length) },
               { type: 'text', value: 'haiku' },

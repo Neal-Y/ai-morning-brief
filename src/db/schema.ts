@@ -43,9 +43,13 @@ export const conversations = sqliteTable('conversations', {
   articleId: text('article_id').notNull().references(() => articles.id),
   deviceId: text('device_id'),
   messages: text('messages').notNull().default('[]'),
+  messageCount: integer('message_count').notNull().default(0),
   model: text('model').notNull().default('haiku'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-})
+  updatedAt: integer('updated_at', { mode: 'timestamp' }),
+}, (table) => ({
+  deviceArticleUnique: unique().on(table.articleId, table.deviceId),
+}))
 
 export const quizzes = sqliteTable('quizzes', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),

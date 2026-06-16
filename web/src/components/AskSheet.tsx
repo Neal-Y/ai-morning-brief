@@ -262,7 +262,7 @@ export function AskSheet({
   const persistHistory = async (articleId: string, history: ApiMessage[]) => {
     if (history.length === 0) return
     try {
-      const response = await fetch('/api/ask-history', {
+      const response = await apiFetch('/api/ask-history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ articleId, messages: history }),
@@ -294,7 +294,7 @@ export function AskSheet({
     let cancelled = false
     const articleId = article.id
     setHistoryLoading(true)
-    fetch(`/api/ask-history?articleId=${articleId}`)
+    apiFetch(`/api/ask-history?articleId=${articleId}`)
       .then(async response => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`)
         return response.json() as Promise<AskHistoryResponse>
