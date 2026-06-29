@@ -9,3 +9,6 @@ web/dist/
 web/tsconfig.tsbuildinfo
 .DS_Store
 .idea/
+
+# Design reference material from claude.ai handoff — kept locally, not versioned (12MB of images)
+handoff/

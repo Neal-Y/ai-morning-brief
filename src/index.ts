@@ -2,9 +2,8 @@ import 'dotenv/config'
 import { isNotNull } from 'drizzle-orm';
 import { loadConfig, CLASSIFIER_CAP, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
 import { getTodaysArticles } from './rss/feed.js';
-import { OpenAIProvider } from './ai/openai.js';
-import { AnthropicProvider } from './ai/anthropic.js';
 import type { AIProvider, ClassifiedArticle } from './ai/provider.js';
+import { selectProvider } from './ai/select-provider.js';
 import { classifyArticles, buildPreferenceContext } from './ai/classifier.js';
 import { generateBrief, buildDegradedBrief } from './ai/brief.js';
 import { sendWebPush } from './notify/web-push.js';
@@ -84,41 +83,6 @@ function selectForUser(
       : []
 
   return [...hardTech, ...signals, ...fillers].slice(0, BRIEF_MAX)
-}
-
-/** Day-of-year (1-based) in Taipei timezone. */
-function getTaipeiDayOfYear(): number {
-  const now = new Date();
-  const taipeiDateStr = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Taipei',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-  const [year, month, day] = taipeiDateStr.split('-').map(Number) as [number, number, number];
-  const start = new Date(year, 0, 0);
-  const current = new Date(year, month - 1, day);
-  const diff = current.getTime() - start.getTime();
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
-}
-
-function selectProvider(config: ReturnType<typeof loadConfig>): AIProvider {
-  // Single-provider mode
-  if (config.aiProvider === 'openai') return new OpenAIProvider(config.openaiApiKey!);
-  if (config.aiProvider === 'anthropic') return new AnthropicProvider(config.anthropicApiKey!);
-
-  // Alternation mode: even day-of-year → GPT (OpenAI), odd → Claude (Anthropic)
-  const dayOfYear = getTaipeiDayOfYear();
-  const useGPT = dayOfYear % 2 === 0;
-  console.log(`[main] Alternation mode — day ${dayOfYear} → ${useGPT ? 'GPT' : 'Claude'}`);
-
-  if (useGPT) {
-    if (!config.openaiApiKey) throw new Error('AI_PROVIDER=alternate requires OPENAI_API_KEY');
-    return new OpenAIProvider(config.openaiApiKey);
-  } else {
-    if (!config.anthropicApiKey) throw new Error('AI_PROVIDER=alternate requires ANTHROPIC_API_KEY');
-    return new AnthropicProvider(config.anthropicApiKey);
-  }
 }
 
 async function main(): Promise<void> {

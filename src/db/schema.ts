@@ -53,12 +53,22 @@ export const conversations = sqliteTable('conversations', {
 
 export const quizzes = sqliteTable('quizzes', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
-  articleId: text('article_id').notNull().references(() => articles.id),
-  question: text('question').notNull(),
-  answer: text('answer').notNull(),
+  type: text('type').notNull(), // 'single_choice' | 'ordering' | 'matching' | 'fill_blank'
+  category: text('category').notNull(),
+  prompt: text('prompt').notNull(),
+  payload: text('payload').notNull(), // JSON, shape depends on `type` — see src/quiz/types.ts
+  explanation: text('explanation').notNull(),
+  sourceName: text('source_name'),
+  sourceUrl: text('source_url'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
-  lastShownAt: integer('last_shown_at', { mode: 'timestamp' }),
-  userRecall: text('user_recall'),
+})
+
+export const quizAttempts = sqliteTable('quiz_attempts', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
+  quizId: integer('quiz_id').notNull().references(() => quizzes.id),
+  deviceId: text('device_id'),
+  correct: integer('correct', { mode: 'boolean' }).notNull(),
+  answeredAt: integer('answered_at', { mode: 'timestamp' }).notNull(),
 })
 
 export const pushSubscriptions = sqliteTable('push_subscriptions', {

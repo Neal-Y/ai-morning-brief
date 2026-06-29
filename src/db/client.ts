@@ -2,7 +2,7 @@ import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { and, desc, eq, gte } from 'drizzle-orm'
 import * as schema from './schema.js'
-import { articles, feedback } from './schema.js'
+import { articles, feedback, quizzes } from './schema.js'
 
 // Use https:// transport (HTTP requests, not WebSocket) — required for Vercel
 // serverless / edge environments where short-lived WebSocket connections hang.
@@ -55,4 +55,21 @@ export async function getRecentFeedback(deviceId?: string): Promise<FeedbackRow[
 
   if (!deviceId && rows.length < FEEDBACK_MIN_THRESHOLD) return []
   return rows as FeedbackRow[]
+}
+
+export const QUIZ_DEDUP_WINDOW_DAYS = 30
+const QUIZ_DEDUP_MAX_ROWS = 60
+
+/** Recent quiz prompts, used to steer the generator away from repeats. */
+export async function getRecentQuizPrompts(): Promise<string[]> {
+  const windowStart = new Date(Date.now() - QUIZ_DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000)
+
+  const rows = await db
+    .select({ prompt: quizzes.prompt })
+    .from(quizzes)
+    .where(gte(quizzes.createdAt, windowStart))
+    .orderBy(desc(quizzes.createdAt))
+    .limit(QUIZ_DEDUP_MAX_ROWS)
+
+  return rows.map((r) => r.prompt)
 }

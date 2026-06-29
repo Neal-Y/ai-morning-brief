@@ -8,6 +8,7 @@
     { "source": "/api/save", "destination": "/api/save" },
     { "source": "/api/feedback", "destination": "/api/feedback" },
     { "source": "/api/unsave", "destination": "/api/unsave" },
+    { "source": "/api/quiz-attempt", "destination": "/api/quiz-attempt" },
     { "source": "/api/:path*", "destination": "/api/index" },
     { "source": "/:path*", "destination": "/index.html" }
   ]

@@ -17,3 +17,13 @@ export function getTaipeiDateString(date = new Date()): string {
 
   return `${year}-${month}-${day}`
 }
+
+/** Day-of-year (1-based) in Taipei timezone. */
+export function getTaipeiDayOfYear(date = new Date()): number {
+  const taipeiDateStr = getTaipeiDateString(date)
+  const [year, month, day] = taipeiDateStr.split('-').map(Number) as [number, number, number]
+  const start = new Date(year, 0, 0)
+  const current = new Date(year, month - 1, day)
+  const diff = current.getTime() - start.getTime()
+  return Math.floor(diff / (1000 * 60 * 60 * 24))
+}
