@@ -1,4 +1,4 @@
-name: 曉得 Quiz Generator
+name: Quiz Generator
 
 on:
   schedule:
