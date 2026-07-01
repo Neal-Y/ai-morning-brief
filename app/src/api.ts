@@ -1,7 +1,8 @@
 import Constants from 'expo-constants'
+import { fetch as expoFetch } from 'expo/fetch'
 import { getDeviceId } from './device'
 
-const PROD_BASE = 'https://ai-morning-brief.vercel.app'
+const PROD_BASE = 'https://ai-morning-brief-chi.vercel.app'
 const DEV_API_PORT = 3001
 
 /**
@@ -54,6 +55,66 @@ export async function fetchQuizzes(count = 5): Promise<RawQuizItem[]> {
   if (!res.ok) throw new Error(`fetchQuizzes failed: ${res.status}`)
   const data = (await res.json()) as { quizzes: RawQuizItem[] }
   return data.quizzes
+}
+
+export interface AskMessage {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface AskContext {
+  title: string
+  summary: string
+  context: string
+}
+
+/**
+ * Stream a follow-up answer from /api/ask (Haiku SSE). Uses expo/fetch because
+ * RN's global fetch can't read a streaming response body — expo/fetch exposes
+ * response.body as a ReadableStream. `onDelta` fires per text chunk.
+ */
+export async function streamAsk(
+  ctx: AskContext,
+  messages: AskMessage[],
+  onDelta: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const deviceId = await getDeviceId()
+  // /api/ask is an Edge function — it only exists on Vercel, never on the local
+  // Hono dev server. Always hit prod (in a production build API_BASE === PROD_BASE).
+  const res = await expoFetch(`${PROD_BASE}/api/ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Device-Id': deviceId },
+    body: JSON.stringify({
+      articleTitle: ctx.title,
+      articleSummary: ctx.summary,
+      articleContext: ctx.context,
+      messages,
+    }),
+    signal,
+  })
+  if (!res.ok || !res.body) throw new Error(`ask failed: ${res.status}`)
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue
+      const raw = line.slice(6)
+      if (raw === '[DONE]') continue
+      try {
+        onDelta(JSON.parse(raw) as string)
+      } catch {
+        // skip malformed chunk
+      }
+    }
+  }
 }
 
 /** Fire-and-forget — a failed attempt log must never block the quiz flow. */

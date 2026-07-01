@@ -1,8 +1,9 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { FONT, RADIUS, T, XP } from '../theme'
 import { FadeInDown } from './Reveal'
 import { PaperButton } from './PaperButton'
+import { AskSheet } from './AskSheet'
 
 export interface AnswerAreaApi {
   resolved: boolean
@@ -37,6 +38,7 @@ export function QuizFrame({
 }: Props) {
   const [resolved, setResolved] = useState(false)
   const [correct, setCorrect] = useState(false)
+  const [askOpen, setAskOpen] = useState(false)
 
   const fly = useRef(new Animated.Value(0)).current
   const flyStyle = {
@@ -93,12 +95,19 @@ export function QuizFrame({
             <Text style={styles.pillText}>{category}</Text>
           </View>
           <Text style={styles.prompt}>{prompt}</Text>
-          {source && (
-            <View style={styles.sourceRow}>
-              <View style={styles.sourceDot} />
-              <Text style={styles.sourceText}>{source.name}</Text>
-            </View>
-          )}
+          <View style={styles.metaRow}>
+            {source ? (
+              <View style={styles.sourceRow}>
+                <View style={styles.sourceDot} />
+                <Text style={styles.sourceText}>{source.name}</Text>
+              </View>
+            ) : (
+              <View />
+            )}
+            <Pressable style={styles.askBtn} onPress={() => setAskOpen(true)}>
+              <Text style={styles.askText}>💬 追問</Text>
+            </Pressable>
+          </View>
 
           <View style={styles.answerArea}>{children({ resolved, resolve })}</View>
 
@@ -128,6 +137,12 @@ export function QuizFrame({
           <PaperButton label={isLast ? '完成今日' : '下一題'} onPress={() => onNext(correct)} />
         </FadeInDown>
       )}
+
+      <AskSheet
+        visible={askOpen}
+        onClose={() => setAskOpen(false)}
+        context={{ title: prompt, summary: explanation, context: category }}
+      />
     </View>
   )
 }
@@ -174,9 +189,23 @@ const styles = StyleSheet.create({
   },
   pillText: { fontFamily: FONT.monoBold, fontSize: 11, letterSpacing: 1.2, color: T.accent },
   prompt: { fontFamily: FONT.black, fontSize: 25, lineHeight: 36, letterSpacing: -0.2, color: T.text },
-  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 12 },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   sourceDot: { width: 6, height: 6, borderRadius: 999, backgroundColor: T.textFaint },
   sourceText: { fontFamily: FONT.mono, fontSize: 12, color: T.textMuted },
+  askBtn: {
+    borderWidth: 1,
+    borderColor: T.border,
+    borderRadius: RADIUS.pill,
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+  },
+  askText: { fontFamily: FONT.monoMed, fontSize: 12, color: T.textMuted },
   answerArea: { marginTop: 20 },
   feedback: { marginTop: 16, borderRadius: RADIUS.card, padding: 16 },
   feedbackHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
