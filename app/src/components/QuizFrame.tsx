@@ -1,5 +1,6 @@
 import { useRef, useState, type ReactNode } from 'react'
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View, type ScrollView as ScrollViewType } from 'react-native'
+import { Feather } from '@expo/vector-icons'
 import { FONT, RADIUS, T, XP } from '../theme'
 import { FadeInDown } from './Reveal'
 import { PaperButton } from './PaperButton'
@@ -40,6 +41,7 @@ export function QuizFrame({
   const [correct, setCorrect] = useState(false)
   const [askOpen, setAskOpen] = useState(false)
 
+  const scrollRef = useRef<ScrollViewType>(null)
   const fly = useRef(new Animated.Value(0)).current
   const flyStyle = {
     opacity: fly,
@@ -57,6 +59,8 @@ export function QuizFrame({
         Animated.timing(fly, { toValue: 0, duration: 780, useNativeDriver: true }),
       ]).start()
     }
+    // scroll to reveal explanation after a short delay (let FadeInDown start first)
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 300)
   }
 
   return (
@@ -86,8 +90,9 @@ export function QuizFrame({
       </Text>
 
       <ScrollView
+        ref={scrollRef}
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[styles.scrollContent, resolved && { paddingBottom: 100 }]}
         showsVerticalScrollIndicator={false}
       >
         <FadeInDown key={id} duration={450}>
@@ -105,7 +110,8 @@ export function QuizFrame({
               <View />
             )}
             <Pressable style={styles.askBtn} onPress={() => setAskOpen(true)}>
-              <Text style={styles.askText}>💬 追問</Text>
+              <Feather name="message-square" size={12} color={T.textMuted} />
+              <Text style={styles.askText}>追問</Text>
             </Pressable>
           </View>
 
@@ -199,6 +205,9 @@ const styles = StyleSheet.create({
   sourceDot: { width: 6, height: 6, borderRadius: 999, backgroundColor: T.textFaint },
   sourceText: { fontFamily: FONT.mono, fontSize: 12, color: T.textMuted },
   askBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     borderWidth: 1,
     borderColor: T.border,
     borderRadius: RADIUS.pill,

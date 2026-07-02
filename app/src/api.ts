@@ -35,6 +35,69 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${API_BASE}${path}`, { ...init, headers })
 }
 
+export async function fetchFeed(date: string): Promise<import('./types').Article[]> {
+  const res = await apiFetch(`/api/feed?date=${date}`)
+  if (!res.ok) throw new Error(`fetchFeed failed: ${res.status}`)
+  const json = await res.json() as import('./types').FeedResponse
+  return json.articles.map((a) => ({
+    ...a,
+    skillTags: typeof a.skillTags === 'string'
+      ? (a.skillTags ? a.skillTags.split(',').map((s) => s.trim()) : [])
+      : [],
+  }))
+}
+
+export interface LibraryArticle {
+  id: string
+  url: string
+  title: string
+  summary: string
+  context: string
+  engineeringImpact: string
+  reason: string
+  shortJudgment: string | null
+  categoryTag: string
+  skillTags: string
+  renderLevel: 'FULL' | 'LIGHT' | 'OMIT'
+  score: number
+  source: string | null
+  briefDate: string
+  feedback: 'up' | 'down' | null
+  saved: boolean
+  notionSynced: boolean
+}
+
+export async function fetchLibrary(): Promise<LibraryArticle[]> {
+  const res = await apiFetch('/api/library')
+  if (!res.ok) throw new Error(`fetchLibrary failed: ${res.status}`)
+  const json = await res.json() as { articles: LibraryArticle[] }
+  return json.articles
+}
+
+export async function unsaveArticle(articleId: string): Promise<void> {
+  await apiFetch('/api/unsave', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ articleId }),
+  })
+}
+
+export async function postFeedback(articleId: string, value: 1 | -1): Promise<void> {
+  await apiFetch('/api/feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ articleId, value }),
+  })
+}
+
+export async function saveArticle(articleId: string): Promise<void> {
+  await apiFetch('/api/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ articleId }),
+  })
+}
+
 export interface RawQuizItem {
   id: number
   type: string
