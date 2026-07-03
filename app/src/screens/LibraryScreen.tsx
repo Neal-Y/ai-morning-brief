@@ -252,6 +252,7 @@ export function LibraryScreen() {
         <AskSheet
           visible
           onClose={() => setAskTarget(null)}
+          articleId={askTarget.id}
           context={{ title: askTarget.title, summary: askTarget.summary, context: askTarget.context }}
         />
       )}

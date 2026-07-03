@@ -180,6 +180,29 @@ export async function streamAsk(
   }
 }
 
+export async function fetchAskHistory(articleId: string): Promise<AskMessage[]> {
+  try {
+    const res = await apiFetch(`/api/ask-history?articleId=${encodeURIComponent(articleId)}`)
+    if (!res.ok) return []
+    const json = await res.json() as { messages: AskMessage[]; messageCount: number }
+    return json.messages ?? []
+  } catch {
+    return []
+  }
+}
+
+export async function saveAskHistory(articleId: string, messages: AskMessage[]): Promise<void> {
+  try {
+    await apiFetch('/api/ask-history', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ articleId, messages, messageCount: messages.length }),
+    })
+  } catch {
+    // silent failure — history save must never block the user
+  }
+}
+
 /** Fire-and-forget — a failed attempt log must never block the quiz flow. */
 export async function submitQuizAttempt(quizId: number, correct: boolean): Promise<void> {
   try {

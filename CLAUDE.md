@@ -1,6 +1,6 @@
 # AI Morning Brief
 
-每日自動化技術情報系統：RSS → LLM 分析 → Turso DB → Web PWA。
+每日自動化技術情報系統：RSS → LLM 分析 → Turso DB → React Native App + Web PWA。
 
 ## 回話風格（節省 token）
 
@@ -10,7 +10,7 @@
 ## TL;DR（新 session 先看這段）
 
 - 整條 pipeline 已上線：GitHub Actions 每天 07:30 台北時間跑 → 寫 Turso DB → **Web Push** 推播。
-- Vercel 部署完成：`ai-morning-brief.vercel.app`（Hono API + React PWA + Edge Runtime functions）。
+- Vercel 部署完成：`ai-morning-brief-chi.vercel.app`（Hono API + React PWA + Edge Runtime functions）。
 - **ntfy 已淘汰**（2026-04-25），現在唯一推播管道是 Web Push（VAPID + iOS standalone PWA）。
 - 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`；現在 SW (`web/public/sw.js`) 是真正的 push handler（`push` + `notificationclick` events，無 fetch cache）。
 - **iPhone standalone PWA footer gap 已收斂（2026-04-28）**：最終解是延伸 root height 到 `100dvh + safe-area-inset-bottom`，再把 bottom dock 作為 extended root 內的 absolute layer。不要回到 fixed footer / negative safe-area offset；細節見 `docs/FRONTEND_FIX_LOG.md` Issue 6。
@@ -52,6 +52,15 @@ React PWA (web/)
   ├─ /library   全歷史頁：所有歷史 tab（filter + 日期分組 + 展開 LLM 四段） / 收藏 tab（Notion sync stats）
   ├─ pathname routing：web/src/main.tsx 監聽 popstate，web/src/router.ts navigate() helper
   └─ Splash gate：iOS standalone 第一次開啟 → 請求 notification permission → 寫 subscription
+
+React Native App (app/) — 取代 PWA 的原生 iOS app
+  ├─ 三分頁（bottom tab）：Quiz（今日題目）/ Feed（簡報）/ Library
+  ├─ QuizScreen   — 每日 quiz 題組（single_choice / ordering / matching / fill_blank）
+  ├─ FeedScreen   — 滑卡瀏覽今日文章；swipe right=有用 / left=略過；💬 AskSheet / 🔖 save
+  ├─ LibraryScreen — 全歷史 + 收藏 tab（呼叫 /api/library）
+  ├─ src/api.ts   — 自動偵測 Metro host（dev LAN）或 fallback 到 prod；quiz-attempt / ask SSE（expo/fetch）
+  ├─ src/theme.ts — T / FONT / RADIUS 設計 token（鏡像 web/ dark theme）
+  └─ src/device.ts — AsyncStorage device UUID（X-Device-Id header）
 ```
 
 ---
@@ -71,6 +80,7 @@ React PWA (web/)
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
 | 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful；2026-05-06 加 dedupe（Notion Article ID lookup + DB sync lock）+ unsave 改 soft-hide（規則見 Conventions Pipeline/DB） |
 | Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。2026-04-27 Vercel preview 真機驗證完成 |
+| React Native App | ⏳ 開發中 | Expo SDK 54，Expo Go 開發，TestFlight 為目標 |
 | Quiz 生成 | ⏳ 未做 | `quizzes` table 已建 schema |
 | 晨間 Recall Quiz | ⏳ 未做 | 需先有 quiz 資料 |
 | Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
@@ -147,6 +157,20 @@ web/
     Card.tsx · Chrome.tsx · AskSheet.tsx · Celebration.tsx
   src/{date,theme,types}.ts · index.css
   vite.config.ts
+app/                     # React Native app（Expo SDK 54）
+  App.tsx                # 根元件：字型載入 + bottom tab navigator（Quiz/Feed/Library）
+  package.json           # expo ^54, react-native 0.81, @expo-google-fonts/*
+  src/
+    api.ts               # fetch wrapper（Metro host 自動偵測 dev / prod fallback）
+    theme.ts             # T / FONT / RADIUS 設計 token（鏡像 web/ dark theme）
+    device.ts            # AsyncStorage device UUID（X-Device-Id header）
+    types.ts             # Article / FeedResponse 等共用型別
+    data.ts              # 靜態資料 / mock helpers
+    screens/
+      QuizScreen.tsx     # 今日題目分頁
+      FeedScreen.tsx     # 簡報分頁：swipe 卡片 + AskSheet + save
+      LibraryScreen.tsx  # Library 分頁：全歷史 + 收藏 tab
+    components/          # ArticleCard / AskSheet / DotGrid 等 RN 元件
 scripts/seed.ts
 docs/
   PROPOSAL.md                       # V1 spec
@@ -170,6 +194,10 @@ npm run dev:api        # Hono API server (port 3001)
 
 # Web
 cd web && npm run dev  # Vite dev (port 5173, proxy → 3001)
+
+# React Native App
+cd app && npx expo start   # Expo Go 開發（Metro bundler，LAN IP 自動偵測）
+cd app && npx expo start --ios   # iOS Simulator
 
 # DB
 npm run db:seed        # 3 篇假文章（今日日期）
@@ -256,6 +284,20 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `Notification.permission` 已是 `granted` 時，App startup useEffect 會自動 call `completeSubscription()` 補寫 `push_subscriptions`（fire-and-forget，使用者無感）。
 - 當天有文章：通知標題 = `displayedItems[0].title`（lead story），body 兩行：第 1 行 = lead 文章的 `engineeringImpact`（讓 LLM 生的判斷上鎖屏，不只是頭條），第 2 行 = active section labels + 額外篇數（例：`Hard Tech AI · Signals · +2 篇`）。當天無文章：標題 = `AI Morning Brief {date}`、body = `今日無重大 AI 新聞`。
 - 通知格式 2026-04-26 重做過一次：拿掉「from Sift」（icon 已表示來源）、`／` 改 `·`、釋出空間放 lead 的 `engineeringImpact`。看 `src/index.ts` Stage 6 的 comment，不要回退。
+
+---
+
+## React Native App (app/)
+
+- **Expo SDK 54**，以 Expo Go 開發；目標發佈路徑是 TestFlight（EAS Build）
+- **三分頁 bottom tab**：Quiz（✦ 今日題目）/ Feed（◎ 簡報）/ Library（⊟）
+- **字型**：NotoSansTC 400/500/700/900 + JetBrains Mono 400/500/700，由 `@expo-google-fonts` 載入；App.tsx 等字型就緒才渲染
+- **主題**：`src/theme.ts` 匯出 `T`（色彩）/ `FONT`（字型 key）/ `RADIUS`；刻意鏡像 web/ dark theme，讓兩個 client 視覺一致
+- **API**：`src/api.ts` 用 `Constants.expoConfig.hostUri` 自動抓 Metro LAN IP（dev），production build 固定走 `https://ai-morning-brief-chi.vercel.app`；也可在 `app/.env` 設 `EXPO_PUBLIC_API_BASE_URL` 強制覆蓋
+- **SSE 追問**：`streamAsk()` 改用 `expo/fetch`（RN 原生 fetch 無法讀 streaming body）；Edge `/api/ask` 只存在於 Vercel，本地 dev server 沒有，開發時直接打 prod
+- **Device ID**：`src/device.ts` 用 AsyncStorage 生成 UUID，每次 fetch 帶 `X-Device-Id` header（對齊 web 的 device_id 機制）
+- **Quiz 互動類型**：`single_choice` / `ordering` / `matching` / `fill_blank`（`api/quiz-attempt.ts` 記錄作答結果）
+- **不要**在 app/ 加 SW、manifest、VAPID 相關邏輯 — push 仍由 web/ PWA 負責
 
 ---
 

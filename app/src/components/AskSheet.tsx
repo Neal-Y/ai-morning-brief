@@ -15,7 +15,7 @@ import {
 } from 'react-native'
 import Markdown from 'react-native-markdown-display'
 import { FONT, RADIUS, T } from '../theme'
-import { streamAsk, type AskContext, type AskMessage } from '../api'
+import { fetchAskHistory, saveAskHistory, streamAsk, type AskContext, type AskMessage } from '../api'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -25,6 +25,7 @@ interface Message {
 interface Props {
   visible: boolean
   onClose: () => void
+  articleId: string
   context: AskContext
 }
 
@@ -37,7 +38,7 @@ const SUGGESTIONS = [
 
 const SCREEN_H = Dimensions.get('window').height
 
-export function AskSheet({ visible, onClose, context }: Props) {
+export function AskSheet({ visible, onClose, articleId, context }: Props) {
   const [mounted, setMounted] = useState(false)
   const [messages, setMessages] = useState<Message[]>([INTRO])
   const [history, setHistory] = useState<AskMessage[]>([])
@@ -53,6 +54,12 @@ export function AskSheet({ visible, onClose, context }: Props) {
     if (visible) {
       setMounted(true)
       Animated.timing(anim, { toValue: 1, duration: 300, useNativeDriver: true }).start()
+      fetchAskHistory(articleId).then((hist) => {
+        if (hist.length > 0) {
+          setHistory(hist)
+          setMessages(hist.map((m) => ({ role: m.role, text: m.content })))
+        }
+      }).catch(() => {})
     } else if (mounted) {
       abortRef.current?.abort()
       Animated.timing(anim, { toValue: 0, duration: 240, useNativeDriver: true }).start(() => {
@@ -63,7 +70,7 @@ export function AskSheet({ visible, onClose, context }: Props) {
         setLoading(false)
       })
     }
-  }, [visible, mounted, anim])
+  }, [visible, mounted, anim, articleId])
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
@@ -98,7 +105,9 @@ export function AskSheet({ visible, onClose, context }: Props) {
         },
         controller.signal,
       )
-      setHistory([...nextHistory, { role: 'assistant', content: streamedRef.current }])
+      const fullHistory: AskMessage[] = [...nextHistory, { role: 'assistant', content: streamedRef.current }]
+      setHistory(fullHistory)
+      saveAskHistory(articleId, fullHistory).catch(() => {})
     } catch (err) {
       if ((err as Error)?.name === 'AbortError') return
       console.error('[AskSheet] stream error:', err)

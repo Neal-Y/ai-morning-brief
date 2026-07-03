@@ -200,6 +200,7 @@ export function FeedScreen() {
         <AskSheet
           visible={askOpen}
           onClose={() => setAskOpen(false)}
+          articleId={current.id}
           context={{ title: current.title, summary: current.summary, context: current.context }}
         />
       )}

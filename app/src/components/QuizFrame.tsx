@@ -147,6 +147,7 @@ export function QuizFrame({
       <AskSheet
         visible={askOpen}
         onClose={() => setAskOpen(false)}
+        articleId={`quiz-${id}`}
         context={{ title: prompt, summary: explanation, context: category }}
       />
     </View>
