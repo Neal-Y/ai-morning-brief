@@ -86,7 +86,7 @@ export async function postFeedback(articleId: string, value: 1 | -1): Promise<vo
   await apiFetch('/api/feedback', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ articleId, value }),
+    body: JSON.stringify({ articleId, signal: value === 1 ? 'up' : 'down' }),
   })
 }
 
