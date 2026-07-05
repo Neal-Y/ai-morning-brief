@@ -6,7 +6,7 @@ import type { QuizType } from './types.js'
 
 const VALID_TYPES = new Set<QuizType>(['single_choice', 'ordering', 'matching', 'fill_blank'])
 
-export const QUIZ_SYSTEM = `You are a quiz writer for "曉得 Quiz" — a daily quiz app for backend / infrastructure engineers.
+export const QUIZ_SYSTEM = `You are a quiz writer for a daily quiz app for backend / infrastructure engineers.
 
 Your job is to write quiz questions that test backend engineering "sense": the kind of
 judgment a working backend/infra engineer should have. Cover topics like system design,

@@ -57,7 +57,7 @@ export async function getRecentFeedback(deviceId?: string): Promise<FeedbackRow[
   return rows as FeedbackRow[]
 }
 
-export const QUIZ_DEDUP_WINDOW_DAYS = 30
+const QUIZ_DEDUP_WINDOW_DAYS = 30
 const QUIZ_DEDUP_MAX_ROWS = 60
 
 /** Recent quiz prompts, used to steer the generator away from repeats. */

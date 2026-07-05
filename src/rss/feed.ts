@@ -32,7 +32,7 @@ export interface FeedResult {
   sourceTotal: number;
 }
 
-export function isValidArticleUrl(url: string): boolean {
+function isValidArticleUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     return parsed.protocol === 'https:' || parsed.protocol === 'http:';
@@ -41,7 +41,7 @@ export function isValidArticleUrl(url: string): boolean {
   }
 }
 
-export async function fetchAllFeeds(): Promise<FeedResult> {
+async function fetchAllFeeds(): Promise<FeedResult> {
   const sourceTotal = RSS_SOURCES.length;
   const results = await Promise.allSettled(
     RSS_SOURCES.map((source) => fetchFeed(source.name, source.url, source.tier))
@@ -87,7 +87,7 @@ async function fetchFeed(
     }));
 }
 
-export function filterLast24h(articles: ArticleSummary[], now: Date = new Date()): ArticleSummary[] {
+function filterLast24h(articles: ArticleSummary[], now: Date = new Date()): ArticleSummary[] {
   const cutoff = now.getTime() - WINDOW_HOURS * 60 * 60 * 1000;
   return articles.filter((article) => {
     if (!article.pubDate) return false;
@@ -108,7 +108,7 @@ function scoreKeywords(text: string, weights: Readonly<Record<string, number>>):
   return total;
 }
 
-export function scoreArticle(article: ArticleSummary): number {
+function scoreArticle(article: ArticleSummary): number {
   const text = `${article.title} ${article.contentSnippet}`.toLowerCase();
   const positive = scoreKeywords(text, KEYWORD_WEIGHTS);
   const negative = scoreKeywords(text, NEGATIVE_KEYWORD_WEIGHTS);
@@ -116,7 +116,7 @@ export function scoreArticle(article: ArticleSummary): number {
   return positive + negative + tierBonus;
 }
 
-export function prefilter(articles: ArticleSummary[]): ArticleSummary[] {
+function prefilter(articles: ArticleSummary[]): ArticleSummary[] {
   return articles.filter((a) => a.score > PREFILTER_MIN_SCORE);
 }
 
