@@ -1,7 +1,7 @@
 import type { AIProvider, ArticleSummary, ArticleClassification, Category, Bucket, Recommendation, RenderLevel } from './provider.js';
 import { extractJson } from './provider.js';
 import { withRetry } from './retry.js';
-import { RETRY_DELAY_MS } from '../config.js';
+import { RETRY_DELAY_MS, CLASSIFIER_CONCURRENCY } from '../config.js';
 import type { FeedbackRow } from '../db/client.js';
 import { FEEDBACK_WINDOW_DAYS } from '../db/client.js';
 
@@ -240,7 +240,7 @@ function parseClassification(raw: string): ArticleClassification {
 
   return {
     category: (VALID_CATEGORIES.has(category) ? category : 'company-market') as Category,
-    bucket: (VALID_BUCKETS.has(bucket) ? bucket : 'IMPORTANT_AI_SIGNALS') as Bucket,
+    bucket: (VALID_BUCKETS.has(bucket) ? bucket : 'DROP') as Bucket,
     renderLevel: resolvedRenderLevel,
     recommendation: (VALID_RECOMMENDATIONS.has(recommendation) ? recommendation : 'SKIM') as Recommendation,
     summary: String(obj['summary'] ?? '').slice(0, 60),
@@ -266,13 +266,13 @@ async function classifyOne(
 
 const FALLBACK_CLASSIFICATION: ArticleClassification = {
   category: 'company-market',
-  bucket: 'IMPORTANT_AI_SIGNALS',
-  renderLevel: 'LIGHT',
-  recommendation: 'SKIM',
+  bucket: 'DROP',
+  renderLevel: 'OMIT',
+  recommendation: 'SKIP',
   summary: '分類失敗，已設為預設',
   engineeringImpact: '工程直接價值低',
   reason: 'Classifier failed',
-  score: 40,
+  score: 0,
 };
 
 /** Run at most `limit` concurrent promises at a time. */
@@ -298,10 +298,6 @@ async function withConcurrency<T>(
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   return results;
 }
-
-// Both OpenAI and Anthropic free-tier TPM limit is ~30k tokens/min.
-// Concurrency 5 hits the limit consistently — 3 stays safely under.
-const CLASSIFIER_CONCURRENCY = 3;
 
 export async function classifyArticles(
   provider: AIProvider,

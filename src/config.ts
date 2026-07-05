@@ -67,6 +67,9 @@ export const RSS_SOURCES: ReadonlyArray<RssSource> = Object.freeze([
 ]);
 
 export const WINDOW_HOURS = 24;
+// Both OpenAI and Anthropic free-tier TPM limit is ~30k tokens/min.
+// Concurrency 5 hits the limit consistently — 3 stays safely under.
+export const CLASSIFIER_CONCURRENCY = 3;
 export const CLASSIFIER_CAP = 18;      // top-N by keyword score sent to LLM classifier
 export const HARD_TECH_MAX = 2;        // max articles from HARD_TECH_AI bucket
 export const SIGNALS_MAX = 1;          // max articles from IMPORTANT_AI_SIGNALS bucket
