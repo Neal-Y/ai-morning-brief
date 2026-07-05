@@ -1,4 +1,4 @@
-import { createSavePage, type NotionArticleInput } from '../src/notion/client.js'
+import { createSavePage, findSavePageByArticleId, type NotionArticleInput } from '../src/notion/client.js'
 
 export const config = { runtime: 'edge' }
 
@@ -145,6 +145,21 @@ export default async function handler(req: Request): Promise<Response> {
       : null
 
     if (existingSave?.notion_page_id) {
+      // Row exists and already has a Notion page — just un-hide (clear deleted_at) and return.
+      // Must clear deleted_at here; otherwise a previously unsaved article stays hidden in Library.
+      await tursoPipeline([
+        {
+          type: 'execute',
+          stmt: {
+            sql: 'UPDATE saves SET deleted_at = NULL, user_note = ? WHERE article_id = ? AND device_id = ?',
+            args: [
+              userNote === null ? { type: 'null' } : { type: 'text', value: userNote },
+              { type: 'text', value: articleId },
+              { type: 'text', value: deviceId },
+            ],
+          },
+        },
+      ])
       return jsonResponse({ ok: true, notionSynced: true, notionPageId: existingSave.notion_page_id })
     }
 
@@ -166,9 +181,18 @@ export default async function handler(req: Request): Promise<Response> {
     let notionPageId: string | null = null
     let notionSynced = false
     try {
-      const result = await createSavePage({ article: articleInput, userNote })
-      notionPageId = result.pageId
-      notionSynced = true
+      // Third dedup layer: check Notion directly in case a prior session created a
+      // page but didn't record notion_page_id back to the saves row (e.g., crash or
+      // race). If found, reuse the existing page instead of creating a duplicate.
+      const existing = await findSavePageByArticleId(articleId)
+      if (existing.pageId) {
+        notionPageId = existing.pageId
+        notionSynced = true
+      } else {
+        const result = await createSavePage({ article: articleInput, userNote })
+        notionPageId = result.pageId
+        notionSynced = true
+      }
     } catch (err) {
       console.error('[save] Notion create failed:', err)
     }
@@ -179,7 +203,7 @@ export default async function handler(req: Request): Promise<Response> {
         {
           type: 'execute',
           stmt: {
-            sql: 'UPDATE saves SET user_note = ?, notion_page_id = ? WHERE article_id = ? AND device_id = ?',
+            sql: 'UPDATE saves SET user_note = ?, notion_page_id = ?, deleted_at = NULL WHERE article_id = ? AND device_id = ?',
             args: [
               userNote === null ? { type: 'null' } : { type: 'text', value: userNote },
               notionPageId === null ? { type: 'null' } : { type: 'text', value: notionPageId },
