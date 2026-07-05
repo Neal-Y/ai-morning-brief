@@ -120,6 +120,20 @@ export async function fetchQuizzes(count = 5): Promise<RawQuizItem[]> {
   return data.quizzes
 }
 
+export interface ActivityData {
+  streak: number
+  totalCorrect: number
+  weekStats: { correct: number; wrong: number; total: number }
+  heatmap: number[][]
+  recent: { date: string; category: string; correct: number; total: number }[]
+}
+
+export async function fetchActivity(): Promise<ActivityData> {
+  const res = await apiFetch('/api/activity')
+  if (!res.ok) throw new Error(`fetchActivity failed: ${res.status}`)
+  return res.json() as Promise<ActivityData>
+}
+
 export interface AskMessage {
   role: 'user' | 'assistant'
   content: string
@@ -203,12 +217,14 @@ export async function saveAskHistory(articleId: string, messages: AskMessage[]):
   }
 }
 
-/** Fire-and-forget — a failed attempt log must never block the quiz flow. */
+/** Fire-and-forget — a failed attempt log must never block the quiz flow.
+ *  Always hits prod: /api/quiz-attempt is a Vercel Edge function, not on the local Hono server. */
 export async function submitQuizAttempt(quizId: number, correct: boolean): Promise<void> {
   try {
-    const res = await apiFetch('/api/quiz-attempt', {
+    const deviceId = await getDeviceId()
+    const res = await fetch(`${PROD_BASE}/api/quiz-attempt`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Device-Id': deviceId },
       body: JSON.stringify({ quizId, correct }),
     })
     if (!res.ok) console.warn(`[api] submitQuizAttempt non-ok status: ${res.status}`)

@@ -19,6 +19,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { QuizScreen } from './src/screens/QuizScreen'
 import { FeedScreen } from './src/screens/FeedScreen'
 import { LibraryScreen } from './src/screens/LibraryScreen'
+import { ActivityScreen } from './src/screens/ActivityScreen'
 import { T, FONT } from './src/theme'
 
 const Tab = createBottomTabNavigator()
@@ -27,6 +28,7 @@ const TAB_ICONS: Record<string, string> = {
   Quiz: '✦',
   Feed: '◎',
   Library: '⊟',
+  Activity: '◈',
 }
 
 export default function App() {
@@ -74,6 +76,7 @@ export default function App() {
             <Tab.Screen name="Quiz" component={QuizScreen} options={{ tabBarLabel: '今日題目' }} />
             <Tab.Screen name="Feed" component={FeedScreen} options={{ tabBarLabel: '簡報' }} />
             <Tab.Screen name="Library" component={LibraryScreen} options={{ tabBarLabel: 'Library' }} />
+            <Tab.Screen name="Activity" component={ActivityScreen} options={{ tabBarLabel: '紀錄' }} />
           </Tab.Navigator>
         </NavigationContainer>
       </SafeAreaProvider>
