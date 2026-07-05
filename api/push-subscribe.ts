@@ -23,11 +23,15 @@ export default async function handler(req: Request): Promise<Response> {
 
   try {
     const deviceId = req.headers.get('X-Device-Id')
-    if (!deviceId) return jsonResponse({ ok: false }, 400)
+    if (!deviceId) return jsonResponse({ ok: false, error: 'missing_device_id' }, 400)
 
     const { endpoint, keys } = (await req.json()) as {
       endpoint: string
       keys: { p256dh: string; auth: string }
+    }
+
+    if (!endpoint || !keys?.p256dh || !keys?.auth) {
+      return jsonResponse({ ok: false, error: 'invalid_subscription' }, 400)
     }
 
     const dbUrl = (process.env['TURSO_DATABASE_URL'] ?? '').replace('libsql://', 'https://')
@@ -39,7 +43,7 @@ export default async function handler(req: Request): Promise<Response> {
       body: JSON.stringify({
         requests: [
           { type: 'execute', stmt: { sql: 'DELETE FROM push_subscriptions WHERE endpoint = ?', args: [{ type: 'text', value: endpoint }] } },
-          { type: 'execute', stmt: { sql: 'INSERT INTO push_subscriptions (endpoint, p256dh, auth, device_id, updated_at) VALUES (?, ?, ?, ?, ?)', args: [{ type: 'text', value: endpoint }, { type: 'text', value: keys.p256dh }, { type: 'text', value: keys.auth }, { type: 'text', value: deviceId }, { type: 'integer', value: String(Date.now()) }] } },
+          { type: 'execute', stmt: { sql: 'INSERT INTO push_subscriptions (endpoint, p256dh, auth, device_id, updated_at) VALUES (?, ?, ?, ?, ?)', args: [{ type: 'text', value: endpoint }, { type: 'text', value: keys.p256dh }, { type: 'text', value: keys.auth }, { type: 'text', value: deviceId }, { type: 'integer', value: String(Math.floor(Date.now() / 1000)) }] } },
           { type: 'close' },
         ],
       }),
@@ -48,7 +52,7 @@ export default async function handler(req: Request): Promise<Response> {
     if (!res.ok) {
       const body = await res.text()
       console.error('[push-subscribe] Turso error:', res.status, body)
-      return jsonResponse({ ok: false }, 500)
+      return jsonResponse({ ok: false, error: 'turso_error' }, 500)
     }
 
     const json = (await res.json()) as TursoPipelineResponse
@@ -61,6 +65,6 @@ export default async function handler(req: Request): Promise<Response> {
     return jsonResponse({ ok: true })
   } catch (err) {
     console.error('[push-subscribe] Failed:', err)
-    return jsonResponse({ ok: false }, 500)
+    return jsonResponse({ ok: false, error: 'internal_error' }, 500)
   }
 }

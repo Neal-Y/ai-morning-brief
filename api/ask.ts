@@ -18,13 +18,29 @@ export default async function handler(req: Request): Promise<Response> {
 
   if (req.method !== 'POST') return new Response('Method Not Allowed', { status: 405 })
 
-  const { articleTitle, articleSummary, articleContext, messages } =
-    await req.json() as {
-      articleTitle: string
-      articleSummary: string
-      articleContext: string
-      messages: AskMessage[]
-    }
+  let body: { articleTitle: string; articleSummary: string; articleContext: string; messages: AskMessage[] }
+  try {
+    body = await req.json()
+  } catch {
+    return new Response(JSON.stringify({ ok: false, error: 'invalid_json' }), {
+      status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    })
+  }
+
+  const deviceId = req.headers.get('X-Device-Id')
+  if (!deviceId) {
+    return new Response(JSON.stringify({ ok: false, error: 'missing_device_id' }), {
+      status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    })
+  }
+
+  const { articleTitle, articleSummary, articleContext, messages } = body
+
+  if (!Array.isArray(messages) || typeof articleTitle !== 'string' || typeof articleSummary !== 'string') {
+    return new Response(JSON.stringify({ ok: false, error: 'invalid_input' }), {
+      status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+    })
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
