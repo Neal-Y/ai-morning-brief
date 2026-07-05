@@ -1,3 +1,15 @@
+export const CATEGORY_LABELS: Record<string, string> = {
+  'model-release': 'MODEL RELEASE',
+  'api-platform': 'API · PLATFORM',
+  'infra-inference': 'INFRA · INFERENCE',
+  'tooling-open-source': 'TOOLING',
+  'benchmark-eval': 'BENCHMARK',
+  'agent-systems': 'AGENT SYSTEMS',
+  'policy-regulation': 'POLICY · REGULATION',
+  'company-market': 'COMPANY · MARKET',
+  'research-adjacent': 'RESEARCH',
+}
+
 export interface Article {
   id: string
   url: string

@@ -14,21 +14,10 @@ import { Feather } from '@expo/vector-icons'
 import { DotGrid } from '../components/DotGrid'
 import { AskSheet } from '../components/AskSheet'
 import { fetchLibrary, saveArticle, unsaveArticle, type LibraryArticle } from '../api'
+import { CATEGORY_LABELS } from '../types'
 import { FONT, RADIUS, T } from '../theme'
 
 type Tab = 'all' | 'saved'
-
-const CATEGORY_LABELS: Record<string, string> = {
-  'model-release': 'Model Release',
-  'api-platform': 'API / Platform',
-  'infra-inference': 'Infra / Inference',
-  'tooling-open-source': 'Tooling',
-  'benchmark-eval': 'Benchmark',
-  'agent-systems': 'Agents',
-  'policy-regulation': 'Policy',
-  'company-market': 'Market',
-  'research-adjacent': 'Research',
-}
 
 function categoryLabel(raw: string) {
   const tag = raw.startsWith('#') ? raw.slice(1) : raw

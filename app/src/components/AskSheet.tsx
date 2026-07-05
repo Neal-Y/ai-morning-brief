@@ -29,9 +29,8 @@ interface Props {
   context: AskContext
 }
 
-const INTRO: Message = { role: 'assistant', text: '關於這題，想更深入哪個方向？' }
+const INTRO: Message = { role: 'assistant', text: '想更深入哪個方向？' }
 const SUGGESTIONS = [
-  '為什麼其他選項不對？',
   '這在 production 上實務怎麼用？',
   '有沒有常見的誤解或陷阱？',
 ]
@@ -70,7 +69,7 @@ export function AskSheet({ visible, onClose, articleId, context }: Props) {
         setLoading(false)
       })
     }
-  }, [visible, mounted, anim, articleId])
+  }, [visible, articleId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => () => abortRef.current?.abort(), [])
 

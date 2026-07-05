@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { Animated, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { Feather, Ionicons } from '@expo/vector-icons'
 import { FONT, RADIUS, T } from '../theme'
+import { CATEGORY_LABELS } from '../types'
 import type { Article } from '../types'
 
 interface Props {
@@ -9,18 +10,6 @@ interface Props {
   saved?: boolean
   onAsk?: () => void
   onSave?: () => void
-}
-
-const CATEGORY_LABELS: Record<string, string> = {
-  'model-release': 'MODEL RELEASE',
-  'api-platform': 'API · PLATFORM',
-  'infra-inference': 'INFRA · INFERENCE',
-  'tooling-open-source': 'TOOLING',
-  'benchmark-eval': 'BENCHMARK',
-  'agent-systems': 'AGENT SYSTEMS',
-  'policy-regulation': 'POLICY · REGULATION',
-  'company-market': 'COMPANY · MARKET',
-  'research-adjacent': 'RESEARCH',
 }
 
 function categoryLabel(raw: string): string {
