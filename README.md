@@ -1,8 +1,42 @@
 # AI Morning Brief
 
-一條每日自動運行的資料管線：RSS 擷取 → LLM 分類 → Turso DB 持久化 → Web Push 交付。架構骨架和社群輿情分析管線相同（資料源不同）：擷取外部資料、LLM 結構化分析、持久化儲存、推送交付。以 GitHub Actions cron 驅動，Vercel Edge Runtime 提供 API 服務層。
+一條每日自動運行的資料管線：RSS 擷取 → LLM 分類 → Turso DB 持久化 → Web Push 交付。
+GitHub Actions cron 驅動，Vercel Edge Runtime 提供 API 服務層。
+自 2026 年 4 月起持續每日運行。
 
-**Live:** https://ai-morning-brief.vercel.app — GitHub Actions cron 每日自動執行，持續運行中。
+使用者端是一支 iOS PWA：每日推播 → 滑卡閱讀 → 👍👎 回饋 → 追問 → 收藏同步 Notion，歷史文章可在 `/library` 回溯。
+
+**Live:** https://ai-morning-brief-chi.vercel.app
+
+---
+
+## 三個工程重點
+
+### 1. 有回饋迴路的 Feedback Loop，不是一次性腳本
+
+Classifier 每次選文前會讀取近 30 天的 👍👎 回饋作為偏好 context，並附加在 system prompt **尾端**（保 Anthropic cache prefix 穩定，不插中間或開頭）。冷啟動門檻 ≥ 10 筆才啟動，防過擬合；per-category 負訊號需 ≥ 2 次 👎 才算（單筆可能是噪音）。
+
+### 2. 成本被當成設計約束
+
+啟用 prompt caching、classifier 每日上限 12 篇（`CLASSIFIER_CAP` 可線性調整成本）、GPT-4o 與 Claude Sonnet 4.6 按台北日期奇偶輪替（分散單一供應商 rate limit 與依賴風險），全系統年成本控制在 **~$35–40**。`CLASSIFIER_CONCURRENCY=3` 是 free-tier Anthropic TPM 的安全邊際。完整拆解見 [Cost](#cost)。
+
+### 3. 錯誤邊界與執行順序硬編碼
+
+Web Push 只在 DB 寫入成功後才送出（Stage 5 → Stage 6 強制串行），避免推播後 DB 寫入失敗導致使用者開 app 看不到內容。RSS 全掛、config/provider 錯誤、DB 寫入失敗、Web Push 全部發送失敗都會 `exit(1)`，GitHub Actions 標記 workflow failed；Classifier 的 fallback bucket 是 DROP（不是靜默晉升），避免低分文章因例外處理而進入 brief。基礎設施問題由 Actions log 負責，不推播給使用者。
+
+---
+
+## 技術決策說明
+
+### 為什麼 POST 全走 Edge Runtime，不走 Hono？
+
+Hono 在 Vercel Node.js adapter 上，`c.req.json()` 對部分 POST request 會 hang 到 5 分鐘 timeout——2026-04-26 在 `/api/feedback` 重現，body < 100 bytes 也觸發。排查過 DB、libSQL、drizzle、VAPID 都不是病灶；結論是 adapter 本身的問題。Edge Runtime 用原生 `Request.json()` 沒這問題。
+
+現行規則：所有需要讀 request body 的新 POST endpoint，直接寫 `api/<name>.ts`（Edge Runtime）+ `vercel.json` rewrite，不加進 Hono app。Hono 現在 read-only（僅 `/api/feed` 與 `/api/library` GET）。
+
+### 為什麼用 Turso HTTP API 而不是 `libsql://`？
+
+Edge Runtime 是 stateless、短命的執行環境，`libsql://` 的 WebSocket persistent connection 在這裡無法建立。Edge functions 統一用 Turso 的 HTTP API（`https://` transport）——等同 REST over HTTP，無狀態連線，天然適合 serverless。Pipeline（GitHub Actions Node.js 環境）同樣使用 `https://` transport，統一行為減少環境差異。
 
 ---
 
@@ -59,36 +93,6 @@ React PWA (web/)
 | `conversations` | 💬 追問對話歷史；一篇文章一筆，`messages` JSON + `message_count` 供 Library 輕量顯示 |
 | `quizzes` | Quiz QA pairs（schema 已建，功能待開發）|
 | `push_subscriptions` | Web Push subscription endpoint + VAPID keys |
-
----
-
-## 三個工程重點
-
-### 1. 有回饋迴路的 Feedback Loop，不是一次性腳本
-
-Classifier 每次選文前會讀取近 30 天的 👍👎 回饋作為偏好 context，並附加在 system prompt **尾端**（保 Anthropic cache prefix 穩定，不插中間或開頭）。冷啟動門檻 ≥ 10 筆才啟動，防過擬合；per-category 負訊號需 ≥ 2 次 👎 才算（單筆可能是噪音）。Classifier 透過 `string[]` 形式呼叫 provider，AnthropicProvider 只在第一個 block 打 `cache_control`，穩定 prefix 跨天不被偏好內容 invalidate。
-
-### 2. 成本被當成設計約束
-
-啟用 prompt caching、classifier 每日上限 12 篇（`CLASSIFIER_CAP` 可線性調整成本）、GPT-4o 與 Claude Sonnet 4.6 按台北日期奇偶輪替（分散單一供應商 rate limit 與依賴風險），全系統年成本控制在 **~$35–40**。`CLASSIFIER_CONCURRENCY=3` 是 free-tier Anthropic TPM 的安全邊際。完整拆解見 [Cost](#cost)。
-
-### 3. 錯誤邊界與執行順序硬編碼
-
-Web Push 只在 DB 寫入成功後才送出（Stage 5 → Stage 6 強制串行），避免推播後 DB 寫入失敗導致使用者開 app 看不到內容。RSS 全掛、config/provider 錯誤、DB 寫入失敗、Web Push 全部發送失敗都會 `exit(1)`，GitHub Actions 標記 workflow failed；Classifier 的 fallback bucket 是 DROP（不是靜默晉升），避免低分文章因例外處理而進入 brief。基礎設施問題由 Actions log 負責，不推播給使用者。
-
----
-
-## 技術決策說明
-
-### 為什麼 POST 全走 Edge Runtime，不走 Hono？
-
-Hono 在 Vercel Node.js adapter 上，`c.req.json()` 對部分 POST request 會 hang 到 5 分鐘 timeout——2026-04-26 在 `/api/feedback` 重現，body < 100 bytes 也觸發。排查過 DB、libSQL、drizzle、VAPID 都不是病灶；結論是 adapter 本身的問題。Edge Runtime 用原生 `Request.json()` 沒這問題。
-
-現行規則：所有需要讀 request body 的新 POST endpoint，直接寫 `api/<name>.ts`（Edge Runtime）+ `vercel.json` rewrite，不加進 Hono app。Hono 現在 read-only（僅 `/api/feed` 與 `/api/library` GET）。
-
-### 為什麼用 Turso HTTP API 而不是 `libsql://`？
-
-Edge Runtime 是 stateless、短命的執行環境，`libsql://` 的 WebSocket persistent connection 在這裡無法建立。Edge functions 統一用 Turso 的 HTTP API（`https://` transport）——等同 REST over HTTP，無狀態連線，天然適合 serverless。Pipeline（GitHub Actions Node.js 環境）同樣使用 `https://` transport，統一行為減少環境差異。
 
 ---
 
