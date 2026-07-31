@@ -1,4 +1,4 @@
-# AI Morning Brief
+# Sift [AI Morning Brief]
 
 一條每日自動運行的資料管線：RSS 擷取 → LLM 分類 → Turso DB 持久化 → Web Push 交付。
 GitHub Actions cron 驅動，Vercel Edge Runtime 提供 API 服務層。
