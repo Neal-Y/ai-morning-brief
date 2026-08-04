@@ -14,6 +14,12 @@ let cachedId: string | null = null
 
 export async function getDeviceId(): Promise<string> {
   if (cachedId) return cachedId
+  // EXPO_PUBLIC_DEVICE_ID lets you pin a specific UUID (e.g. to share data with the PWA).
+  const override = process.env.EXPO_PUBLIC_DEVICE_ID
+  if (override) {
+    cachedId = override
+    return override
+  }
   let id = await AsyncStorage.getItem(DEVICE_ID_KEY)
   if (!id) {
     id = generateUUID()

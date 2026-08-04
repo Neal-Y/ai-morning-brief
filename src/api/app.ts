@@ -46,7 +46,7 @@ app.get('/api/library', async (c) => {
       ? db.select().from(feedback).where(eq(feedback.deviceId, deviceId))
       : Promise.resolve([]),
     deviceId
-      ? db.select().from(saves).where(eq(saves.deviceId, deviceId))
+      ? db.select().from(saves).where(and(eq(saves.deviceId, deviceId), sql`deleted_at IS NULL`))
       : Promise.resolve([]),
   ])
 

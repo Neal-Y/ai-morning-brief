@@ -13,7 +13,7 @@ import {
 import { DotGrid } from '../components/DotGrid'
 import { ArticleCard } from '../components/ArticleCard'
 import { AskSheet } from '../components/AskSheet'
-import { fetchFeed, postFeedback, saveArticle, unsaveArticle } from '../api'
+import { fetchFeed, fetchLibrary, postFeedback, saveArticle, unsaveArticle } from '../api'
 import { FONT, RADIUS, T } from '../theme'
 import type { Article } from '../types'
 
@@ -46,6 +46,15 @@ export function FeedScreen() {
     fetchFeed(todayDate())
       .then(setArticles)
       .catch((e: unknown) => setError(String(e)))
+    // Feed itself doesn't carry per-device save state (it's edge-cached and
+    // shared across devices), so seed it from Library's device-scoped data.
+    // Best-effort: a failure here just means bookmarks show as unsaved until
+    // the user visits Library, not a broken feed.
+    fetchLibrary()
+      .then((rows) => {
+        setSaved(new Set(rows.filter((r) => r.saved).map((r) => r.id)))
+      })
+      .catch(() => {})
   }, [])
 
   const current = articles?.[index] ?? null

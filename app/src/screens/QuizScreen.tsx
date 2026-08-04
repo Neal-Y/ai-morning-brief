@@ -4,18 +4,19 @@ import { DotGrid } from '../components/DotGrid'
 import { QuizCard } from '../components/QuizCard'
 import { CompletionCard } from '../components/CompletionCard'
 import { loadQuestions, type Quiz } from '../data'
-import { submitQuizAttempt } from '../api'
+import { fetchActivity, submitQuizAttempt } from '../api'
 import { FONT, T, XP } from '../theme'
-
-const STREAK = 12
 
 export function QuizScreen() {
   const [questions, setQuestions] = useState<Quiz[] | null>(null)
   const [index, setIndex] = useState(0)
   const [results, setResults] = useState<boolean[]>([])
+  const [streak, setStreak] = useState(0)
 
   useEffect(() => {
     loadQuestions().then(setQuestions)
+    // Best-effort: if this fails, streak just reads 0 instead of a stale/fake number.
+    fetchActivity().then((a) => setStreak(a.streak)).catch(() => {})
   }, [])
 
   const total = questions?.length ?? 0
@@ -66,7 +67,7 @@ export function QuizScreen() {
             quiz={questions[index]!}
             index={index}
             total={total}
-            streak={STREAK}
+            streak={streak}
             xpToday={xpToday}
             isLast={index === total - 1}
             onNext={handleNext}

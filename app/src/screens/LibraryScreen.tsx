@@ -118,15 +118,21 @@ function ArticleRow({ article, onAsk, onToggleSave }: ArticleRowProps) {
 export function LibraryScreen() {
   const [tab, setTab] = useState<Tab>('all')
   const [articles, setArticles] = useState<LibraryArticle[] | null>(null)
+  const [loadError, setLoadError] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const [askTarget, setAskTarget] = useState<LibraryArticle | null>(null)
 
   const load = useCallback(async () => {
-    const data = await fetchLibrary()
-    setArticles(data)
+    setLoadError(false)
+    try {
+      const data = await fetchLibrary()
+      setArticles(data)
+    } catch {
+      setLoadError(true)
+    }
   }, [])
 
-  useEffect(() => { load().catch(() => {}) }, [load])
+  useEffect(() => { load() }, [load])
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true)
@@ -194,7 +200,14 @@ export function LibraryScreen() {
         </View>
 
         {/* content */}
-        {!visible ? (
+        {loadError ? (
+          <View style={styles.center}>
+            <Text style={styles.emptyText}>載入失敗，請稍後再試</Text>
+            <Pressable onPress={load} style={styles.retryBtn}>
+              <Text style={styles.retryText}>重新載入</Text>
+            </Pressable>
+          </View>
+        ) : !visible ? (
           <View style={styles.center}>
             <ActivityIndicator color={T.accent} />
           </View>
@@ -346,4 +359,13 @@ const styles = StyleSheet.create({
   actionLabelSaved: { color: T.accent },
 
   emptyText: { fontFamily: FONT.mono, fontSize: 13, color: T.textFaint },
+  retryBtn: {
+    marginTop: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: RADIUS.pill,
+    borderWidth: 1,
+    borderColor: T.border,
+  },
+  retryText: { fontFamily: FONT.monoMed, fontSize: 13, color: T.textMuted },
 })
