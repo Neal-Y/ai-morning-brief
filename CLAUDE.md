@@ -1,6 +1,6 @@
-# AI Morning Brief
+# AI Morning Brief（產品名「Sift」）
 
-每日自動化技術情報系統：RSS → LLM 分析 → Turso DB → React Native App + Web PWA。
+雙軌內容系統：(1) RSS → LLM 分析 → 每日技術簡報（V1 遺留，穩定） (2) LLM 出題 → backend/infra 判斷力 quiz（遊戲化學習）。兩條 pipeline 各自獨立產生，共用同一顆 Turso DB + 同一個 client 殼（React Native App「Sift」+ Web PWA）。
 
 ## 回話風格（節省 token）
 
@@ -17,50 +17,63 @@
 - Classifier 已吃進 feedback（V2 Investment 環節核心），近 30 天 / 20 筆 / 門檻 10 筆。Anthropic cache 有拆 prefix（穩定部分跨天保留）。
 - **F4 Notion 整合（2026-04-25，dedupe 強化 2026-05-06）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `saves.articleId` unique。Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。dedupe：先查 Notion `Article ID` property + DB sync lock（`notion_syncing_at`），有舊 page 就 reuse；`/api/unsave` 改成 soft-hide（`saves.deleted_at`），row 與 `notion_page_id` 都保留，下次再 save 直接掛回同一 Notion page。
 - **追問歷史（2026-05-06）**：每篇文章一條 `conversations` row（`messages` JSON + `message_count`），`api/ask-history.ts` Edge Runtime 提供 GET/POST upsert。AskSheet 開啟時 hydrate 過往對話、每完成一個 user→assistant turn 就保存；Library 顯示 low-key ask message count，點開可帶歷史回到 AskSheet。`/api/library` JOIN 時只取 `message_count`，**不**載 messages JSON。
-- **產品方向重新校準（2026-04-26）**：原本 V2_DESIGN.md 把 quiz (F5) 排第一，覆盤後發現 quiz 是「賭使用者願意主動測驗」的高風險投資；真正使用者已表達的痛點是「滑過沒存的找不回 + LLM 內容隔天就丟」。新的三大支柱：(1) 每日推播 (V1) (2) Library / 歷史頁 (3) Retention layer (quiz, 蓋在 Library 上)。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
+- **產品方向重新校準（2026-04-26）**：原本 V2 設計把 quiz (F5) 排第一，當時覆盤後降級成「Library 上的 retention layer」，退場條件是「沒回頭翻 library 就不做 quiz」。詳見 [docs/decisions/2026-04-26-product-review.md](./docs/decisions/2026-04-26-product-review.md)（**背景文件，決策已被後續開發蓋過，見下一條**）。
 - **Library 頁面已 ship（2026-04-26，commit `0a61bad` / `ee694bb`）**：原 roadmap PR-A/B/C 一發併出。細節見系統架構 + 功能狀態 + Conventions。
-- **下一步決策 gate**（觀察期至約 2026-05-11）：看自己會不會回頭翻 `/library`；不回頭翻就停在 stable 版，不急著疊 RSS 擴源 / quiz。
+- **⚠️ 2026-04-26 的「Library 決策 gate」已作廢**：Quiz 實際上照做了，且已經是主力產品（app 改名「Sift」、四分頁、封測中）。不用再回頭驗證 gate 有沒有通過，這條規則不再生效，純留作歷史紀錄。
+- **現況（2026-08）**：Quiz pipeline 程式碼正常運作，但 `quiz_sync.yml` cron **目前手動關閉**（操作者選擇，等使用頻率提高再開，不是壞掉）。DB 裡已有先前生成的題庫，`/api/quiz` 的 recycle 邏輯（優先出沒答過的，答完就循環）持續供應，不會因為 cron 關閉就退回 `app/src/data.ts` 的 3 題硬編碼 fallback（那只在 API 整個打不到時才觸發）。app「Sift」在 Expo Go 封測中，狀況穩定。**下一步是 EAS Build → TestFlight**。
+- **Notion 整合維持現狀、不主動投資**：使用者不會回頭看 Notion saves，但整合已經串好、成本是 sunk，先放著不拆，也不再加功能。舊的「Notion 30 天回看」檢查點作廢。
 
 ---
 
 ## 系統架構
 
-```
-GitHub Actions cron (daily 台北 07:30)
-  └─ src/index.ts                     # pipeline 入口
-       ├─ rss/feed.ts                 # RSS ingestion + 24h filter + 關鍵字打分
-       ├─ db/client.getRecentFeedback # 讀近 30 天 feedback 作為偏好 context
-       ├─ ai/classifier.ts            # per-article LLM 分類（concurrency=3）
-       ├─ ai/brief.ts                 # brief generator（一次 LLM call）
-       ├─ notify/db-writer.ts         # upsert 文章到 Turso（成功後才推播）
-       └─ notify/web-push.ts          # 對 push_subscriptions 全表發 Web Push
+> 這裡是摘要。演算法細節（classifier bucket/renderLevel 規則、rank+select 算法、quiz 驗證規則）、完整 DB schema、完整 API contract 見 **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**（living spec，改邏輯務必同步更新）。
 
-Hono API (src/api/app.ts → api/index.ts on Vercel)
+```
+GitHub Actions cron — 兩條獨立 pipeline，錯開時間互不影響
+  ├─ daily_sync.yml（07:30 台北）→ src/index.ts             # 文章 pipeline
+  │    ├─ rss/feed.ts                 # RSS ingestion + 24h filter + 關鍵字打分
+  │    ├─ db/client.getRecentFeedback # 讀近 30 天 feedback 作為偏好 context
+  │    ├─ ai/classifier.ts            # per-article LLM 分類（concurrency=3）
+  │    ├─ ai/brief.ts                 # brief generator（一次 LLM call）
+  │    ├─ notify/db-writer.ts         # upsert 文章到 Turso（成功後才推播）
+  │    └─ notify/web-push.ts          # 對 push_subscriptions 全表發 Web Push
+  └─ quiz_sync.yml（06:00 台北）→ src/quiz-pipeline.ts       # quiz pipeline（不依賴文章）
+       ├─ db/client.getRecentQuizPrompts # 讀近期已出過的題目 prompt，防重複
+       ├─ quiz/generate.ts             # LLM 出題（single_choice / ordering / matching / fill_blank 混出）
+       └─ db/quiz-writer.ts            # 寫入 quizzes table
+
+Hono API (src/api/app.ts → api/index.ts on Vercel) — read-only GET
   ├─ GET  /api/feed?date=   # 從 Turso 讀當日文章
-  └─ GET  /api/library      # 全歷史 + feedback / saved / notionSynced + ask message_count 多表 JS-join（不撈 messages JSON），read-only no-store
+  ├─ GET  /api/library      # 全歷史 + feedback / saved / notionSynced + ask message_count 多表 JS-join（不撈 messages JSON），read-only no-store
+  ├─ GET  /api/quiz         # 今日 quiz 題組
+  └─ GET  /api/activity     # 學習紀錄：heatmap / streak / 正確率等統計（device_id 範圍）
 
 Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
-  ├─ POST     /api/ask           # api/ask.ts — Haiku 4.5 SSE streaming 追問
-  ├─ GET/POST /api/ask-history   # api/ask-history.ts — per-article conversations 讀 / upsert messages JSON
+  ├─ POST     /api/ask           # api/ask.ts — Haiku 4.5 SSE streaming 追問（文章與 quiz 共用；quiz 用合成 articleId=`quiz-${id}`）
+  ├─ GET/POST /api/ask-history   # api/ask-history.ts — per-(article, device) conversations 讀 / upsert messages JSON
   ├─ POST     /api/push-subscribe# api/push-subscribe.ts — 寫 push_subscriptions
   ├─ POST     /api/save          # api/save.ts — 查 article + Notion dedupe（Article ID lookup + DB sync lock）+ upsert saves
   ├─ POST     /api/feedback      # api/feedback.ts — up/down（delete-then-insert，同 articleId 只留最新）
-  └─ POST     /api/unsave        # api/unsave.ts — soft-hide saves（set deleted_at；row、notion_page_id、Notion page 都不動）
+  ├─ POST     /api/unsave        # api/unsave.ts — soft-hide saves（set deleted_at；row、notion_page_id、Notion page 都不動）
+  └─ POST     /api/quiz-attempt  # api/quiz-attempt.ts — 寫入 quiz_attempts（quizId / deviceId / correct）
 
-React PWA (web/)
+React PWA (web/) — 原生 iOS app（app/）上線後為次要 client，仍是 Web Push 入口
   ├─ /          滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration
   ├─ /library   全歷史頁：所有歷史 tab（filter + 日期分組 + 展開 LLM 四段） / 收藏 tab（Notion sync stats）
   ├─ pathname routing：web/src/main.tsx 監聽 popstate，web/src/router.ts navigate() helper
   └─ Splash gate：iOS standalone 第一次開啟 → 請求 notification permission → 寫 subscription
 
-React Native App (app/) — 取代 PWA 的原生 iOS app
-  ├─ 三分頁（bottom tab）：Quiz（今日題目）/ Feed（簡報）/ Library
-  ├─ QuizScreen   — 每日 quiz 題組（single_choice / ordering / matching / fill_blank）
+React Native App「Sift」(app/) — 主力 client，Expo Go 封測中
+  ├─ 四分頁（bottom tab）：Quiz（今日題目）/ Feed（簡報）/ Library / Activity（學習紀錄）
+  ├─ QuizScreen   — 每日 quiz 題組（single_choice / ordering / matching / fill_blank）；XP：對 +20 / 錯 +5
+  ├─ QuizFrame    — 四種題型共用 chrome（進度條 / streak / XP / 分類 pill）+ 💬 AskSheet（追問這題）
   ├─ FeedScreen   — 滑卡瀏覽今日文章；swipe right=有用 / left=略過；💬 AskSheet / 🔖 save
   ├─ LibraryScreen — 全歷史 + 收藏 tab（呼叫 /api/library）
+  ├─ ActivityScreen — 學習紀錄：年度 heatmap（DotGrid）/ 週 pie / streak / 正確率（呼叫 /api/activity）
   ├─ src/api.ts   — 自動偵測 Metro host（dev LAN）或 fallback 到 prod；quiz-attempt / ask SSE（expo/fetch）
-  ├─ src/theme.ts — T / FONT / RADIUS 設計 token（鏡像 web/ dark theme）
-  └─ src/device.ts — AsyncStorage device UUID（X-Device-Id header）
+  ├─ src/theme.ts — T / FONT / RADIUS / XP 設計 token（鏡像 web/ dark theme）
+  └─ src/device.ts — AsyncStorage device UUID（`sift_device_id`，X-Device-Id header，多使用者隔離用）
 ```
 
 ---
@@ -73,34 +86,37 @@ React Native App (app/) — 取代 PWA 的原生 iOS app
 | Web Push 推播 | ✅ | 標題 = lead story title, body = 「Hard Tech AI／Signals」section labels |
 | Turso DB 寫入 | ✅ | article id = SHA-256(url).slice(0,16)；client 用 `https://` 而非 `libsql://`（serverless friendly） |
 | Vercel 部署 | ✅ | `api/index.ts` (Hono read-only) + Edge：`ask` / `ask-history` / `push-subscribe` / `save` / `unsave` / `feedback` |
-| PWA 卡片 UI | ✅ | iPhone standalone 已穩定，細節見 FRONTEND_FIX_LOG |
+| PWA 卡片 UI | ✅ | iPhone standalone 已穩定，細節見 `docs/FRONTEND_FIX_LOG.md` |
 | 👍👎 → DB | ✅ | delete-then-insert 防誤按；Edge Runtime（2026-04-26 從 Hono 搬出，原本 504 timeout） |
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
 | 💬 追問歷史 | ✅ | `api/ask-history.ts` Edge：GET hydrate / POST upsert；`conversations` 一篇一 row；AskSheet 開啟還原、turn 完成保存；Library 顯示 ask message count |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
 | 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful；2026-05-06 加 dedupe（Notion Article ID lookup + DB sync lock）+ unsave 改 soft-hide（規則見 Conventions Pipeline/DB） |
 | Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。2026-04-27 Vercel preview 真機驗證完成 |
-| React Native App | ⏳ 開發中 | Expo SDK 54，Expo Go 開發，TestFlight 為目標 |
-| Quiz 生成 | ⏳ 未做 | `quizzes` table 已建 schema |
-| 晨間 Recall Quiz | ⏳ 未做 | 需先有 quiz 資料 |
+| React Native App「Sift」| ⏳ 封測中 | Expo SDK 54，Expo Go 開發，TestFlight 為目標；四分頁 Quiz/Feed/Library/Activity |
+| Quiz 生成 | ✅ 程式碼完成，⏸️ cron 手動暫停 | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（06:00 台北）目前手動關閉，等使用頻率提高再開。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
+| Quiz 作答紀錄 | ✅ | `POST /api/quiz-attempt` → `quiz_attempts`；XP：答對 +20 / 答錯 +5（`app/src/theme.ts` XP 常數） |
+| 學習紀錄 / Activity | ✅ | `GET /api/activity` + `ActivityScreen.tsx`：年度 heatmap、週 pie、streak、正確率，皆以 device_id 為範圍 |
+| 多使用者支援 | ✅ | `device_id` 貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts；app 端 `src/device.ts` 用 AsyncStorage 存 UUID（`sift_device_id`），每次 fetch 帶 `X-Device-Id` |
+| Quiz 追問 | ✅ | Quiz 題目重用文章的 AskSheet + `/api/ask` / `/api/ask-history`，用合成 `articleId = quiz-${id}` 掛進同一套 conversations 機制，沒有另開一套 |
+| 晨間 Recall Quiz（排程推播提醒去答題）| ⏳ 未做 | Quiz 生成本身已上線，但「排程通知去答題」這層還沒做 |
 | Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
 | 週報 | ⏳ 未做 | |
 
 ---
 
-## 下一步（按優先順序，2026-04-26 重排）
+## 下一步（2026-08 現況重排）
 
-> 重排理由：覆盤後發現 quiz 是高風險賭注，Library 是已表達需求。詳見 [docs/PRODUCT_REVIEW_2026-04-26.md](./docs/PRODUCT_REVIEW_2026-04-26.md)。
+> 舊版（2026-04-26）把 Quiz 當高風險賭注、排在 Library 之後、配了退場條件。實際發展沒照這個腳本走——Quiz 已經做完且封測順暢，舊排序作廢。以下是目前真正的優先序。
 
-1. **下一步決策 gate**（觀察期至約 2026-05-11）— 觀察自己是否真的會回頭翻 `/library`。**退場條件**：1–2 週若自己沒回頭翻過，內容品質一輪 / Quiz 都不做，停在「每日推播 + Library」stable 版。產品定位見 [docs/LIBRARY_PROPOSAL.md](./docs/LIBRARY_PROPOSAL.md)，設計 review 見 [docs/LIBRARY_DESIGN_REVIEW_v1.md](./docs/LIBRARY_DESIGN_REVIEW_v1.md)。
-2. **內容品質一輪**（Library 之後 — Library 越多源越值錢）：
-   - 2a. **RSS 源擴充**：新增 Anthropic news / OpenAI blog / Cloudflare blog / AWS ML blog。RSS URL 上線前要 `curl` 驗證仍有效（Anthropic / OpenAI 換過很多次）
-   - 2b. **觀察一週 keyword weight**：官方 blog 進來後是否被 PREFILTER 漏放或誤殺，視情況微調 `KEYWORD_WEIGHTS`
-   - 2c. **Skill-tag 產出**（原 V2 F6）：classifier 輸出 `skillTags` 陣列，Library filter chip 才有第三維度可用（目前 Library 已預留 `skillTags` 顯示，等 classifier 產就會自動有東西）
-   - **不要做的事**：AWS What's New（firehose）、Google AI Blog（行銷腔）、各家 changelog feeds（太細粒度）。詳見對話紀錄 2026-04-26 後段
-3. **Quiz (F5)** — 降為 Library 上的 retention layer。前置條件：Library ship 後使用者真的有回去翻。配退場條件：「2 週連續 7 天沒答 quiz 就砍掉」。
-4. **Notion 策略回看** — 不急著做 backfill / conversations 寫回 / 筆記 UI。先觀察 Library 是否已解決「歷史找回」需求；若 Notion 仍有價值，優先改成明確的 curated export，而不是擴大自動同步。
-5. **Classifier 偏好 v2**（feedback 累積一兩個月後評估再動，**不要提早優化**）。
+1. **Sift → TestFlight**：Quiz pipeline、四分頁 app、多使用者 device_id 都已到位，下一步是 EAS Build 送審。這是目前唯一的 active 任務。
+2. **內容品質一輪**（文章 pipeline 這條，優先度低於 1，非阻塞）：
+   - RSS 源擴充：Anthropic news / OpenAI blog / Cloudflare blog / AWS ML blog。上線前要 `curl` 驗證 URL 仍有效
+   - Skill-tag 產出（`skillTags` classifier 還沒產）：Library filter chip 第三維度
+   - 不要做：AWS What's New（firehose）、Google AI Blog（行銷腔）、各家 changelog feeds（太細粒度）
+3. **晨間 Recall Quiz**（排程通知提醒去答題）：Quiz 生成本身已上線，這層還沒做，等 TestFlight 過了再評估要不要加
+4. **Notion 整合**：維持現狀，不主動投資、不拆——已串好且 sunk cost，使用者不會回頭看，優先度最低
+5. **Classifier 偏好 v2**（feedback 累積夠久再評估，不要提早優化）
 
 ---
 
@@ -109,10 +125,13 @@ React Native App (app/) — 取代 PWA 的原生 iOS app
 - [x] `/api/feed?date=...` 在 Vercel 上正常回傳
 - [x] `/api/push-subscribe` 寫入 `push_subscriptions` table（Edge Runtime，已驗證 2026-04-25）
 - [x] GitHub Actions secrets 已設 `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` + `VAPID_*`
-- [ ] 連續 3 天 07:30 自動觸發都能成功收到 Web Push（觀察一週）
+- [x] 連續多天 07:30 自動觸發成功收到 Web Push（穩定運行至今，2026-08）
 - [x] Library 在 Vercel preview 真機跑一遍（2026-04-27 — `/library` 路由、filter、展開 LLM、🔖 / 移除收藏、AskSheet 改 full-screen，「原文」改 link 樣式）
 - [x] Library `/api/library` GET 在 Vercel 正常回傳（feedback / saved / notionSynced 三欄）
-- [ ] **Notion 30 天回看**（到 2026-05-26）：30 天內若沒回 Notion 翻過 Sift Saves 一次，重新評估是否該砍
+- [x] Quiz pipeline 正常出題（獨立 cron，`quiz_sync.yml`）
+- [x] Sift app 四分頁在 Expo Go 封測跑起來（Quiz/Feed/Library/Activity）
+- [ ] EAS Build → TestFlight 送審
+- ~~Notion 30 天回看~~：作廢，不會回去看，但整合維持現狀不拆（見 TL;DR）
 
 ---
 
@@ -120,29 +139,35 @@ React Native App (app/) — 取代 PWA 的原生 iOS app
 
 ```
 src/
-  index.ts            # pipeline 入口
+  index.ts            # 文章 pipeline 入口
+  quiz-pipeline.ts    # quiz pipeline 入口（獨立於文章 pipeline，見 quiz_sync.yml）
   config.ts           # env, RSS sources, keyword weights
   date.ts             # Taipei date helper
   rss/feed.ts
   ai/provider.ts      # AIProvider interface + 共用 types
+  ai/select-provider.ts # GPT/Claude 輪替邏輯（文章 + quiz pipeline 共用）
   ai/classifier.ts    # 分類器 + buildPreferenceContext()
   ai/brief.ts         # brief generator + degraded fallback
   ai/retry.ts
   ai/openai.ts · anthropic.ts
+  quiz/generate.ts    # LLM 出題（4 題型 + AVOID REPEATING dedup context，同 classifier 手法附在 system prompt 尾端）
+  quiz/types.ts        # QuizType + 各題型 payload interface
   notify/web-push.ts  # web-push 函式庫，對 push_subscriptions 全表發送
-  notify/db-writer.ts # Turso upsert
+  notify/db-writer.ts # Turso upsert（文章）
+  db/quiz-writer.ts   # Turso insert（quiz 題目）
   notion/client.ts    # raw fetch Notion REST API（createSavePage）
-  db/schema.ts        # articles / feedback / saves (article_id unique, deleted_at soft-hide, notion_syncing_at lock) / conversations (article_id unique, messages JSON + message_count) / quizzes / push_subscriptions
-  db/client.ts        # libSQL client (https://) + getRecentFeedback()
-  api/app.ts          # Hono app（GET /api/feed + GET /api/library，read-only；library 只 select conversations.message_count，不撈 messages JSON）
+  db/schema.ts        # articles / feedback / saves / conversations / quizzes / quiz_attempts / push_subscriptions — feedback/saves/conversations/quiz_attempts/push_subscriptions 皆有 device_id 欄位
+  db/client.ts        # libSQL client (https://) + getRecentFeedback() + getRecentQuizPrompts()
+  api/app.ts          # Hono app（GET /api/feed + /api/library + /api/quiz + /api/activity，全部 read-only）
   api/server.ts       # 本地 dev (port 3001)
 api/index.ts             # Vercel entry (hono/vercel handle)
-api/ask.ts               # Edge Runtime SSE for /api/ask
-api/ask-history.ts       # Edge Runtime GET/POST → Turso HTTP API（per-article conversations upsert / fetch）
+api/ask.ts               # Edge Runtime SSE for /api/ask（文章與 quiz 共用，quiz 用合成 articleId）
+api/ask-history.ts       # Edge Runtime GET/POST → Turso HTTP API（per-(article, device) conversations upsert / fetch）
 api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
 api/save.ts              # Edge Runtime POST → Notion dedupe (Article ID lookup + DB sync lock) + Turso HTTP API（upsert saves，clears deleted_at）
 api/feedback.ts          # Edge Runtime POST → Turso HTTP API（delete-then-insert feedback）
 api/unsave.ts            # Edge Runtime POST → Turso HTTP API（soft-hide via deleted_at；row、notion_page_id、Notion page 都保留）
+api/quiz-attempt.ts      # Edge Runtime POST → Turso HTTP API（寫 quiz_attempts，device_id 必填）
 vercel.json
 web/
   index.html
@@ -157,28 +182,38 @@ web/
     Card.tsx · Chrome.tsx · AskSheet.tsx · Celebration.tsx
   src/{date,theme,types}.ts · index.css
   vite.config.ts
-app/                     # React Native app（Expo SDK 54）
-  App.tsx                # 根元件：字型載入 + bottom tab navigator（Quiz/Feed/Library）
+app/                     # React Native app「Sift」（Expo SDK 54）
+  App.tsx                # 根元件：字型載入 + bottom tab navigator（Quiz/Feed/Library/Activity）
+  app.json                # expo name/slug = "Sift"
   package.json           # expo ^54, react-native 0.81, @expo-google-fonts/*
   src/
-    api.ts               # fetch wrapper（Metro host 自動偵測 dev / prod fallback）
-    theme.ts             # T / FONT / RADIUS 設計 token（鏡像 web/ dark theme）
-    device.ts            # AsyncStorage device UUID（X-Device-Id header）
+    api.ts               # fetch wrapper（Metro host 自動偵測 dev / prod fallback）；fetchActivity() / submitQuizAttempt()
+    theme.ts             # T / FONT / RADIUS / XP 設計 token（鏡像 web/ dark theme）
+    device.ts            # AsyncStorage device UUID（`sift_device_id`，X-Device-Id header）
     types.ts             # Article / FeedResponse 等共用型別
     data.ts              # 靜態資料 / mock helpers
     screens/
-      QuizScreen.tsx     # 今日題目分頁
+      QuizScreen.tsx     # 今日題目分頁：載入 quiz、記錄結果、算 XP
       FeedScreen.tsx     # 簡報分頁：swipe 卡片 + AskSheet + save
       LibraryScreen.tsx  # Library 分頁：全歷史 + 收藏 tab
-    components/          # ArticleCard / AskSheet / DotGrid 等 RN 元件
+      ActivityScreen.tsx # 學習紀錄分頁：年度 heatmap（DotGrid）/ 週 pie / streak / 正確率
+    components/          # ArticleCard / AskSheet / DotGrid / QuizFrame（四題型共用 chrome + AskSheet）/ QuizCard / CompletionCard 等 RN 元件
 scripts/seed.ts
 docs/
-  PROPOSAL.md                       # V1 spec
-  V2_DESIGN.md                      # V2 產品藍圖 + phased rollout
-  FRONTEND_FIX_LOG.md               # 前端 / mobile UI 修復史（先讀這份再動 UI）
-  LIBRARY_PROPOSAL.md               # Library 產品定位 + 設計 brief
-  LIBRARY_DESIGN_REVIEW_v1.md       # Library 設計 v1 review + DB 可行性核對
-  PRODUCT_REVIEW_2026-04-26.md      # 產品方向校準（quiz 降級、Library 升級）
+  README.md                         # docs/ 目錄，先看這份分清楚 living spec vs 凍結決策紀錄
+  ARCHITECTURE.md                   # living：classifier/quiz 演算法細節、完整 DB schema、完整 API contract
+  KNOWN_ISSUES.md                   # living：目前真的錯的地方（非 wishlist）
+  PRINCIPLES.md                     # living：可重複使用的產品/工程判斷原則
+  DEPLOY.md                         # living：本地開發 + 部署 + env vars
+  FRONTEND_FIX_LOG.md               # living：web/ PWA 修復史（先讀這份再動 web UI）
+  FRONTEND_FIX_LOG_APP.md           # living：app/ RN 修復史（先讀這份再動 app UI）
+  decisions/                        # 凍結，不再改；每篇檔頭寫「現況以哪份 living doc 為準」
+    2026-04-13-v1-proposal.md         # V1 spec（機制細節已搬到 ARCHITECTURE.md）
+    2026-04-25-handoff-web-push.md    # ntfy → Web Push 交接快照
+    2026-04-26-v2-design.md           # V2 產品藍圖 + phased rollout（roadmap 已過期，哲學/rejected 表仍有參考價值）
+    2026-04-26-product-review.md      # 產品方向校準（結論已被推翻，原則已搬到 PRINCIPLES.md）
+    2026-04-26-library-proposal.md    # Library 產品定位 + 設計 brief
+    2026-04-27-library-design-review-v1.md  # Library 設計 v1 review + DB 可行性核對
 .github/workflows/daily_sync.yml
 ```
 
@@ -190,6 +225,7 @@ docs/
 # Pipeline
 npm run build          # tsc
 npm run dev:pipeline   # tsx src/index.ts（會真的寫 DB + 推 Web Push）
+npm run dev:quiz       # tsx src/quiz-pipeline.ts（會真的寫 DB，5 題）
 npm run dev:api        # Hono API server (port 3001)
 
 # Web
@@ -260,17 +296,23 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - 👎 per-category 要 ≥ 2 次才算負訊號（單一 👎 可能只是當天心情，別當真）
 
 **Edge Runtime endpoints（POST 一律走這裡，不要進 Hono；GET 視情況也可走 Edge）：**
-- `/api/ask` → `api/ask.ts`（SSE streaming）
-- `/api/ask-history` → `api/ask-history.ts`（GET 讀 / POST upsert per-article conversations row）
+- `/api/ask` → `api/ask.ts`（SSE streaming；文章與 quiz 共用，quiz 用合成 `articleId=quiz-${id}`）
+- `/api/ask-history` → `api/ask-history.ts`（GET 讀 / POST upsert per-(article, device) conversations row）
 - `/api/push-subscribe` → `api/push-subscribe.ts`（寫 Turso）
 - `/api/save` → `api/save.ts`（查 article、Notion dedupe lookup、upsert saves，sync lock 防併發 double-create）
 - `/api/unsave` → `api/unsave.ts`（soft-hide saves via deleted_at；不刪 row、不動 notion_page_id、不刪 Notion page）
 - `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
+- `/api/quiz-attempt` → `api/quiz-attempt.ts`（寫 `quiz_attempts`；`X-Device-Id` header 必填，缺就 400）
 - **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。
-- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/feed` + `/api/library` GET）。
-- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
+- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/feed`、`/api/library`、`/api/quiz`、`/api/activity` 皆 GET）。
+- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback`、`/api/quiz-attempt` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
+
+**Quiz pipeline / 多使用者：**
+- Quiz 出題完全獨立於文章 pipeline：不同 cron 檔（`quiz_sync.yml` 06:00 台北 vs `daily_sync.yml` 07:30 台北）、不同 entry（`quiz-pipeline.ts` vs `index.ts`）、不共用 selection 邏輯；共用的只有 `ai/select-provider.ts`（GPT/Claude 輪替）和同一顆 Turso DB
+- Quiz dedup 用同一招：`getRecentQuizPrompts()` 撈近期已出過的題目 prompt，附加在 `QUIZ_SYSTEM` **尾端**（"AVOID REPEATING" 區塊），保 cache prefix 穩定 — 跟 classifier 的 `buildPreferenceContext()` 手法一致，不要重新發明
+- `device_id` 是目前唯一的多使用者隔離機制（沒有帳號系統）：`feedback` / `saves` / `conversations` / `push_subscriptions` / `quiz_attempts` 都有 `device_id` 欄位，app 端由 `src/device.ts` 生成 UUID 存 AsyncStorage，每次 fetch 帶 `X-Device-Id` header。新增任何寫入型 endpoint 若涉及個人化資料，記得比照加 `device_id` 欄位 + header 檢查
 
 **PWA / Service Worker：**
 - **不要**重新加 `vite-plugin-pwa` 或其他 SW 產生器。app 是「每天開一次抓新資料」，沒有 offline 需求，SW 只會製造 cache 地獄（見 FRONTEND_FIX_LOG Issue 14）。
@@ -287,17 +329,20 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 
 ---
 
-## React Native App (app/)
+## React Native App「Sift」(app/)
 
-- **Expo SDK 54**，以 Expo Go 開發；目標發佈路徑是 TestFlight（EAS Build）
-- **三分頁 bottom tab**：Quiz（✦ 今日題目）/ Feed（◎ 簡報）/ Library（⊟）
+- **產品形態**：新聞（Feed，讀當日 AI brief）+ 遊戲化 quiz（Quiz，backend/infra 工程判斷力題目）雙軌，共用 Library / Activity / Ask 基礎設施。兩條內容各自獨立 pipeline 產生（見系統架構），app 端是統一的殼
+- **Expo SDK 54**，以 Expo Go 開發封測中；目標發佈路徑是 TestFlight（EAS Build）
+- **四分頁 bottom tab**：Quiz（✦ 今日題目）/ Feed（◎ 簡報）/ Library（⊟）/ Activity（紀錄 — 學習儀表板）
 - **字型**：NotoSansTC 400/500/700/900 + JetBrains Mono 400/500/700，由 `@expo-google-fonts` 載入；App.tsx 等字型就緒才渲染
-- **主題**：`src/theme.ts` 匯出 `T`（色彩）/ `FONT`（字型 key）/ `RADIUS`；刻意鏡像 web/ dark theme，讓兩個 client 視覺一致
-- **API**：`src/api.ts` 用 `Constants.expoConfig.hostUri` 自動抓 Metro LAN IP（dev），production build 固定走 `https://ai-morning-brief-chi.vercel.app`；也可在 `app/.env` 設 `EXPO_PUBLIC_API_BASE_URL` 強制覆蓋
-- **SSE 追問**：`streamAsk()` 改用 `expo/fetch`（RN 原生 fetch 無法讀 streaming body）；Edge `/api/ask` 只存在於 Vercel，本地 dev server 沒有，開發時直接打 prod
-- **Device ID**：`src/device.ts` 用 AsyncStorage 生成 UUID，每次 fetch 帶 `X-Device-Id` header（對齊 web 的 device_id 機制）
-- **Quiz 互動類型**：`single_choice` / `ordering` / `matching` / `fill_blank`（`api/quiz-attempt.ts` 記錄作答結果）
+- **主題**：`src/theme.ts` 匯出 `T`（色彩）/ `FONT`（字型 key）/ `RADIUS` / `XP`（答對/答錯經驗值）；刻意鏡像 web/ dark theme，讓兩個 client 視覺一致
+- **API**：`src/api.ts` 用 `Constants.expoConfig.hostUri` 自動抓 Metro LAN IP（dev），production build 固定走 `https://ai-morning-brief-chi.vercel.app`。**Expo Go dev 模式下 `hostUri` 永遠存在**，所以不設 override 的話一律假設 `npm run dev:api` 有在跑本地——沒開就整個打不通。`app/.env`（gitignored，不會被 push）目前設了 `EXPO_PUBLIC_API_BASE_URL` 固定指向 prod，讓日常用 Expo Go 不用開本地 server；要測後端改動時把這行註解掉即可切回本地自動偵測
+- **SSE 追問**：`streamAsk()` 改用 `expo/fetch`（RN 原生 fetch 無法讀 streaming body）；Edge `/api/ask` 只存在於 Vercel，本地 dev server 沒有，開發時直接打 prod。Quiz 題目追問重用同一套 AskSheet + `/api/ask` + `/api/ask-history`，用合成 `articleId = quiz-${id}` 掛進 conversations table，**沒有**為 quiz 另開一套追問機制
+- **Device ID**：`src/device.ts` 用 AsyncStorage 生成 UUID（key: `sift_device_id`），每次 fetch 帶 `X-Device-Id` header；貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts 五個 table，是多使用者隔離的唯一依據（無帳號系統）
+- **Quiz 互動類型**：`single_choice` / `ordering` / `matching` / `fill_blank`（`api/quiz-attempt.ts` 記錄作答結果，寫入 `quiz_attempts`）；出題交由獨立 `quiz_sync.yml` cron，非即時生成
+- **Activity（學習紀錄）**：`GET /api/activity`（Hono，read-only）回傳 heatmap / streak / 正確率，皆用 `X-Device-Id` 圈定範圍
 - **不要**在 app/ 加 SW、manifest、VAPID 相關邏輯 — push 仍由 web/ PWA 負責
+- **已知問題**：Quiz 分頁的 streak 是寫死的常數（跟 Activity 分頁算出來的真實 streak 對不上）、Feed 分頁的收藏狀態是純前端 local state（重整後會跟 Library 不同步）。完整清單見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)，動 `QuizScreen.tsx` / `FeedScreen.tsx` 前先看一眼
 
 ---
 
@@ -308,7 +353,10 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 3. **Category tags**：#model-release #api-platform #infra-inference #tooling-open-source #benchmark-eval #agent-systems #policy-regulation #company-market #social-opinion #event-promo #research-adjacent
 4. **Web design**：報紙 / FT editorial 風格，Source Serif 4 + JetBrains Mono
 5. **Streak**：localStorage `mb_streak`，讀完最後一篇 +1
-6. **Deploy**：Vercel free tier（V2_DESIGN.md §4 決策）
+6. **Deploy**：Vercel free tier（[decisions/2026-04-26-v2-design.md](./docs/decisions/2026-04-26-v2-design.md) §4 決策）
+7. **雙內容 pipeline 解耦**：Quiz 不依賴文章資料，獨立 cron / entry / dedup，只共用 provider 選擇邏輯和 DB。理由：兩條內容各自有自己的更新節奏和失敗模式，耦合在一起會讓文章 pipeline 的錯誤處理複雜化，也讓 quiz 沒辦法獨立重跑
+8. **Quiz 追問重用文章 Ask 基礎設施**：用合成 `articleId = quiz-${id}` 讓 quiz 題目掛進既有的 `/api/ask` + `conversations` table，而不是為 quiz 另建一套追問系統——避免維護兩套幾乎一樣的 SSE + 歷史儲存邏輯
+9. **多使用者靠 device_id，不做帳號系統**：AsyncStorage 生成 UUID 當身分依據，貫穿五張表。輕量但有已知限制：換裝置 = 換身分，資料不會跟著人走
 
 ---
 
@@ -318,7 +366,8 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - 超過 10 輪對話後，編輯檔案前一律重新讀取該檔案
 - 大任務拆獨立模組，不要一個 agent 硬扛
 - `nvm use 20` 先跑，再跑任何 npm 指令
-- 遇到前端 / mobile UI 問題，**先讀 `docs/FRONTEND_FIX_LOG.md`** 再動手
+- 遇到前端 / mobile UI 問題，**先讀對應的 fix log 再動手**：`web/` 看 `docs/FRONTEND_FIX_LOG.md`，`app/` 看 `docs/FRONTEND_FIX_LOG_APP.md`
+- 文件改動先看 `docs/README.md` 分清楚 living spec（跟 code 同步）vs `docs/decisions/`（凍結，不改）——不要把新事實寫進 `decisions/` 底下的檔案
 - Commit 前先把 UI 結果描述給使用者，等他說 go 才動（Never commit proactively）
 
 ---

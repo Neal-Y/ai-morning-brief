@@ -1,6 +1,8 @@
 # Handoff — Web Push / ntfy Removal
 
-> **Status (2026-04-28)**：本文件為 2026-04-25 ntfy 拔除 / Web Push 切換當下的交接快照。後續產品方向（Library ship、quiz 降級等）以 [CLAUDE.md](../CLAUDE.md) TL;DR 為準，本文不再更新。
+> **Status: Decision record, frozen 2026-04-28. Do not edit for new facts.**
+>
+> 本文件為 2026-04-25 ntfy 拔除 / Web Push 切換當下的交接快照。內容已大致併入 [../../CLAUDE.md](../../CLAUDE.md) Conventions（Pipeline/DB）與 [README](../../README.md) §4，此檔僅保留當下時間戳記與交接紀錄。「Quiz generation can follow after Notion save is stable」（文末）已作廢——quiz 後來獨立成自己的 pipeline，跟 Notion 穩定與否無關。
 
 Date: 2026-04-25
 

@@ -1,6 +1,12 @@
 # 產品覆盤 — 2026-04-26
 
+> **Status: Decision record, frozen 2026-04-26. Do not edit for new facts.**
+>
 > 一次刻意停下來的反思：在 F4 Notion 整合 ship 之後、F5 quiz 開工之前，先回頭問「**這產品到底要幹嘛、哪些功能其實是工程師自嗨**」。
+>
+> **§4「Quiz 是賭注，不是顯然的下一步」的結論已被推翻**：quiz 實際上照做了，且已經是主力產品（app 改名「Sift」，四分頁封測中），退場條件從未觸發執行。現況見 [../../CLAUDE.md](../../CLAUDE.md)。
+>
+> **§「該被記下來的工作原則」不受此影響** —— 那 6 條是可重複使用的方法論，不是這次的產品結論，已整理成 living doc：[../PRINCIPLES.md](../PRINCIPLES.md)。
 >
 > 寫這份文件是因為這次討論本身比結論更值錢。下次再覺得自己「幹勁滿滿一直 ship」的時候，先回來讀一次。
 
@@ -155,6 +161,6 @@ V2_DESIGN.md 的 Rejected 表（DALL-E cover image / iOS native widget / knowled
 ## 連帶決策（這次討論衍生）
 
 - ✅ 通知文案重設計（移除 "from Sift" 冗餘行、`/` → `·`、用釋出空間放 lead 文章的 `engineeringImpact`）→ 已實作，見當日 commit
-- ✅ Library 頁面設計提案 → 見 [LIBRARY_PROPOSAL.md](./LIBRARY_PROPOSAL.md)
+- ✅ Library 頁面設計提案 → 見 [2026-04-26-library-proposal.md](./2026-04-26-library-proposal.md)
 - ✅ V2_DESIGN.md 重新排序：Library 升為第三支柱、Quiz 降為 Retention layer
 - ⏳ Notion 觀察期：2026-05-26 回看是否有真的回去翻 Sift Saves

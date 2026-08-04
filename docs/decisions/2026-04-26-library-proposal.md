@@ -1,10 +1,12 @@
 # Library 頁面設計提案
 
-> **Status (2026-04-28)**：已 ship（2026-04-26）。本文件為 ship 前的設計提案紀錄，現況以 [CLAUDE.md](../CLAUDE.md) TL;DR + `web/src/Library.tsx` 為準。
+> **Status: Decision record, frozen 2026-04-28. Do not edit for new facts.**
+>
+> 已 ship（2026-04-26）。本文件為 ship 前的設計提案紀錄，現況以 [../../CLAUDE.md](../../CLAUDE.md) + `web/src/Library.tsx` 為準。**§6/§9 的「不佔 tab bar 第一順位 / 不要再加 tab」判斷已被 RN app「Sift」推翻** —— Sift 現在是四分頁 bottom tab，Library 就是其中一個 tab；這是 web PWA（次要 client）vs RN app（主力 client）的入口模型差異，不是原判斷寫錯，只是產品後來多了一個 client。
 >
 > 給設計用的 self-contained brief。讀完這份文件就能開始畫畫面，不需要再回去翻 codebase。
 >
-> 上下文背景：[PRODUCT_REVIEW_2026-04-26.md](./PRODUCT_REVIEW_2026-04-26.md) §「真正的第三格答案」。
+> 上下文背景：[2026-04-26-product-review.md](./2026-04-26-product-review.md) §「真正的第三格答案」。
 
 ---
 

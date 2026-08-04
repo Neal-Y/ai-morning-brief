@@ -1,12 +1,14 @@
 # Library 設計 v1 Review
 
-> **Status (2026-04-28)**：Library 已 ship（2026-04-26）。本文件為設計 review 當下紀錄，現況以 [CLAUDE.md](../CLAUDE.md) TL;DR + `web/src/Library.tsx` 為準。
+> **Status: Decision record, frozen 2026-04-28. Do not edit for new facts.**
+>
+> Library 已 ship（2026-04-26）。本文件為設計 review 當下紀錄——UI 細節層級的 mockup 評注，現況以 [../../CLAUDE.md](../../CLAUDE.md) + `web/src/Library.tsx` 為準。
 >
 > 對 claude-design 第一版 Library 頁面 mockup 的檢視紀錄 + 給設計師的回饋 prompt。
 >
 > **Date:** 2026-04-26
-> **設計提案來源：** [LIBRARY_PROPOSAL.md](./LIBRARY_PROPOSAL.md)
-> **下一版要補：** Mobile viewport / Expanded row / Empty / Loading state
+> **設計提案來源：** [2026-04-26-library-proposal.md](./2026-04-26-library-proposal.md)
+> **下一版要補：** Mobile viewport / Expanded row / Empty / Loading state（已隨 ship 完成，此檔未回填最終結果）
 
 ---
 

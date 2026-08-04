@@ -2,29 +2,34 @@
 
 ## Project Structure & Module Organization
 
-- `src/` holds the scheduled backend pipeline: RSS ingestion, AI classification, brief generation, Turso access, Notion sync, and push.
-- `src/api/` contains the local Hono API. It is read-oriented: `GET /api/feed` and `GET /api/library` live in `src/api/app.ts`.
-- Root `api/*.ts` files are Vercel routes. Body-reading POST endpoints are Edge functions: `ask`, `ask-history`, `push-subscribe`, `save`, `unsave`, and `feedback`.
+- `src/` holds two independent scheduled pipelines: the article pipeline (RSS ingestion, AI classification, brief generation, Notion sync, push) entered via `src/index.ts`, and the quiz pipeline (`src/quiz/generate.ts`, `src/db/quiz-writer.ts`) entered via `src/quiz-pipeline.ts`. They run on separate GitHub Actions crons (`daily_sync.yml` 07:30 Taipei, `quiz_sync.yml` 06:00 Taipei) and do not depend on each other.
+- `src/api/` contains the local Hono API. It is read-oriented: `GET /api/feed`, `GET /api/library`, `GET /api/quiz`, and `GET /api/activity` live in `src/api/app.ts`.
+- Root `api/*.ts` files are Vercel routes. Body-reading POST endpoints are Edge functions: `ask`, `ask-history`, `push-subscribe`, `save`, `unsave`, `feedback`, and `quiz-attempt`.
+- `app/` is the React Native app, product name "Sift" (Expo SDK 54, currently in Expo Go closed beta). Four bottom tabs: Quiz, Feed, Library, Activity (`app/src/screens/ActivityScreen.tsx` — a learning-stats dashboard with a heatmap, pie chart, and streak). This is the primary client going forward; `web/` remains the Web Push entry point.
 - `web/` is the React PWA: source in `web/src/`, assets and service worker in `web/public/`.
 - `web/src/Library.tsx` is the implemented `/library` page; `web/src/router.ts` provides the lightweight pathname router.
 - `scripts/` contains helpers like `scripts/seed.ts`.
-- `docs/` stores product notes, design reviews, and handoffs. Library implementation source of truth is `web/src/Library.tsx`.
+- `docs/` is split into living specs (kept in sync with code — `ARCHITECTURE.md`, `KNOWN_ISSUES.md`, `PRINCIPLES.md`, `DEPLOY.md`, `FRONTEND_FIX_LOG.md` for `web/`, `FRONTEND_FIX_LOG_APP.md` for `app/`) and `docs/decisions/` (frozen, dated, point-in-time — never edit for new facts). Read `docs/README.md` first; it explains the split and indexes every file.
 
 ## Current Product State
 
 - V1 daily brief pipeline is live: GitHub Actions runs the RSS -> LLM -> Turso -> Web Push flow.
 - Web Push replaced ntfy. Do not reintroduce ntfy or generated service workers.
-- Notion save sync is live via `api/save.ts`; failures should not block in-app saves. Saves are soft-hidden on unsave, and Notion sync uses `Article ID` lookup plus a DB sync lock to avoid duplicate pages.
+- Notion save sync is live via `api/save.ts`; failures should not block in-app saves. Saves are soft-hidden on unsave, and Notion sync uses `Article ID` lookup plus a DB sync lock to avoid duplicate pages. This integration is intentionally left as-is (sunk cost, not actively revisited) — do not expand it without being asked.
 - Library is no longer only a plan: `/library`, `/api/library`, filters, expanded rows, AskSheet reuse, save, unsave, Ask count, and per-article Ask history restore are implemented.
-- Ask history is persisted in Turso `conversations`: one row per article, capped message JSON, plus `message_count` for lightweight Library indicators. Do not load full conversation bodies in `/api/library`.
-- Quiz and skill-tag generation remain future work. Do not prioritize them before validating Library usage.
+- Ask history is persisted in Turso `conversations`: one row per (article, device), capped message JSON, plus `message_count` for lightweight Library indicators. Do not load full conversation bodies in `/api/library`.
+- Quiz generation is live and independent of the article pipeline: `src/quiz-pipeline.ts` generates 4 question types (single_choice, ordering, matching, fill_blank) daily via its own cron, with prompt-level dedup against recently asked questions. Quiz answers are recorded via `POST /api/quiz-attempt` into `quiz_attempts`. Quiz follow-up questions reuse the article Ask infrastructure via a synthetic `articleId = quiz-${id}` — do not build a separate ask/conversation system for quiz.
+- There is no account system. Multi-user isolation is by `device_id` (a UUID the app generates and stores in AsyncStorage, sent as `X-Device-Id`), present on `feedback`, `saves`, `conversations`, `push_subscriptions`, and `quiz_attempts`. Any new endpoint that writes personalized data should follow this pattern.
+- Skill-tag generation (`skillTags` on articles) remains future work.
+- Current focus is shipping the Sift app to TestFlight via EAS Build — treat this as the active priority unless told otherwise.
 
 ## Build, Test, and Development Commands
 
 Use Node 20+ (`nvm use 20`).
 
 - `npm run dev:api` starts the local Hono API server on port 3001.
-- `npm run dev:pipeline` runs the real pipeline; it can write to Turso and send push notifications.
+- `npm run dev:pipeline` runs the real article pipeline; it can write to Turso and send push notifications.
+- `npm run dev:quiz` runs the real quiz pipeline; it can write to Turso (5 questions).
 - `npm run typecheck` checks `src/`, `api/`, `scripts/`, and Drizzle config without emitting files.
 - `npm run build` compiles the backend pipeline to `dist/`.
 - `npm run db:generate`, `db:migrate`, `db:push`, and `db:seed` manage Drizzle and sample data.
@@ -60,6 +65,8 @@ Do not commit `.env`, `.env.local`, API keys, VAPID private keys, Turso tokens, 
 - Classifier concurrency is intentionally capped for provider limits. Do not add unbounded LLM calls or retries.
 - The service worker in `web/public/sw.js` is only for push and notification click handling. Do not add fetch caching without revisiting the PWA cache history.
 - Web Push should only fire after DB persistence succeeds; failed infrastructure should fail the workflow rather than notify stale or missing content.
+- `device_id` is client-supplied (`X-Device-Id` header) with no auth behind it — trivially spoofable. This is an accepted tradeoff for a no-account hobby app, not an oversight; do not "fix" it by adding auth without being asked.
+- Quiz dedup context (`getRecentQuizPrompts`) and classifier preference context (`buildRecentQuizContext` / `buildPreferenceContext`) must stay appended at the END of their respective system prompts to preserve the stable cache-prefix. Do not move either to the start or middle of the prompt.
 
 ## [ADDED CONTENT] Engineering Workflow & Review Framework
 
