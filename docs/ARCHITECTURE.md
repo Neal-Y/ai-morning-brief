@@ -156,7 +156,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 |---|---|---|
 | `articles` | `id` (SHA-256(url).slice(0,16)) pk, `url` unique, `score`, `renderLevel`, `categoryTag`, `skillTags` (JSON string, unused by classifier today), `briefDate` | No `device_id` — articles are global, not per-user |
 | `feedback` | `articleId` fk, `signal` ('up'\|'down'), `deviceId` | delete-then-insert on write — same (device, article) pair only ever has the latest signal |
-| `saves` | `articleId` fk, `deviceId`, `notionPageId`, `deletedAt` | unique on `(deviceId, articleId)`. Unsave = soft hide (`deletedAt` set); row and `notionPageId` survive so re-save reuses the same Notion page |
+| `saves` | `articleId` fk, `deviceId`, `notionPageId` | unique on `(deviceId, articleId)`. **⚠️ `deletedAt`/`notionSyncingAt` are referenced by `unsave.ts`/`save.ts` but were never actually migrated into the live table — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).** `src/db/schema.ts` correctly omits them; the design doc language elsewhere describing soft-hide as shipped is currently aspirational, not real |
 | `conversations` | `articleId` fk (real or synthetic `quiz-${id}`), `deviceId`, `messages` (JSON), `messageCount`, `model` | unique on `(articleId, deviceId)`. Full-overwrite on save, not append-diff. `/api/library` selects `messageCount` only — never loads `messages` |
 | `quizzes` | `type`, `category`, `prompt`, `payload` (JSON, shape per `type`), `explanation` | No `deviceId` — quizzes are global, like articles |
 | `quiz_attempts` | `quizId` fk, `deviceId`, `correct` | One row per attempt (no unique constraint — a user can retry and log multiple attempts on the same quiz) |

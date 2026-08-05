@@ -91,7 +91,7 @@ React Native App「Sift」(app/) — 主力 client，Expo Go 封測中
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
 | 💬 追問歷史 | ✅ | `api/ask-history.ts` Edge：GET hydrate / POST upsert；`conversations` 一篇一 row；AskSheet 開啟還原、turn 完成保存；Library 顯示 ask message count |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
-| 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful；2026-05-06 加 dedupe（Notion Article ID lookup + DB sync lock）+ unsave 改 soft-hide（規則見 Conventions Pipeline/DB） |
+| 🔖 Notion 整合 | ⚠️ 部分 | Edge Runtime + raw fetch；首次收藏正常。**soft-hide / sync lock 設計的 `deleted_at` `notion_syncing_at` 欄位從未真的 migrate 進 DB**（2026-08-05 發現），`/api/unsave` 跟「重存」路徑實際上一直在 500。詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md) |
 | Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。2026-04-27 Vercel preview 真機驗證完成 |
 | React Native App「Sift」| ⏳ 封測中 | Expo SDK 54，Expo Go 開發，TestFlight 為目標；四分頁 Quiz/Feed/Library/Activity |
 | Quiz 生成 | ✅ 程式碼完成，⏸️ cron 手動暫停 | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（06:00 台北）目前手動關閉，等使用頻率提高再開。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
@@ -286,7 +286,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `saves.articleId` 是 unique（一篇一筆）；`/api/save` handler 自己做 upsert（`ON CONFLICT(article_id) DO UPDATE`，順便清掉 `deleted_at`），不依賴 Drizzle upsert（Edge Runtime 用 raw Turso HTTP API）
 - Notion sync 失敗不阻斷收藏：寫 `saves` row 但 `notion_page_id = NULL`，回 `{ ok: true, notionSynced: false }`，下次同篇再點會 retry
 - **Notion dedupe 三層防線（2026-05-06）**：再次按 🔖 同一篇時 (a) 既有 `saves.notion_page_id` 不為 NULL → 直接 reuse，不打 Notion；(b) 沒 page id → 用 `saves.notion_syncing_at` 當 10 分鐘 sync lock（CAS update where IS NULL or stale），搶到 lock 才呼叫 Notion，搶不到回 `{ notionSyncing: true }`；(c) 真的要建 page 前先 `findSavePageByArticleId(articleId)` query Notion 上是否已有同 `Article ID`，有就 reuse、沒有才 `createSavePage`。三層都是為了避免 unsave→re-save 又生第二張 Notion page。
-- `/api/unsave` 是 **soft-hide**（`UPDATE saves SET deleted_at = ?`）：**不刪 row、不動 notion_page_id、不刪 Notion page**。保留 row 是為了讓 re-save 走上面 dedupe (a) 直接掛回原本那張 Notion page；不刪 Notion page 是因為 Notion 是外部 PKM，使用者可能已經整理過內容。未來若調整，優先考慮把 Notion 降級為明確的「送到 Notion」curated export，而不是每次 save 自動同步。
+- `/api/unsave` 設計上是 **soft-hide**（`UPDATE saves SET deleted_at = ?`）：**不刪 row、不動 notion_page_id、不刪 Notion page**。保留 row 是為了讓 re-save 走上面 dedupe (a) 直接掛回原本那張 Notion page；不刪 Notion page 是因為 Notion 是外部 PKM，使用者可能已經整理過內容。**⚠️ 2026-08-05 發現：`deleted_at` / `notion_syncing_at` 這兩個欄位從沒真的 migrate 進 live DB，上述設計目前是「寫好但沒真的生效」——`/api/unsave` 實際上一直在 500。詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)，動這塊前先看那份。** 未來若調整，優先考慮把 Notion 降級為明確的「送到 Notion」curated export，而不是每次 save 自動同步。
 - `conversations` 是「一個 articleId 一 row」：`messages` JSON、`message_count`、`model`、`created_at`、`updated_at`。`/api/ask-history` POST 是整段覆寫（不 append diff），AskSheet 在每個 user→assistant turn 完成後送一次。`/api/library` JOIN 時只 select `message_count`，**不要**載入 messages JSON（library payload 別變大）；要看完整對話走 `/api/ask-history?articleId=` GET。
 
 **Classifier 偏好：**

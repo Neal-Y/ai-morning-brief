@@ -24,12 +24,6 @@ Added `@expo/vector-icons` to `app/package.json` dependencies explicitly (was pr
 
 `app/src/data.ts` — if `fetchQuizzes()` fails or returns zero mappable items, `loadQuestions()` falls back to a hardcoded `FALLBACK` array of 3 `single_choice` questions. The app normally serves a free mix of all 4 types; on fallback, `ordering`/`matching`/`fill_blank` silently disappear for that session. File header comment already documents this as "offline/error fallback only, not the primary path" — flagging here so it doesn't get mistaken for a content bug when someone eventually sees an all-single-choice quiz set.
 
-### 🟢 `@expo/vector-icons` used but not a declared dependency
-
-`ArticleCard.tsx`, `LibraryScreen.tsx`, `QuizFrame.tsx` import `{ Feather, Ionicons }` from `@expo/vector-icons`, but it's not in `app/package.json` — only present transitively via `expo`. Works today because Expo pulls it in and Metro hoists it; would break if `expo`'s own dependency on it is ever dropped, or under stricter dependency resolution.
-
-**Fix shape**: add `@expo/vector-icons` to `app/package.json` dependencies explicitly.
-
 ### 🟢 Dead fields in the article API contract
 
 `Article.recommendation` (`'READ_NOW'|'SKIM'|'SKIP'`, `types.ts`) is populated by the classifier and shipped in every `/api/feed`/`/api/library` response, but no screen or component reads it — contrast with `renderLevel`, which *does* gate UI (`工程影響`/`深入脈絡` sections). Similarly `LibraryArticle.notionSynced` and `RawArticle.classifiedAt` are declared but unconsumed by any current screen. Not a bug — just payload weight with no reader; worth knowing before "optimizing" the API response shape, since removing them would be safe today.
@@ -42,4 +36,13 @@ Added `@expo/vector-icons` to `app/package.json` dependencies explicitly (was pr
 
 ## Backend / pipelines
 
-*(none open — add here when found)*
+### 🔴 `saves.deleted_at` and `saves.notion_syncing_at` are referenced by code but don't exist in the live DB
+
+Discovered 2026-08-05 when `GET /api/library` started 500ing for every request carrying `X-Device-Id` (i.e. every real app request) after `src/api/app.ts` added a `sql\`deleted_at IS NULL\`` filter. `PRAGMA table_info(saves)` against the live Turso DB shows only `id, article_id, device_id, user_note, notion_page_id, created_at` — **no `deleted_at`, no `notion_syncing_at`**, even though `src/db/schema.ts` also never declared them (schema.ts is actually correct/honest here). CLAUDE.md/README/ARCHITECTURE.md describe a shipped soft-delete + Notion sync-lock design assuming these columns exist; the design was written and partially coded, but the migration never actually landed in production. This matches an old, previously-unresolved flag: commits around 2026-05-06 ("soft delete, Notion sync lock") were "overridden in a rebase" at some point and never properly re-migrated.
+
+**Current blast radius**:
+- `GET /api/library` — **fixed 2026-08-05**, reverted to not filtering on `deleted_at` (see `src/api/app.ts`). Library now shows all saves for a device, including ones a user "removed" — because removal was never actually taking effect server-side (see next point).
+- `POST /api/unsave` (`api/unsave.ts`) — its `UPDATE saves SET deleted_at = ?, notion_syncing_at = NULL ...` references both missing columns. **Every unsave request has almost certainly been 500ing since this endpoint was deployed.** The app's optimistic local UI update makes it *look* like unsaving worked (bookmark toggles off), while the failure is silently swallowed (`.catch(() => {})`), so a saved article never actually leaves `saves` server-side.
+- `POST /api/save` (`api/save.ts`) — first-time saves (plain `INSERT`) are unaffected. Re-saving an article that already has a `saves` row (the "restore after unsave" path, lines ~154/206) hits `UPDATE ... SET deleted_at = NULL ...` and would also 500.
+
+**Fix shape (not yet done — needs a decision, not just code)**: either (a) run a real migration adding `deleted_at INTEGER` and `notion_syncing_at INTEGER` to the live `saves` table, matching what `unsave.ts`/`save.ts` already assume, and add both to `src/db/schema.ts` so this can't silently drift again — this actually completes the soft-delete design as documented; or (b) rip the `deleted_at`/`notion_syncing_at` references out of `unsave.ts`/`save.ts` and go back to hard-delete-on-unsave (simpler, but loses the "re-save reuses the same Notion page" dedupe behavior the docs describe). Don't pick silently — this changes user-visible behavior either way.

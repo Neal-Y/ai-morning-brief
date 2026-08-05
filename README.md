@@ -110,7 +110,7 @@ React PWA (web/) — Web Push 入口
 |-------|------|
 | `articles` | 每日文章 + 分類結果 |
 | `feedback` | 👍👎 回饋，用於 classifier 偏好調整 |
-| `saves` | 🔖 收藏紀錄；`(device_id, article_id)` unique，`deleted_at` soft hide，`notion_page_id` 保留 re-save 去重 |
+| `saves` | 🔖 收藏紀錄；`(device_id, article_id)` unique。⚠️ `deleted_at` soft-hide 設計的欄位其實從沒 migrate 進 live DB，`/api/unsave` 目前實際上是壞的——見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md) |
 | `conversations` | 💬 追問對話歷史；一 (article, device) 一筆，`messages` JSON + `message_count` 供 Library 輕量顯示；quiz 用合成 article_id 共用此表 |
 | `quizzes` | Quiz 題目（4 題型，polymorphic `payload` JSON）|
 | `quiz_attempts` | Quiz 作答紀錄：`quiz_id` / `device_id` / `correct` |

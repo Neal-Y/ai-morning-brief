@@ -46,7 +46,10 @@ app.get('/api/library', async (c) => {
       ? db.select().from(feedback).where(eq(feedback.deviceId, deviceId))
       : Promise.resolve([]),
     deviceId
-      ? db.select().from(saves).where(and(eq(saves.deviceId, deviceId), sql`deleted_at IS NULL`))
+      // NOTE: NOT filtering on deleted_at here — that column was never actually
+      // migrated into the live `saves` table (see docs/KNOWN_ISSUES.md). Filtering
+      // on it 500s every request. Revisit once the migration actually lands.
+      ? db.select().from(saves).where(eq(saves.deviceId, deviceId))
       : Promise.resolve([]),
   ])
 
