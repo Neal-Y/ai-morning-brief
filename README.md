@@ -162,7 +162,7 @@ React PWA (web/) — Web Push 入口
 - **Web PWA**：滑卡瀏覽、👍👎 回饋、💬 追問（Haiku streaming）、🔖 收藏、streak 計數
 - **Library / 歷史頁** (`/library`)：所有歷史文章 + 收藏 tab、filter、日期分組、展開 LLM 四段內容、收藏／移除收藏、AskSheet 直接從歷史卡開追問並恢復該篇歷史對話
 - **Web Push (VAPID)**：iOS standalone PWA 支援，通知標題 = lead story headline，body 第 1 行 = lead 文章的 `engineeringImpact`（LLM 判斷直接上鎖屏）
-- **🔖 → Notion 同步**：點收藏自動同步 Notion page；Article ID 查重 + soft-unsave 保留 page link，避免同篇重複建頁
+- **🔖 → Notion 同步**：點收藏自動同步 Notion page；重存時查 DB 快取或直接查 Notion `Article ID` 找回舊 page，避免同篇重複建頁；unsave 是硬刪除 saves row，不動 Notion page
 - **Feedback loop**：Classifier 讀近 30 天 👍👎 回饋調整選文偏好（≥10 筆啟動）
 - **Provider alternation**：GPT-4o / Claude Sonnet 4.6 按日輪替，文章與 quiz pipeline 共用同一套邏輯
 
