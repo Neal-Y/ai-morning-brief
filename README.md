@@ -79,7 +79,7 @@ Edge Functions (Vercel 獨立路由，不走 Hono)
   ├─ GET/POST /api/ask-history api/ask-history.ts — 每篇文章一份對話歷史（Turso HTTP API）
   ├─ POST /api/push-subscribe  api/push-subscribe.ts — 寫 push_subscriptions
   ├─ POST /api/save            api/save.ts — Notion Article ID 去重 + upsert/restore saves
-  ├─ POST /api/unsave          api/unsave.ts — soft-hide in-app save（保留 Notion link）
+  ├─ POST /api/unsave          api/unsave.ts — 硬刪除 saves row（Notion page 不動，dedupe 靠直查 Notion）
   ├─ POST /api/feedback        api/feedback.ts — 👍👎 回饋（delete-then-insert）
   └─ POST /api/quiz-attempt    api/quiz-attempt.ts — 寫入 quiz_attempts
 
@@ -110,7 +110,7 @@ React PWA (web/) — Web Push 入口
 |-------|------|
 | `articles` | 每日文章 + 分類結果 |
 | `feedback` | 👍👎 回饋，用於 classifier 偏好調整 |
-| `saves` | 🔖 收藏紀錄；`(device_id, article_id)` unique。⚠️ `deleted_at` soft-hide 設計的欄位其實從沒 migrate 進 live DB，`/api/unsave` 目前實際上是壞的——見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md) |
+| `saves` | 🔖 收藏紀錄；`(device_id, article_id)` unique；unsave 是硬刪除，不是 soft-delete（2026-08-05 修正，過程見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)） |
 | `conversations` | 💬 追問對話歷史；一 (article, device) 一筆，`messages` JSON + `message_count` 供 Library 輕量顯示；quiz 用合成 article_id 共用此表 |
 | `quizzes` | Quiz 題目（4 題型，polymorphic `payload` JSON）|
 | `quiz_attempts` | Quiz 作答紀錄：`quiz_id` / `device_id` / `correct` |

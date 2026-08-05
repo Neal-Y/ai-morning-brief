@@ -61,19 +61,19 @@ export default async function handler(req: Request): Promise<Response> {
     return jsonResponse({ ok: false, error: 'invalid_body' }, 400)
   }
 
-  // Soft-hide only: set deleted_at, reset notion_syncing_at lock.
-  // Do NOT delete the row and do NOT touch notion_page_id — if the user
-  // re-saves the same article, the existing row (and its Notion page link)
-  // will be reused by save.ts to avoid creating a duplicate Notion page.
+  // Hard delete: unsaving means "I don't want this in my saves" — the article
+  // itself is untouched (articles table), only the save/bookmark relationship
+  // goes away. Safe to actually delete rather than soft-hide: save.ts's Notion
+  // dedupe (findSavePageByArticleId) checks Notion directly by Article ID, not
+  // this row, so re-saving later still reuses the same Notion page even
+  // without a lingering DB row — see docs/KNOWN_ISSUES.md for the history here.
   try {
-    const now = String(Math.floor(Date.now() / 1000))
     await tursoPipeline([
       {
         type: 'execute',
         stmt: {
-          sql: 'UPDATE saves SET deleted_at = ?, notion_syncing_at = NULL WHERE article_id = ? AND device_id = ?',
+          sql: 'DELETE FROM saves WHERE article_id = ? AND device_id = ?',
           args: [
-            { type: 'integer', value: now },
             { type: 'text', value: articleId },
             { type: 'text', value: deviceId },
           ],

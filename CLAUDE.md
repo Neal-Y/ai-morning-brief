@@ -15,7 +15,7 @@
 - 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`；現在 SW (`web/public/sw.js`) 是真正的 push handler（`push` + `notificationclick` events，無 fetch cache）。
 - **iPhone standalone PWA footer gap 已收斂（2026-04-28）**：最終解是延伸 root height 到 `100dvh + safe-area-inset-bottom`，再把 bottom dock 作為 extended root 內的 absolute layer。不要回到 fixed footer / negative safe-area offset；細節見 `docs/FRONTEND_FIX_LOG.md` Issue 6。
 - Classifier 已吃進 feedback（V2 Investment 環節核心），近 30 天 / 20 筆 / 門檻 10 筆。Anthropic cache 有拆 prefix（穩定部分跨天保留）。
-- **F4 Notion 整合（2026-04-25，dedupe 強化 2026-05-06）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `saves.articleId` unique。Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。dedupe：先查 Notion `Article ID` property + DB sync lock（`notion_syncing_at`），有舊 page 就 reuse；`/api/unsave` 改成 soft-hide（`saves.deleted_at`），row 與 `notion_page_id` 都保留，下次再 save 直接掛回同一 Notion page。
+- **F4 Notion 整合（2026-04-25，dedupe 修正 2026-08-05）**：🔖 → `api/save.ts` Edge Runtime → Notion REST API（raw fetch，無 SDK）建 page，DB 端 `(saves.articleId, deviceId)` unique。Notion 失敗仍寫 saves（`notion_page_id = NULL`），下次再點會 retry。dedupe 靠兩層：DB 有 `notion_page_id` 就直接 reuse；沒有就直接查 Notion `Article ID` property（`findSavePageByArticleId`）。`/api/unsave` 是**硬刪除**（`DELETE FROM saves`）——2026-08-05 從「soft-hide 靠 `deleted_at`」改過來，因為那個欄位從沒真的 migrate 進 DB，且硬刪除一樣安全（Notion dedupe 查的是 Notion 本身，不靠這個 row）。
 - **追問歷史（2026-05-06）**：每篇文章一條 `conversations` row（`messages` JSON + `message_count`），`api/ask-history.ts` Edge Runtime 提供 GET/POST upsert。AskSheet 開啟時 hydrate 過往對話、每完成一個 user→assistant turn 就保存；Library 顯示 low-key ask message count，點開可帶歷史回到 AskSheet。`/api/library` JOIN 時只取 `message_count`，**不**載 messages JSON。
 - **產品方向重新校準（2026-04-26）**：原本 V2 設計把 quiz (F5) 排第一，當時覆盤後降級成「Library 上的 retention layer」，退場條件是「沒回頭翻 library 就不做 quiz」。詳見 [docs/decisions/2026-04-26-product-review.md](./docs/decisions/2026-04-26-product-review.md)（**背景文件，決策已被後續開發蓋過，見下一條**）。
 - **Library 頁面已 ship（2026-04-26，commit `0a61bad` / `ee694bb`）**：原 roadmap PR-A/B/C 一發併出。細節見系統架構 + 功能狀態 + Conventions。
@@ -55,7 +55,7 @@ Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
   ├─ POST     /api/push-subscribe# api/push-subscribe.ts — 寫 push_subscriptions
   ├─ POST     /api/save          # api/save.ts — 查 article + Notion dedupe（Article ID lookup + DB sync lock）+ upsert saves
   ├─ POST     /api/feedback      # api/feedback.ts — up/down（delete-then-insert，同 articleId 只留最新）
-  ├─ POST     /api/unsave        # api/unsave.ts — soft-hide saves（set deleted_at；row、notion_page_id、Notion page 都不動）
+  ├─ POST     /api/unsave        # api/unsave.ts — 硬刪除 saves row（DELETE；不動 articles、不動 Notion page）
   └─ POST     /api/quiz-attempt  # api/quiz-attempt.ts — 寫入 quiz_attempts（quizId / deviceId / correct）
 
 React PWA (web/) — 原生 iOS app（app/）上線後為次要 client，仍是 Web Push 入口
@@ -91,7 +91,7 @@ React Native App「Sift」(app/) — 主力 client，Expo Go 封測中
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
 | 💬 追問歷史 | ✅ | `api/ask-history.ts` Edge：GET hydrate / POST upsert；`conversations` 一篇一 row；AskSheet 開啟還原、turn 完成保存；Library 顯示 ask message count |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
-| 🔖 Notion 整合 | ⚠️ 部分 | Edge Runtime + raw fetch；首次收藏正常。**soft-hide / sync lock 設計的 `deleted_at` `notion_syncing_at` 欄位從未真的 migrate 進 DB**（2026-08-05 發現），`/api/unsave` 跟「重存」路徑實際上一直在 500。詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md) |
+| 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful；dedupe 靠 DB `notion_page_id` 快取 + Notion `Article ID` 直查兩層。`/api/unsave` 是硬刪除（2026-08-05 修正，原本設計的 soft-hide 因欄位從未 migrate 進 DB 而一直是壞的，詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)） |
 | Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。2026-04-27 Vercel preview 真機驗證完成 |
 | React Native App「Sift」| ⏳ 封測中 | Expo SDK 54，Expo Go 開發，TestFlight 為目標；四分頁 Quiz/Feed/Library/Activity |
 | Quiz 生成 | ✅ 程式碼完成，⏸️ cron 手動暫停 | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（06:00 台北）目前手動關閉，等使用頻率提高再開。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
@@ -164,9 +164,9 @@ api/index.ts             # Vercel entry (hono/vercel handle)
 api/ask.ts               # Edge Runtime SSE for /api/ask（文章與 quiz 共用，quiz 用合成 articleId）
 api/ask-history.ts       # Edge Runtime GET/POST → Turso HTTP API（per-(article, device) conversations upsert / fetch）
 api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
-api/save.ts              # Edge Runtime POST → Notion dedupe (Article ID lookup + DB sync lock) + Turso HTTP API（upsert saves，clears deleted_at）
+api/save.ts              # Edge Runtime POST → Notion dedupe (DB notion_page_id 快取 + Article ID 直查) + Turso HTTP API（upsert saves）
 api/feedback.ts          # Edge Runtime POST → Turso HTTP API（delete-then-insert feedback）
-api/unsave.ts            # Edge Runtime POST → Turso HTTP API（soft-hide via deleted_at；row、notion_page_id、Notion page 都保留）
+api/unsave.ts            # Edge Runtime POST → Turso HTTP API（硬刪除 saves row；不動 articles、不動 Notion page）
 api/quiz-attempt.ts      # Edge Runtime POST → Turso HTTP API（寫 quiz_attempts，device_id 必填）
 vercel.json
 web/
@@ -283,10 +283,10 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - Infra 錯誤不送 Web Push：RSS 全掛、config/provider 錯誤、DB 寫入失敗、Web Push 全部發送失敗都要 `exit(1)`，讓 GitHub Actions failed；Actions log 是錯誤診斷 source of truth。
 - DB upsert 一律用 `onConflictDoUpdate`（用 `onConflictDoNothing` 會讓 count log 誤報）
 - db-writer 的 conflict target 是 `articles.url`
-- `saves.articleId` 是 unique（一篇一筆）；`/api/save` handler 自己做 upsert（`ON CONFLICT(article_id) DO UPDATE`，順便清掉 `deleted_at`），不依賴 Drizzle upsert（Edge Runtime 用 raw Turso HTTP API）
+- `saves.articleId` + `deviceId` 是 unique（一裝置一篇一筆）；`/api/save` handler 自己做 upsert 邏輯（存在的 row 就 UPDATE，不存在就 INSERT），不依賴 Drizzle upsert（Edge Runtime 用 raw Turso HTTP API）
 - Notion sync 失敗不阻斷收藏：寫 `saves` row 但 `notion_page_id = NULL`，回 `{ ok: true, notionSynced: false }`，下次同篇再點會 retry
-- **Notion dedupe 三層防線（2026-05-06）**：再次按 🔖 同一篇時 (a) 既有 `saves.notion_page_id` 不為 NULL → 直接 reuse，不打 Notion；(b) 沒 page id → 用 `saves.notion_syncing_at` 當 10 分鐘 sync lock（CAS update where IS NULL or stale），搶到 lock 才呼叫 Notion，搶不到回 `{ notionSyncing: true }`；(c) 真的要建 page 前先 `findSavePageByArticleId(articleId)` query Notion 上是否已有同 `Article ID`，有就 reuse、沒有才 `createSavePage`。三層都是為了避免 unsave→re-save 又生第二張 Notion page。
-- `/api/unsave` 設計上是 **soft-hide**（`UPDATE saves SET deleted_at = ?`）：**不刪 row、不動 notion_page_id、不刪 Notion page**。保留 row 是為了讓 re-save 走上面 dedupe (a) 直接掛回原本那張 Notion page；不刪 Notion page 是因為 Notion 是外部 PKM，使用者可能已經整理過內容。**⚠️ 2026-08-05 發現：`deleted_at` / `notion_syncing_at` 這兩個欄位從沒真的 migrate 進 live DB，上述設計目前是「寫好但沒真的生效」——`/api/unsave` 實際上一直在 500。詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)，動這塊前先看那份。** 未來若調整，優先考慮把 Notion 降級為明確的「送到 Notion」curated export，而不是每次 save 自動同步。
+- **Notion dedupe 是兩層，不是三層（2026-08-05 修正）**：舊文件曾寫「`notion_syncing_at` 10 分鐘 sync lock」是第二層防線，但那個欄位從沒 migrate 進 DB、`save.ts` 也從沒真的用它當鎖——這層從來不存在，是文件寫得比實作多。實際運作是：(a) 既有 `saves.notion_page_id` 不為 NULL → 直接 reuse，不打 Notion；(b) 沒有才呼叫 `findSavePageByArticleId(articleId)` 直接查 Notion 上是否已有同 `Article ID`，有就 reuse、沒有才 `createSavePage`。**(b) 是真正防重複的關鍵**——它查的是 Notion 本身，不依賴本地 DB row 存不存在。
+- `/api/unsave` 是**真正的硬刪除**（`DELETE FROM saves WHERE ...`，2026-08-05 從原本設計的 soft-hide 改過來）：unsave 代表「不想存了」，跟文章本身（`articles` table）無關，砍掉 save row 沒有風險——因為上面 (b) 的 Notion 查詢是直接查 Notion，不靠這個 row 殘留，re-save 一樣會找回同一張 Notion page。soft-hide 設計曾經想靠 `deleted_at` 欄位做，但那個欄位從沒真的存在於 live DB（`saves` 實際欄位只有 `id/article_id/device_id/user_note/notion_page_id/created_at`），導致 `/api/unsave` 一直在 500；改成硬刪除後不需要任何 migration，問題直接消失。詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)。
 - `conversations` 是「一個 articleId 一 row」：`messages` JSON、`message_count`、`model`、`created_at`、`updated_at`。`/api/ask-history` POST 是整段覆寫（不 append diff），AskSheet 在每個 user→assistant turn 完成後送一次。`/api/library` JOIN 時只 select `message_count`，**不要**載入 messages JSON（library payload 別變大）；要看完整對話走 `/api/ask-history?articleId=` GET。
 
 **Classifier 偏好：**
@@ -300,7 +300,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/ask-history` → `api/ask-history.ts`（GET 讀 / POST upsert per-(article, device) conversations row）
 - `/api/push-subscribe` → `api/push-subscribe.ts`（寫 Turso）
 - `/api/save` → `api/save.ts`（查 article、Notion dedupe lookup、upsert saves，sync lock 防併發 double-create）
-- `/api/unsave` → `api/unsave.ts`（soft-hide saves via deleted_at；不刪 row、不動 notion_page_id、不刪 Notion page）
+- `/api/unsave` → `api/unsave.ts`（硬刪除 saves row；不動 articles、不動 Notion page）
 - `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
 - `/api/quiz-attempt` → `api/quiz-attempt.ts`（寫 `quiz_attempts`；`X-Device-Id` header 必填，缺就 400）
 - **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。

@@ -61,7 +61,7 @@ Do not commit `.env`, `.env.local`, API keys, VAPID private keys, Turso tokens, 
 ## Known Constraints & Review Risks
 
 - `/api/library` currently loads all articles, feedback, saves, and conversation message counts, then joins in JS. This is acceptable while data is small; revisit pagination or date windows before 10x history growth. Do not add full `conversations.messages` to this endpoint.
-- `saves.deleted_at` means unsaved items are hidden in-app but retain `notion_page_id`; do not change unsave back to row deletion unless you also redesign Notion dedupe/re-save behavior.
+- Unsave is a hard delete (`DELETE FROM saves`, fixed 2026-08-05). An earlier soft-hide design (`saves.deleted_at`) was documented but never actually migrated into the live DB — it silently 500ed every unsave request. Don't reintroduce soft-hide without adding a real migration first; hard delete is safe because Notion dedupe (`findSavePageByArticleId`) checks Notion directly, not the local row. See docs/KNOWN_ISSUES.md for the incident.
 - Classifier concurrency is intentionally capped for provider limits. Do not add unbounded LLM calls or retries.
 - The service worker in `web/public/sw.js` is only for push and notification click handling. Do not add fetch caching without revisiting the PWA cache history.
 - Web Push should only fire after DB persistence succeeds; failed infrastructure should fail the workflow rather than notify stale or missing content.

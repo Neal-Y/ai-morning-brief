@@ -156,7 +156,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 |---|---|---|
 | `articles` | `id` (SHA-256(url).slice(0,16)) pk, `url` unique, `score`, `renderLevel`, `categoryTag`, `skillTags` (JSON string, unused by classifier today), `briefDate` | No `device_id` — articles are global, not per-user |
 | `feedback` | `articleId` fk, `signal` ('up'\|'down'), `deviceId` | delete-then-insert on write — same (device, article) pair only ever has the latest signal |
-| `saves` | `articleId` fk, `deviceId`, `notionPageId` | unique on `(deviceId, articleId)`. **⚠️ `deletedAt`/`notionSyncingAt` are referenced by `unsave.ts`/`save.ts` but were never actually migrated into the live table — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md).** `src/db/schema.ts` correctly omits them; the design doc language elsewhere describing soft-hide as shipped is currently aspirational, not real |
+| `saves` | `articleId` fk, `deviceId`, `notionPageId` | unique on `(deviceId, articleId)`. Unsave is a **hard delete** (`DELETE FROM saves`, fixed 2026-08-05 — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for why an earlier soft-delete design never actually worked). Safe because Notion dedupe checks Notion directly (`findSavePageByArticleId`), not this row — re-saving after unsave still finds and reuses the same Notion page |
 | `conversations` | `articleId` fk (real or synthetic `quiz-${id}`), `deviceId`, `messages` (JSON), `messageCount`, `model` | unique on `(articleId, deviceId)`. Full-overwrite on save, not append-diff. `/api/library` selects `messageCount` only — never loads `messages` |
 | `quizzes` | `type`, `category`, `prompt`, `payload` (JSON, shape per `type`), `explanation` | No `deviceId` — quizzes are global, like articles |
 | `quiz_attempts` | `quizId` fk, `deviceId`, `correct` | One row per attempt (no unique constraint — a user can retry and log multiple attempts on the same quiz) |
@@ -182,8 +182,8 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 | `POST /api/ask` | `{ articleId, context, messages }` | SSE stream, Haiku 4.5 |
 | `GET/POST /api/ask-history` | GET: `?articleId=`. POST: `{ articleId, messages }` | Per-(article, device) conversation read/full-overwrite |
 | `POST /api/push-subscribe` | subscription object | Writes `push_subscriptions` |
-| `POST /api/save` | `{ articleId }` | Notion dedupe (Article ID lookup + sync lock) + upsert `saves` |
-| `POST /api/unsave` | `{ articleId }` | Soft-hide (`deletedAt` set) — never deletes the row or the Notion page |
+| `POST /api/save` | `{ articleId, userNote? }` | Notion dedupe (DB `notion_page_id` cache, else direct Article ID lookup via `findSavePageByArticleId`) + upsert `saves` |
+| `POST /api/unsave` | `{ articleId }` | Hard delete the `saves` row (`DELETE`) — never touches `articles` or the Notion page |
 | `POST /api/feedback` | `{ articleId, signal }` | Delete-then-insert `feedback` |
 | `POST /api/quiz-attempt` | `{ quizId, correct }` | Insert `quiz_attempts` |
 

@@ -145,13 +145,13 @@ export default async function handler(req: Request): Promise<Response> {
       : null
 
     if (existingSave?.notion_page_id) {
-      // Row exists and already has a Notion page — just un-hide (clear deleted_at) and return.
-      // Must clear deleted_at here; otherwise a previously unsaved article stays hidden in Library.
+      // Row already exists with a Notion page (e.g. a rapid double-tap of save,
+      // or a client retry) — idempotent update, no new Notion page needed.
       await tursoPipeline([
         {
           type: 'execute',
           stmt: {
-            sql: 'UPDATE saves SET deleted_at = NULL, user_note = ? WHERE article_id = ? AND device_id = ?',
+            sql: 'UPDATE saves SET user_note = ? WHERE article_id = ? AND device_id = ?',
             args: [
               userNote === null ? { type: 'null' } : { type: 'text', value: userNote },
               { type: 'text', value: articleId },
@@ -203,7 +203,7 @@ export default async function handler(req: Request): Promise<Response> {
         {
           type: 'execute',
           stmt: {
-            sql: 'UPDATE saves SET user_note = ?, notion_page_id = ?, deleted_at = NULL WHERE article_id = ? AND device_id = ?',
+            sql: 'UPDATE saves SET user_note = ?, notion_page_id = ? WHERE article_id = ? AND device_id = ?',
             args: [
               userNote === null ? { type: 'null' } : { type: 'text', value: userNote },
               notionPageId === null ? { type: 'null' } : { type: 'text', value: notionPageId },

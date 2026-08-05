@@ -108,6 +108,6 @@ vercel deploy
 4. 從 database URL 抓 ID（`notion.so/<workspace>/<DATABASE_ID>?v=...`）。
 5. `NOTION_API_KEY` + `NOTION_DATABASE_ID` 加到 Vercel 的 production / preview env。
 
-Notion sync 失敗不阻斷收藏：`saves` row 仍寫入（`notion_page_id = NULL`），下次點同一篇自動 retry。再次 save 前先用 Notion `Article ID` property 查重，有既有 page 直接 reuse，不建新頁。`/api/unsave` 只 soft-hide in-app save，不刪 Notion page，也不丟 `notion_page_id`。
+Notion sync 失敗不阻斷收藏：`saves` row 仍寫入（`notion_page_id = NULL`），下次點同一篇自動 retry。再次 save 前先用 Notion `Article ID` property 查重，有既有 page 直接 reuse，不建新頁。`/api/unsave` 是硬刪除 `saves` row（不刪 Notion page）——不需要保留 row，因為重存的查重是直接查 Notion，不靠本地 row。
 
 `alternate` 模式：偶數天（年內第幾天）→ GPT-4o，奇數天 → Claude Sonnet 4.6。
