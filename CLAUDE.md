@@ -1,6 +1,6 @@
 # AI Morning Brief（產品名「Sift」）
 
-雙軌內容系統：(1) RSS → LLM 分析 → 每日技術簡報（V1 遺留，穩定） (2) LLM 出題 → backend/infra 判斷力 quiz（遊戲化學習）。兩條 pipeline 各自獨立產生，共用同一顆 Turso DB + 同一個 client 殼（React Native App「Sift」+ Web PWA）。
+雙軌內容系統：(1) RSS → LLM 分析 → 每日技術簡報（V1 遺留，穩定） (2) LLM 出題 → backend/infra 判斷力 quiz（遊戲化學習）。兩條 pipeline 各自獨立產生，共用同一顆 Turso DB + 同一個 client 殼（Web PWA 為主力，React Native App「Sift」暫時擱置）。
 
 ## 回話風格（節省 token）
 
@@ -20,8 +20,11 @@
 - **產品方向重新校準（2026-04-26）**：原本 V2 設計把 quiz (F5) 排第一，當時覆盤後降級成「Library 上的 retention layer」，退場條件是「沒回頭翻 library 就不做 quiz」。詳見 [docs/decisions/2026-04-26-product-review.md](./docs/decisions/2026-04-26-product-review.md)（**背景文件，決策已被後續開發蓋過，見下一條**）。
 - **Library 頁面已 ship（2026-04-26，commit `0a61bad` / `ee694bb`）**：原 roadmap PR-A/B/C 一發併出。細節見系統架構 + 功能狀態 + Conventions。
 - **⚠️ 2026-04-26 的「Library 決策 gate」已作廢**：Quiz 實際上照做了，且已經是主力產品（app 改名「Sift」、四分頁、封測中）。不用再回頭驗證 gate 有沒有通過，這條規則不再生效，純留作歷史紀錄。
-- **現況（2026-08）**：Quiz pipeline 程式碼正常運作，但 `quiz_sync.yml` cron **目前手動關閉**（操作者選擇，等使用頻率提高再開，不是壞掉）。DB 裡已有先前生成的題庫，`/api/quiz` 的 recycle 邏輯（優先出沒答過的，答完就循環）持續供應，不會因為 cron 關閉就退回 `app/src/data.ts` 的 3 題硬編碼 fallback（那只在 API 整個打不到時才觸發）。app「Sift」在 Expo Go 封測中，狀況穩定。**下一步是 EAS Build → TestFlight**。
+- **現況（2026-08）**：Quiz pipeline 程式碼正常運作，但 `quiz_sync.yml` cron **目前手動關閉**（操作者選擇，等使用頻率提高再開，不是壞掉）。DB 裡已有先前生成的題庫，`/api/quiz` 的 recycle 邏輯（優先出沒答過的，答完就循環）持續供應，不會因為 cron 關閉就退回 `app/src/data.ts` 的 3 題硬編碼 fallback（那只在 API 整個打不到時才觸發）。app「Sift」在 Expo Go 封測中，狀況穩定、**程式碼保留、可繼續跑**，但 EAS Build → TestFlight 要花錢、現階段用量不到值得投資的門檻，**暫時擱置**（非凍結、非廢棄）——等用量提高再撿回來。
 - **Notion 整合維持現狀、不主動投資**：使用者不會回頭看 Notion saves，但整合已經串好、成本是 sunk，先放著不拆，也不再加功能。舊的「Notion 30 天回看」檢查點作廢。
+- **Quiz / Activity 搬上 Web PWA（2026-09-07，commit `ebf73c6`）**：因為 `app/` 的 EAS Build/TestFlight 延後，把 RN app 的 Quiz + Activity 分頁整套搬進 `web/`，PWA 現在也是四分頁：Quiz `/quiz` / Feed `/` / Library `/library` / Activity `/activity`，變成主力 client。刻意不動的部分：`/` 仍是 Feed（PWA `start_url` + push 通知落地頁）、`web/public/sw.js` 沒改、manifest + `<title>` 品牌名維持「Morning Brief」、`theme_color`/`background_color`/`<meta name="theme-color">` 三處仍是 `#14110D`。細節見系統架構、功能狀態、Project Structure、Key Design Decisions #8。
+- **Quiz 追問歷史其實從沒存活過（2026-09-07 發現）**：舊文件寫的「quiz 用合成 `articleId=quiz-${id}` 掛進 `conversations` table」從沒真的動起來——`api/ask-history.ts` 的 `isArticleId` 只收 16 位 hex，`quiz-6` 一律 400；就算放寬 regex，`conversations.article_id` 對 `articles.id` 的 FK 是真的有 enforce，塞不存在的文章 id 會 500。`app/` 的 `saveAskHistory` 把這個 400 吞進空 `catch {}`，所以整個 Expo Go 封測期間 quiz 追問歷史都靜默沒存到；`/api/ask` streaming 本身不吃 `articleId`，問答當下沒事，只有歷史沒存。web/ 這次改用 `web/src/askHistory.ts`：quiz 對話存 localStorage，文章對話不變，**沒有動任何後端檔案**。見 Key Design Decision #8 修正版。
+- **device_id 不跨 client 同步**：web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，這次 web port 沒有做身分遷移——Activity 等個人化歷史在 web 上從零開始算，是刻意決定，不是漏做。
 
 ---
 
@@ -58,13 +61,16 @@ Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
   ├─ POST     /api/unsave        # api/unsave.ts — 硬刪除 saves row（DELETE；不動 articles、不動 Notion page）
   └─ POST     /api/quiz-attempt  # api/quiz-attempt.ts — 寫入 quiz_attempts（quizId / deviceId / correct）
 
-React PWA (web/) — 原生 iOS app（app/）上線後為次要 client，仍是 Web Push 入口
-  ├─ /          滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration
+React PWA (web/) — 主力 client（2026-09-07 起，四分頁），仍是 Web Push 入口
+  ├─ Shell.tsx + BottomNav.tsx  # 常駐 bottom nav：extended root 內的 absolute layer，nav.ts 量測高度供 useNavInset()
+  ├─ /          滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration（PWA start_url + push 通知落地頁，不可換掉）
+  ├─ /quiz      Quiz.tsx：今日 quiz 題組（single_choice / ordering / matching / fill_blank）；真實 streak（讀 /api/activity）；無硬編碼 fallback 題庫，失敗給明確錯誤 + retry
   ├─ /library   全歷史頁：所有歷史 tab（filter + 日期分組 + 展開 LLM 四段） / 收藏 tab（Notion sync stats）
-  ├─ pathname routing：web/src/main.tsx 監聽 popstate，web/src/router.ts navigate() helper
+  ├─ /activity  Activity.tsx：年度 heatmap / 週 pie / streak / 正確率（呼叫 /api/activity）
+  ├─ pathname routing：web/src/main.tsx 監聽 popstate，web/src/router.ts navigate() helper（仍非 react-router）
   └─ Splash gate：iOS standalone 第一次開啟 → 請求 notification permission → 寫 subscription
 
-React Native App「Sift」(app/) — 主力 client，Expo Go 封測中
+React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留、Expo Go 仍可跑）
   ├─ 四分頁（bottom tab）：Quiz（今日題目）/ Feed（簡報）/ Library / Activity（學習紀錄）
   ├─ QuizScreen   — 每日 quiz 題組（single_choice / ordering / matching / fill_blank）；XP：對 +20 / 錯 +5
   ├─ QuizFrame    — 四種題型共用 chrome（進度條 / streak / XP / 分類 pill）+ 💬 AskSheet（追問這題）
@@ -93,30 +99,31 @@ React Native App「Sift」(app/) — 主力 client，Expo Go 封測中
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
 | 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful；dedupe 靠 DB `notion_page_id` 快取 + Notion `Article ID` 直查兩層。`/api/unsave` 是硬刪除（2026-08-05 修正，原本設計的 soft-hide 因欄位從未 migrate 進 DB 而一直是壞的，詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)） |
 | Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。2026-04-27 Vercel preview 真機驗證完成 |
-| React Native App「Sift」| ⏳ 封測中 | Expo SDK 54，Expo Go 開發，TestFlight 為目標；四分頁 Quiz/Feed/Library/Activity |
+| Web PWA 四分頁（Quiz/Feed/Library/Activity）| ✅ | 2026-09-07（commit `ebf73c6`）把 app/ 的 Quiz + Activity 分頁整套搬進 web/，PWA 現在是主力 client。`/` 仍是 Feed（start_url + push 落地頁），SW / manifest / theme_color 全部沒動 |
+| React Native App「Sift」| ⏸️ 暫時擱置 | Expo SDK 54，Expo Go 開發，程式碼保留可運作；EAS Build → TestFlight 因用量不到值得投資的門檻而延後，非凍結、非廢棄 |
 | Quiz 生成 | ✅ 程式碼完成，⏸️ cron 手動暫停 | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（06:00 台北）目前手動關閉，等使用頻率提高再開。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
-| Quiz 作答紀錄 | ✅ | `POST /api/quiz-attempt` → `quiz_attempts`；XP：答對 +20 / 答錯 +5（`app/src/theme.ts` XP 常數） |
-| 學習紀錄 / Activity | ✅ | `GET /api/activity` + `ActivityScreen.tsx`：年度 heatmap、週 pie、streak、正確率，皆以 device_id 為範圍 |
-| 多使用者支援 | ✅ | `device_id` 貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts；app 端 `src/device.ts` 用 AsyncStorage 存 UUID（`sift_device_id`），每次 fetch 帶 `X-Device-Id` |
-| Quiz 追問 | ✅ | Quiz 題目重用文章的 AskSheet + `/api/ask` / `/api/ask-history`，用合成 `articleId = quiz-${id}` 掛進同一套 conversations 機制，沒有另開一套 |
+| Quiz 作答紀錄 | ✅ | `POST /api/quiz-attempt` → `quiz_attempts`；XP：答對 +20 / 答錯 +5（web `web/src/components/quiz/tokens.ts` 與 app `app/src/theme.ts` 各自的 XP 常數，web 版衍生自 `theme.ts`） |
+| 學習紀錄 / Activity | ✅ | `GET /api/activity`：年度 heatmap、週 pie、streak、正確率，皆以 device_id 為範圍。web `Activity.tsx` 與 app `ActivityScreen.tsx` 吃同一支 API |
+| 多使用者支援 | ✅ | `device_id` 貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts；web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，**兩邊不共用、沒有遷移**，每次 fetch 帶 `X-Device-Id` |
+| Quiz 追問 | ⚠️ 問答能用，歷史沒存 | `/api/ask` streaming 正常（不吃 articleId）；但「用合成 `articleId=quiz-${id}` 掛進 conversations」從沒真的動起來——`ask-history.ts` 的 hex regex + FK 會擋掉，app/ 端吞掉 400 靜默失敗。web/ 2026-09-07 改用 localStorage 存 quiz 對話（不動後端），app/ 仍是原本壞掉的狀態。見 Key Design Decision #8 |
 | 晨間 Recall Quiz（排程推播提醒去答題）| ⏳ 未做 | Quiz 生成本身已上線，但「排程通知去答題」這層還沒做 |
 | Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
 | 週報 | ⏳ 未做 | |
 
 ---
 
-## 下一步（2026-08 現況重排）
+## 下一步（2026-09 現況重排）
 
-> 舊版（2026-04-26）把 Quiz 當高風險賭注、排在 Library 之後、配了退場條件。實際發展沒照這個腳本走——Quiz 已經做完且封測順暢，舊排序作廢。以下是目前真正的優先序。
+> 舊版（2026-08）把「Sift → TestFlight」列為唯一 active 任務。實際發展：EAS Build / TestFlight 要花錢，現階段用量不到值得投資的門檻，這步延後（不是取消）。已經 ship 的是把 app/ 的 Quiz + Activity 分頁整套搬上 web PWA（2026-09-07，commit `ebf73c6`），web/ 現在是四分頁主力 client。以下是延後 TestFlight 後真正的優先序。
 
-1. **Sift → TestFlight**：Quiz pipeline、四分頁 app、多使用者 device_id 都已到位，下一步是 EAS Build 送審。這是目前唯一的 active 任務。
-2. **內容品質一輪**（文章 pipeline 這條，優先度低於 1，非阻塞）：
+1. **內容品質一輪**（文章 pipeline）：
    - RSS 源擴充：Anthropic news / OpenAI blog / Cloudflare blog / AWS ML blog。上線前要 `curl` 驗證 URL 仍有效
    - Skill-tag 產出（`skillTags` classifier 還沒產）：Library filter chip 第三維度
    - 不要做：AWS What's New（firehose）、Google AI Blog（行銷腔）、各家 changelog feeds（太細粒度）
-3. **晨間 Recall Quiz**（排程通知提醒去答題）：Quiz 生成本身已上線，這層還沒做，等 TestFlight 過了再評估要不要加
-4. **Notion 整合**：維持現狀，不主動投資、不拆——已串好且 sunk cost，使用者不會回頭看，優先度最低
-5. **Classifier 偏好 v2**（feedback 累積夠久再評估，不要提早優化）
+2. **晨間 Recall Quiz**（排程通知提醒去答題）：Quiz 生成本身已上線，這層還沒做
+3. **Notion 整合**：維持現狀，不主動投資、不拆——已串好且 sunk cost，使用者不會回頭看，優先度最低
+4. **Classifier 偏好 v2**（feedback 累積夠久再評估，不要提早優化）
+5. **Sift → EAS Build / TestFlight**：延後，不是取消。等 web PWA 用量提高、或有明確理由需要原生 app（push 可靠度、離線）再撿回來
 
 ---
 
@@ -130,7 +137,9 @@ React Native App「Sift」(app/) — 主力 client，Expo Go 封測中
 - [x] Library `/api/library` GET 在 Vercel 正常回傳（feedback / saved / notionSynced 三欄）
 - [x] Quiz pipeline 正常出題（獨立 cron，`quiz_sync.yml`）
 - [x] Sift app 四分頁在 Expo Go 封測跑起來（Quiz/Feed/Library/Activity）
-- [ ] EAS Build → TestFlight 送審
+- [x] web PWA 四分頁 Playwright 驗證（2026-09-07，模擬 iPhone 13 viewport + 34px safe-area）：四分頁切換 + 瀏覽器 Back 無整頁重載、四種 quiz 題型作答 + XP 正確（+20/+5）、五次 `POST /api/quiz-attempt` 皆 200、Activity 數字與 `/api/activity` 逐欄位比對一致、nav 在 0px 與 34px inset 下都完全在 home indicator 之上、standalone push permission gate 正常
+- [ ] **真實 iPhone 安裝的 PWA 還沒驗證過**：這台機器只有 Xcode Command Line Tools、沒有 iOS Simulator，上面的驗證都是 Playwright 模擬視窗。`docs/FRONTEND_FIX_LOG.md` Issue 6 的驗收基準是「從主畫面捷徑開啟的真實 standalone PWA」——這個還沒做，是目前唯一真正待驗證項目
+- EAS Build → TestFlight：延後（見下一步 #5），不是待辦項目，等用量提高再排
 - ~~Notion 30 天回看~~：作廢，不會回去看，但整合維持現狀不拆（見 TL;DR）
 
 ---
@@ -172,17 +181,27 @@ vercel.json
 web/
   index.html
   public/manifest.json · apple-touch-icon.png · icon-512.svg
-  public/sw.js          # push handler SW（push + notificationclick events）
-  src/main.tsx          # pathname routing：/library → Library，其他 → App
+  public/sw.js          # push handler SW（push + notificationclick events，這次 quiz/activity port 沒動這支）
+  src/main.tsx          # 四分頁 pathname routing：/quiz、/（Feed）、/library、/activity，包在 Shell 裡；仍非 react-router
   src/router.ts         # navigate(path) helper（pushState + popstate dispatch）
-  src/App.tsx           # 日報主畫面：swipe 物理 + streak + push permission gate
-  src/Library.tsx       # /library 頁面：filter / 日期分組 / 展開 LLM / saves tab
+  src/Shell.tsx          # app shell：extended root 上的 absolute layer + 常駐 bottom nav；path 由 main.tsx 傳入，Shell 自己不讀 window.location
+  src/nav.ts             # NAV_ROW_H=54 / TABS / tabForPath() / NavInsetContext・useNavInset()；nav 高度用量測值發布，因為 env(safe-area-inset-bottom) 在 JS 讀不到 px 數字
+  src/App.tsx           # Feed 主畫面（仍是 `/`，PWA start_url + push 落地頁不可換）：swipe 物理 + streak + push permission gate；feedback dock 抬高到 nav 之上，TopChrome 拿掉重複的 Library 按鈕
+  src/Library.tsx       # /library 頁面：filter / 日期分組 / 展開 LLM / saves tab；root height 改 100%（填滿 Shell layer），AskSheet z-index 提到 60
+  src/Quiz.tsx           # /quiz 頁面：讀 /api/activity 真實 streak，失敗給明確錯誤 + retry，**無**硬編碼 fallback 題庫
+  src/Activity.tsx       # /activity 頁面：年度 heatmap / 週 pie / streak / 正確率，全部吃 /api/activity 真資料
+  src/askHistory.ts     # quiz 對話走 localStorage（`mb_quiz_ask_quiz-<id>`），文章對話走 /api/ask-history；原本設計的 conversations 掛法對 quiz 從沒真的動起來，見 Key Design Decision #8
+  src/quiz/types.ts     # Quiz union、各題型 payload validator、shuffleWithOrigin（從 app/src/data.ts 搬過來）
+  src/api.ts             # apiFetch + 新增型別化層：fetchQuizzes / submitQuizAttempt / fetchActivity / fetchAskHistory / saveAskHistory
   src/push.ts           # isPushSupported / isStandalone / completeSubscription
   src/components/
-    Card.tsx · Chrome.tsx · AskSheet.tsx · Celebration.tsx
-  src/{date,theme,types}.ts · index.css
-  vite.config.ts
-app/                     # React Native app「Sift」（Expo SDK 54）
+    Card.tsx · Chrome.tsx · AskSheet.tsx（history 改走 askHistory.ts，z-index 30→60） · Celebration.tsx
+    BottomNav.tsx       # 四分頁 nav：absolute at bottom:0、padding-bottom: env(safe-area-inset-bottom)、z-index 50、inline SVG icon；沿用 FRONTEND_FIX_LOG Issue 6 手法，不要改回 fixed footer
+    quiz/               # QuizFrame・QuizCard・SingleChoiceCard・OptionRow・OrderingCard・MatchingCard（SVG bezier connector，無新依賴）・FillBlankCard・CompletionCard・tokens.ts（quiz-only 色票 Q + XP 常數，衍生自 theme.ts；theme.ts 本身沒改）
+    activity/           # Heatmap・WeekPie・StatCard
+  src/{date,theme,types}.ts · index.css   # theme.ts 是唯一真理，app/ 的 theme 是鏡像它，不是反過來
+  vite.config.ts        # Edge-only route（ask/ask-history/save/unsave/feedback/quiz-attempt/push-subscribe）proxy 到 prod Vercel（本地 Hono dev server 沒有這些 function）；純 GET route（feed/library/quiz/activity）仍打 localhost:3001 —— 代表本地 dev 的寫入操作會真的寫進 prod Turso DB
+app/                     # React Native app「Sift」（Expo SDK 54，暫時擱置——非凍結，Expo Go 仍可跑；EAS Build/TestFlight 因用量不到門檻延後）
   App.tsx                # 根元件：字型載入 + bottom tab navigator（Quiz/Feed/Library/Activity）
   app.json                # expo name/slug = "Sift"
   package.json           # expo ^54, react-native 0.81, @expo-google-fonts/*
@@ -313,6 +332,14 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - Quiz 出題完全獨立於文章 pipeline：不同 cron 檔（`quiz_sync.yml` 06:00 台北 vs `daily_sync.yml` 07:30 台北）、不同 entry（`quiz-pipeline.ts` vs `index.ts`）、不共用 selection 邏輯；共用的只有 `ai/select-provider.ts`（GPT/Claude 輪替）和同一顆 Turso DB
 - Quiz dedup 用同一招：`getRecentQuizPrompts()` 撈近期已出過的題目 prompt，附加在 `QUIZ_SYSTEM` **尾端**（"AVOID REPEATING" 區塊），保 cache prefix 穩定 — 跟 classifier 的 `buildPreferenceContext()` 手法一致，不要重新發明
 - `device_id` 是目前唯一的多使用者隔離機制（沒有帳號系統）：`feedback` / `saves` / `conversations` / `push_subscriptions` / `quiz_attempts` 都有 `device_id` 欄位，app 端由 `src/device.ts` 生成 UUID 存 AsyncStorage，每次 fetch 帶 `X-Device-Id` header。新增任何寫入型 endpoint 若涉及個人化資料，記得比照加 `device_id` 欄位 + header 檢查
+- web 跟 app 的 device_id **不共用**：web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`。2026-09-07 web port 沒有做身分遷移，是刻意決定——Activity 等個人化歷史在 web 上從零開始算，不要當成 bug 去「修」
+
+**Web 前端 nav / Quiz+Activity port（2026-09-07）：**
+- 新頁面一律用 `useNavInset()`（`web/src/nav.ts`）拿 nav 高度，不要用 `env(safe-area-inset-bottom)` 猜——那個值在 JS 讀不到 px 數字，nav 高度是 `Shell.tsx` 量測後用 `NavInsetContext` 發佈的
+- bottom-docked 控制項要蓋過 nav 就疊 z-index，不要用 fixed footer 或 negative safe-area offset——這是 `docs/FRONTEND_FIX_LOG.md` Issue 6 的教訓，nav 本身也遵守同一條規則
+- `vite.config.ts` 把 Edge-only route（`ask` / `ask-history` / `save` / `unsave` / `feedback` / `quiz-attempt` / `push-subscribe`）proxy 到 prod Vercel，因為本地 Hono dev server 沒有這些 function；純 GET route（`feed` / `library` / `quiz` / `activity`）仍打 `localhost:3001`。**這代表本地 dev 的寫入操作（👍/🔖/quiz attempt）會真的寫進 prod Turso DB**——不是新風險（本地 API server 本來就讀寫同一顆 DB），但測試時要注意會留下真實資料
+- Quiz port 沒加新 npm dependency：matching 題型的連接線是手刻 SVG bezier，不是新圖形庫
+- `web/src/theme.ts` 是唯一真理（authoritative）；quiz-only palette 放在 `web/src/components/quiz/tokens.ts`，從 `theme.ts` 衍生，**不要**改 `theme.ts` 本身——`app/src/theme.ts` 才是鏡像 web/ 的那一邊，方向不能反過來
 
 **PWA / Service Worker：**
 - **不要**重新加 `vite-plugin-pwa` 或其他 SW 產生器。app 是「每天開一次抓新資料」，沒有 offline 需求，SW 只會製造 cache 地獄（見 FRONTEND_FIX_LOG Issue 14）。
@@ -332,17 +359,17 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 ## React Native App「Sift」(app/)
 
 - **產品形態**：新聞（Feed，讀當日 AI brief）+ 遊戲化 quiz（Quiz，backend/infra 工程判斷力題目）雙軌，共用 Library / Activity / Ask 基礎設施。兩條內容各自獨立 pipeline 產生（見系統架構），app 端是統一的殼
-- **Expo SDK 54**，以 Expo Go 開發封測中；目標發佈路徑是 TestFlight（EAS Build）
+- **Expo SDK 54**，以 Expo Go 開發封測中；**暫時擱置**（非凍結、非廢棄，程式碼保留、可繼續跑）——EAS Build/TestFlight 要花錢，現階段用量不到值得投資的門檻，先延後，web PWA（見系統架構）接手當主力 client，等用量提高再撿回來
 - **四分頁 bottom tab**：Quiz（✦ 今日題目）/ Feed（◎ 簡報）/ Library（⊟）/ Activity（紀錄 — 學習儀表板）
 - **字型**：NotoSansTC 400/500/700/900 + JetBrains Mono 400/500/700，由 `@expo-google-fonts` 載入；App.tsx 等字型就緒才渲染
 - **主題**：`src/theme.ts` 匯出 `T`（色彩）/ `FONT`（字型 key）/ `RADIUS` / `XP`（答對/答錯經驗值）；刻意鏡像 web/ dark theme，讓兩個 client 視覺一致
 - **API**：`src/api.ts` 用 `Constants.expoConfig.hostUri` 自動抓 Metro LAN IP（dev），production build 固定走 `https://ai-morning-brief-chi.vercel.app`。**Expo Go dev 模式下 `hostUri` 永遠存在**，所以不設 override 的話一律假設 `npm run dev:api` 有在跑本地——沒開就整個打不通。`app/.env`（gitignored，不會被 push）目前設了 `EXPO_PUBLIC_API_BASE_URL` 固定指向 prod，讓日常用 Expo Go 不用開本地 server；要測後端改動時把這行註解掉即可切回本地自動偵測
-- **SSE 追問**：`streamAsk()` 改用 `expo/fetch`（RN 原生 fetch 無法讀 streaming body）；Edge `/api/ask` 只存在於 Vercel，本地 dev server 沒有，開發時直接打 prod。Quiz 題目追問重用同一套 AskSheet + `/api/ask` + `/api/ask-history`，用合成 `articleId = quiz-${id}` 掛進 conversations table，**沒有**為 quiz 另開一套追問機制
+- **SSE 追問**：`streamAsk()` 改用 `expo/fetch`（RN 原生 fetch 無法讀 streaming body）；Edge `/api/ask` 只存在於 Vercel，本地 dev server 沒有，開發時直接打 prod。Quiz 題目追問重用同一套 AskSheet + `/api/ask`，用合成 `articleId = quiz-${id}`；但追問**歷史**沒有真的存進 `conversations`（`ask-history.ts` 的 hex regex + FK 會擋，`saveAskHistory` 把 400 吞進空 `catch {}`）——這是 2026-09-07 才發現的既有問題，`app/` 目前還沒修，見 Key Design Decision #8
 - **Device ID**：`src/device.ts` 用 AsyncStorage 生成 UUID（key: `sift_device_id`），每次 fetch 帶 `X-Device-Id` header；貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts 五個 table，是多使用者隔離的唯一依據（無帳號系統）
 - **Quiz 互動類型**：`single_choice` / `ordering` / `matching` / `fill_blank`（`api/quiz-attempt.ts` 記錄作答結果，寫入 `quiz_attempts`）；出題交由獨立 `quiz_sync.yml` cron，非即時生成
 - **Activity（學習紀錄）**：`GET /api/activity`（Hono，read-only）回傳 heatmap / streak / 正確率，皆用 `X-Device-Id` 圈定範圍
 - **不要**在 app/ 加 SW、manifest、VAPID 相關邏輯 — push 仍由 web/ PWA 負責
-- **已知問題**：Quiz 分頁的 streak 是寫死的常數（跟 Activity 分頁算出來的真實 streak 對不上）、Feed 分頁的收藏狀態是純前端 local state（重整後會跟 Library 不同步）。完整清單見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)，動 `QuizScreen.tsx` / `FeedScreen.tsx` 前先看一眼
+- **已知問題**：Quiz 分頁寫死 streak、Feed 分頁收藏純前端 local state 兩項已於 2026-08-04 修掉（`QuizScreen.tsx` 改叫 `fetchActivity().streak`，`FeedScreen.tsx` 改由 `fetchLibrary()` 灌初始收藏狀態）。追問歷史沒真的存進 `conversations` 是新發現的既有問題（見上一條 + Key Design Decision #8）。完整清單見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)
 
 ---
 
@@ -355,8 +382,9 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 5. **Streak**：localStorage `mb_streak`，讀完最後一篇 +1
 6. **Deploy**：Vercel free tier（[decisions/2026-04-26-v2-design.md](./docs/decisions/2026-04-26-v2-design.md) §4 決策）
 7. **雙內容 pipeline 解耦**：Quiz 不依賴文章資料，獨立 cron / entry / dedup，只共用 provider 選擇邏輯和 DB。理由：兩條內容各自有自己的更新節奏和失敗模式，耦合在一起會讓文章 pipeline 的錯誤處理複雜化，也讓 quiz 沒辦法獨立重跑
-8. **Quiz 追問重用文章 Ask 基礎設施**：用合成 `articleId = quiz-${id}` 讓 quiz 題目掛進既有的 `/api/ask` + `conversations` table，而不是為 quiz 另建一套追問系統——避免維護兩套幾乎一樣的 SSE + 歷史儲存邏輯
+8. **Quiz 追問重用文章 Ask 基礎設施 — streaming 對，persistence 錯（2026-09-07 修正）**：`/api/ask` SSE streaming 本身跟 `articleId` 無關（只吃 `articleTitle`/`articleSummary`/`articleContext`），quiz 用合成 `articleId = quiz-${id}` 去問是通的。但「歷史掛進 `conversations` table」這件事**從沒真的動起來**：`api/ask-history.ts` 的 `isArticleId` 是 `/^[a-f0-9]{16}$/`，`quiz-6` 直接 400；就算放寬 regex，`conversations.article_id` 對 `articles.id` 的 FK 是真的有 enforce，塞一個不存在的文章 id 會 500（拿掉 FK 得整張表 rebuild，不是加個 migration 就好）。`app/` 的 `saveAskHistory` 把這個 400 吞進空 `catch {}`，所以整個 Expo Go 封測期間 quiz 追問歷史都靜默沒存到。web/（`web/src/askHistory.ts`）這次改成 quiz 對話直接存 localStorage（`mb_quiz_ask_quiz-<id>`），不碰後端——沒有帳號系統，`device_id` 本身也只是 localStorage/AsyncStorage UUID，reach 其實等價。跟 `saves.deleted_at` / `notion_syncing_at` 是同一種病：文件寫的比實作做的多，見 docs/KNOWN_ISSUES.md
 9. **多使用者靠 device_id，不做帳號系統**：AsyncStorage 生成 UUID 當身分依據，貫穿五張表。輕量但有已知限制：換裝置 = 換身分，資料不會跟著人走
+10. **device_id 不跨 client migrate**：web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，2026-09-07 web port 沒有做身分遷移——Activity 歷史在 web 上從零開始算。刻意決定，不是漏做（沒有帳號系統，兩邊本來就是不同身分）
 
 ---
 

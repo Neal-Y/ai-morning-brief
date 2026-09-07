@@ -2,6 +2,12 @@
 
 > **Status: Living log.** Same pattern as [FRONTEND_FIX_LOG.md](./FRONTEND_FIX_LOG.md) (the web PWA's log) — one file per client, because the two have almost no shared gotchas (native module availability vs. browser/PWA quirks). Read this before debugging `app/` UI issues; add an entry whenever you hit and resolve a non-obvious `app/`-specific bug.
 
+## Status note (2026-09-07): `app/` temporarily shelved, not frozen or abandoned
+
+As of `ebf73c6`, the Quiz and Activity screens were ported to the web PWA (`web/src/Quiz.tsx`, `web/src/Activity.tsx`, plus new bottom-nav shell). Reason: EAS Build / TestFlight cost money that isn't justified at current usage, and shipping the same two screens to the web client gets the retention-layer value without that spend.
+
+This is **not** a decision to freeze, deprecate, or delete `app/`. The code stays as-is and still runs fine in Expo Go. If usage later justifies the cost of EAS Build / TestFlight, `app/` resumes from here. This log stays live — the issues below remain valid for whenever that happens, and new `app/`-specific issues should still be logged here even while the app itself isn't the active focus.
+
 ---
 
 ## Issue 1 — `react-native-reanimated` fails to initialize on this Expo Go install
@@ -41,3 +47,15 @@ REACT_NATIVE_PACKAGER_HOSTNAME=192.168.0.105 npx expo start   # substitute curre
 **Fix**: `app/.env` (gitignored, local-only) sets `EXPO_PUBLIC_API_BASE_URL=https://ai-morning-brief-chi.vercel.app`, overriding the auto-detect so Expo Go defaults to prod. No local server needed for day-to-day use.
 
 **Guardrail**: When you actually want to test unreleased backend changes (`src/api/app.ts` edits before deploying), comment out that line in `app/.env` and start `npm run dev:api` — that restores LAN auto-detection. Don't forget to uncomment it again afterward, or the next Expo Go session will silently try to hit a local server that isn't running.
+
+---
+
+## Issue 4 — Quiz follow-up (追問) history has never persisted in `app/`
+
+**Symptom**: no visible error. Streaming Ask answers on a quiz question work fine, but reopening that quiz question's AskSheet never restores prior turns.
+
+**Root cause**: `app/src/api.ts`'s `saveAskHistory` posts a synthetic `articleId = quiz-<id>` to `/api/ask-history`. The endpoint validates `articleId` against `/^[a-f0-9]{16}$/` and rejects anything else with `400 invalid_article_id` — so the synthetic id never gets past validation. The surrounding `catch {}` swallows the failure silently. This is not fixable by loosening the regex alone: `conversations.article_id` is a `NOT NULL` foreign key into `articles.id`, so a synthetic quiz id could never be persisted there regardless of format validation. Streaming answers themselves are unaffected — `/api/ask` never takes an `articleId`, only the history-save call does.
+
+**Fix**: not fixed in `app/`. The web port (`ebf73c6`) worked around the same synthetic-id problem for its own Quiz tab using localStorage instead of `/api/ask-history`. `app/` was not touched by that change, so this silent failure is still live there. Full write-up lives in [docs/KNOWN_ISSUES.md](./KNOWN_ISSUES.md) — check there before re-investigating.
+
+**Guardrail**: don't attempt to fix this by relaxing the `articleId` regex in `api/ask-history.ts` — the FK constraint on `conversations.article_id` blocks synthetic ids independent of format. Any real fix needs either a schema change (nullable/polymorphic reference) or a non-DB persistence path (as the web port chose).

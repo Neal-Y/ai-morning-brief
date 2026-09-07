@@ -18,8 +18,8 @@ Root-level docs outside this folder, for context: [`../CLAUDE.md`](../CLAUDE.md)
 | [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) | Real, verified discrepancies between what the code claims and what it does (e.g. a hardcoded value standing in for something that should be computed). Not a wishlist — only things actually wrong today. |
 | [PRINCIPLES.md](./PRINCIPLES.md) | Reusable product/engineering judgment calls extracted from past retros — durable methodology, not a log of what happened. |
 | [DEPLOY.md](./DEPLOY.md) | Local dev commands, GitHub Actions / Vercel deploy steps, full env var reference, Notion manual setup. |
-| [FRONTEND_FIX_LOG.md](./FRONTEND_FIX_LOG.md) | Web PWA (`web/`) UI incident log — symptom → root cause → fix → guardrail. Read before touching PWA frontend code. |
-| [FRONTEND_FIX_LOG_APP.md](./FRONTEND_FIX_LOG_APP.md) | Same pattern, for the React Native app (`app/`, "Sift"). Read before touching RN frontend code. |
+| [FRONTEND_FIX_LOG.md](./FRONTEND_FIX_LOG.md) | Web PWA (`web/`) UI incident log — symptom → root cause → fix → guardrail. `web/` is the **primary client** as of 2026-09-07 (four bottom tabs: Quiz/Feed/Library/Activity). Read before touching PWA frontend code. |
+| [FRONTEND_FIX_LOG_APP.md](./FRONTEND_FIX_LOG_APP.md) | Same pattern, for the React Native app (`app/`, "Sift"). `app/` is **temporarily shelved** (2026-09-07) — EAS Build/TestFlight cost wasn't worth it at current usage, but the code isn't frozen or removed and still runs in Expo Go; this doc stays a living spec for whenever `app/` resumes. Read before touching RN frontend code. |
 
 ## Decision records (`decisions/`, frozen — do not edit)
 

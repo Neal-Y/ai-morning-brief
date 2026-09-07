@@ -140,11 +140,11 @@ One LLM call, `QUIZ_COUNT = 5` questions per run, free mix of 4 types:
 
 Plain insert into `quizzes` — no upsert/dedup at the DB layer; dedup happens earlier, at generation time, via the prompt-steering context above.
 
-### Consumption (app-side)
+### Consumption (client-side — web PWA `web/` is primary; RN app `app/` shelved, see [README.md](./README.md))
 
 - `GET /api/quiz` (Hono, read-only) — today's question set.
 - `POST /api/quiz-attempt` (`api/quiz-attempt.ts`, Edge) — records `{ quizId, deviceId, correct }` into `quiz_attempts`. `X-Device-Id` required, 400 without it.
-- Ask follow-up on a quiz question reuses the article Ask infrastructure via a synthetic `articleId = quiz-${id}` (see [../CLAUDE.md](../CLAUDE.md) Key Design Decisions #8). The quiz prompt is repurposed as Ask `context.title`, the explanation as `context.summary`, the category as `context.context`.
+- Ask *streaming* on a quiz question reuses `/api/ask` via a synthetic `articleId = quiz-${id}` — that part works on both clients (the quiz prompt is repurposed as Ask `context.title`, the explanation as `context.summary`, the category as `context.context`). Ask *history persistence* via `conversations` does **not** work for this synthetic id — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) "Quiz follow-up history cannot persist to the DB". `web/src/askHistory.ts` routes quiz threads to `localStorage` instead; `app/`'s equivalent path still silently fails.
 
 ---
 
@@ -157,7 +157,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 | `articles` | `id` (SHA-256(url).slice(0,16)) pk, `url` unique, `score`, `renderLevel`, `categoryTag`, `skillTags` (JSON string, unused by classifier today), `briefDate` | No `device_id` — articles are global, not per-user |
 | `feedback` | `articleId` fk, `signal` ('up'\|'down'), `deviceId` | delete-then-insert on write — same (device, article) pair only ever has the latest signal |
 | `saves` | `articleId` fk, `deviceId`, `notionPageId` | unique on `(deviceId, articleId)`. Unsave is a **hard delete** (`DELETE FROM saves`, fixed 2026-08-05 — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for why an earlier soft-delete design never actually worked). Safe because Notion dedupe checks Notion directly (`findSavePageByArticleId`), not this row — re-saving after unsave still finds and reuses the same Notion page |
-| `conversations` | `articleId` fk (real or synthetic `quiz-${id}`), `deviceId`, `messages` (JSON), `messageCount`, `model` | unique on `(articleId, deviceId)`. Full-overwrite on save, not append-diff. `/api/library` selects `messageCount` only — never loads `messages` |
+| `conversations` | `articleId` fk, `deviceId`, `messages` (JSON), `messageCount`, `model` | unique on `(articleId, deviceId)`. Full-overwrite on save, not append-diff. `/api/library` selects `messageCount` only — never loads `messages`. FK to `articles.id` **is enforced** — a synthetic `quiz-${id}` (or any non-existent 16-hex id) cannot be written here; see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) |
 | `quizzes` | `type`, `category`, `prompt`, `payload` (JSON, shape per `type`), `explanation` | No `deviceId` — quizzes are global, like articles |
 | `quiz_attempts` | `quizId` fk, `deviceId`, `correct` | One row per attempt (no unique constraint — a user can retry and log multiple attempts on the same quiz) |
 | `push_subscriptions` | `endpoint` unique, `p256dh`, `auth`, `deviceId` | Web Push subscription |
@@ -179,8 +179,8 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 
 | Route | Body | Effect |
 |---|---|---|
-| `POST /api/ask` | `{ articleId, context, messages }` | SSE stream, Haiku 4.5 |
-| `GET/POST /api/ask-history` | GET: `?articleId=`. POST: `{ articleId, messages }` | Per-(article, device) conversation read/full-overwrite |
+| `POST /api/ask` | `{ articleTitle, articleSummary, articleContext, messages }` | SSE stream, Haiku 4.5. Takes **no** `articleId` — the thread's identity lives only in `/api/ask-history`. That is why quiz Ask *streaming* works with a synthetic id while its *persistence* does not |
+| `GET/POST /api/ask-history` | GET: `?articleId=`. POST: `{ articleId, messages }` | Per-(article, device) conversation read/full-overwrite. `articleId` must match `/^[a-f0-9]{16}$/` (400 otherwise) **and** already exist in `articles` (500 otherwise, FK enforced) — synthetic quiz ids satisfy neither; see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) |
 | `POST /api/push-subscribe` | subscription object | Writes `push_subscriptions` |
 | `POST /api/save` | `{ articleId, userNote? }` | Notion dedupe (DB `notion_page_id` cache, else direct Article ID lookup via `findSavePageByArticleId`) + upsert `saves` |
 | `POST /api/unsave` | `{ articleId }` | Hard delete the `saves` row (`DELETE`) — never touches `articles` or the Notion page |

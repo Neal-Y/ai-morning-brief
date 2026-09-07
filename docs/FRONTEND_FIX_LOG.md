@@ -1,6 +1,6 @@
 # Frontend Fix Log
 
-Last updated: 2026-04-28
+Last updated: 2026-09-07
 
 Purpose: give the next session a concrete handoff for the mobile/web issues already fixed, why they happened, and what still needs verification on a real phone.
 
@@ -374,6 +374,14 @@ Before trying new code, keep these constraints in mind:
 - current status is based on real installed iPhone PWA screenshots from 2026-04-28
 - `cd web && npm run build` passed after each footer experiment
 
+### Amendment (2026-09-07): bottom-nav port transferred ownership of the safe-area band
+
+`ebf73c6` added a bottom tab bar (`BottomNav.tsx`) to the web PWA (Quiz/Feed/Library/Activity), and it slots into the exact model this issue established — extended root (`html` at `100dvh + env(safe-area-inset-bottom)`, `#root { position: relative }`), bottom chrome as an absolute layer inside that extended root. `BottomNav` is that absolute layer now: `bottom: 0`, `padding-bottom: env(safe-area-inset-bottom)`, `z-index: 50`. It owns the bottom safe-area band and home-indicator clearance.
+
+Because of that, **`FEEDBACK_BAR_BOTTOM = 56`** — the constant this issue tuned against a real device specifically to clear the home indicator — **no longer exists** in `web/src/App.tsx`. If you go looking for it, this is why. The feedback dock now sits a small fixed gap above the nav (`FEEDBACK_BAR_GAP = 14`, positioned as `bottom: navInset + FEEDBACK_BAR_GAP`), and the old fixed `FEEDBACK_DOCK_HEIGHT = 112` was replaced by a height computed from the nav's measured bar height (`navInset`, published via `NavInsetContext` in `Shell.tsx`).
+
+This does not change the experiment history, the debunked assumptions, or the acceptance model above — it only moves who is responsible for the bottom safe-area band. See Issue 16 for a `ResizeObserver` pitfall in how that height gets measured, and Issue 17 for a layered z-index consequence.
+
 ## Issue 7: Header date should match the brief date, not device-local "now"
 
 ### Symptom
@@ -646,6 +654,114 @@ Existing PWA installs may need one or two foreground cycles for the kill-switch 
 2. If still stale, long-press home-screen icon → Remove app → re-add to home screen.
 
 The kill-switch is idempotent, so even repeated runs are safe.
+
+---
+
+## Issue 15: Swipe feedback was never recorded (bare `fetch` vs `apiFetch`, 400 swallowed by `.catch`)
+
+### Symptom
+
+None visible in the UI — swiping a card left/right (👍/👎) appeared to work normally: the card advanced immediately, exactly as if the vote had been recorded.
+
+### Root Cause
+
+Two things stacked, and together they meant swipe feedback was never written to the DB at all:
+
+1. `App.tsx`'s `onPointerUp` swipe branch called bare `fetch('/api/feedback', …)` directly, while the button path (`registerFeedback`) called `apiFetch(…)`. Only `apiFetch` attaches the `X-Device-Id` header.
+2. `api/feedback.ts` requires that header and rejects its absence outright: `if (!deviceId) return jsonResponse({ ok: false, error: 'missing_device_id' }, 400)`. Confirmed against production with curl — POST without `X-Device-Id` returns `{"ok":false,"error":"missing_device_id"}` / HTTP 400; the same POST with the header returns `{"ok":true}` / HTTP 200.
+
+The swipe branch's call was `fetch('/api/feedback', {...}).catch(() => {})`. A 400 is a **resolved** promise, not a rejected one — `.catch` never fires, and the response body/status was never inspected. So no unattributed row was written; **no row was written at all**. Swiping is the primary way feedback is given on the Feed, so the main path contributed nothing to `feedback` since the `missing_device_id` guard landed. Only the button path (`registerFeedback`, using `apiFetch`) ever actually recorded a vote. This was a pre-existing bug, not introduced by the Quiz/Activity port in `ebf73c6` — it just got noticed during that pass.
+
+### Risk / User Impact
+
+- Silent total data loss on the primary feedback path: no error, no visual sign, card behavior identical to success.
+- Downstream consequence: `src/db/client.ts`'s `getRecentFeedback()` feeds the classifier's preference context (last 30 days / 20 rows / threshold 10, per CLAUDE.md). Because web swipe votes never landed, that context has only ever learned from web button-press votes plus whatever `app/` sent — historical web swipe feedback is simply absent and cannot be recovered. Worth knowing before reading meaning into the current preference signal, or concluding the cold-start threshold was never reached because engagement was low (it may just be uncounted).
+- For completeness: `/api/library` selects feedback scoped `where(eq(feedback.deviceId, deviceId))` (`src/api/app.ts`), so even a hypothetical device-less row would have been invisible to every device — but that's moot here since the insert never happened.
+
+### Fix
+
+Use `apiFetch` in the swipe branch too, matching the button path.
+
+### Changed File(s)
+
+- `web/src/App.tsx`
+
+### Validation
+
+- A Playwright touch-drag on the Feed produced `POST /api/feedback` carrying `X-Device-Id`; before the fix, the header was absent on the same interaction.
+
+### Guardrail
+
+In `web/`, never call bare `fetch` for an app API route. `apiFetch` is the only thing that attaches `X-Device-Id`, and endpoints like `api/feedback.ts` reject a missing header with a 400 — but `.catch()` alone does not surface a non-2xx response: a resolved promise with `ok: false` is indistinguishable from success unless `res.ok` (or the response body) is actually checked. A silent 400 looks exactly like a working feature. Grep for `fetch(` (not `apiFetch(`) hitting `/api/*` before shipping anything that touches request plumbing, and never treat `.catch(() => {})` as a substitute for checking `res.ok`.
+
+---
+
+## Issue 16: `ResizeObserver` on the bottom nav never fired for safe-area changes
+
+### Symptom
+
+With a bottom safe-area inset simulated, the Feed action row overlapped the top of the bottom nav by roughly 20px (measured: nav top at 609px, action buttons spanning 585–629px).
+
+### Root Cause
+
+`Shell.tsx` measures the bottom nav's height and publishes it through `NavInsetContext` (needed because `env(safe-area-inset-bottom)` isn't readable as a number from JS, and consumers like `ArticleCard` need a real px value to lay out against). The observer was registered as `ro.observe(el)` — the default observed box is `content-box`. The nav's height changes come entirely from `padding-bottom: env(safe-area-inset-bottom)`, and padding does not move the content box, so the callback never fired when the inset appeared/changed, and `navInset` stayed at its stale pre-inset value (0, on first mount before any inset was known).
+
+### Risk / User Impact
+
+- The initial `useLayoutEffect` measurement is correct on a real iOS device (the inset already exists at first paint), so this mostly bites on inset changes **after** mount — orientation change, or any other event that alters the safe-area inset mid-session.
+- It also silently defeated any test harness that simulates the inset after the component has already mounted, which is exactly how this was caught.
+
+### Fix
+
+`ro.observe(el, { box: 'border-box' })`, so padding-driven size changes are observed.
+
+### Changed File(s)
+
+- `web/src/Shell.tsx`
+
+### Validation
+
+- After the fix, no control straddles the nav; the lowest control's bottom sits at 595 against a nav top of 609 — the intended 14px (`FEEDBACK_BAR_GAP`) gap.
+
+### Guardrail
+
+When observing an element whose size is driven by padding or border (safe-area padding especially — `env(safe-area-inset-*)` is exactly this pattern), you must pass `{ box: 'border-box' }`. The default `content-box` observation mode silently observes nothing for padding-only size changes — no error, the callback just never fires.
+
+---
+
+## Issue 17: Full-screen AskSheet assumed its host was exactly `100dvh`
+
+### Symptom
+
+Opening 追問 (Ask) from a quiz question pushed the sheet's header (title + ✕ close button) off the top of the screen. The sheet could not be closed.
+
+### Root Cause
+
+`AskSheet.tsx`'s `fullScreen` mode hardcoded `height: '100dvh'` with `position: absolute; bottom: 0`. In `Library.tsx`, the host is a `position: fixed; inset: 0` wrapper that is itself viewport-sized, so `100dvh` happened to fit exactly. Inside the new `QuizFrame` (added by the Quiz port), the host is shorter than the dynamic viewport, so a `100dvh`-tall box anchored to the host's bottom pushed its top to a negative offset — off-screen.
+
+### Risk / User Impact
+
+- The sheet was unclosable on the Quiz tab: the ✕ button was rendered above the visible viewport, with no way to dismiss short of reloading.
+
+### Fix
+
+In `fullScreen` mode, pin `top: 0` in addition to `bottom: 0` and let height follow the host instead of hardcoding `100dvh`. Library is unaffected — its host is already viewport-height, so the computed result is identical there.
+
+Related, same change: `AskSheet`'s `z-index` went 30 → 60 (and Library's wrapper 30 → 60, `App.tsx`'s scrim 25 → 55) so the sheet renders above the bottom nav's `z-index: 50` — the sheet is meant to be a full modal takeover regardless of which tab it's opened from.
+
+### Changed File(s)
+
+- `web/src/components/AskSheet.tsx`
+- `web/src/Library.tsx`
+- `web/src/App.tsx`
+
+### Validation
+
+- Manual check: AskSheet opened from `QuizFrame` now shows its header and is closeable; Library's AskSheet behavior unchanged (same computed geometry as before).
+
+### Guardrail
+
+A component that can be hosted inside more than one layer (a viewport-sized fixed wrapper in one place, a shorter in-page container in another) must size itself from its host (`top`/`bottom`/`inset`), not from a viewport unit like `100dvh` or `100vh`. Viewport units are only safe when you've verified every current and future host is itself exactly viewport-sized — which is not a property you can rely on staying true.
 
 ---
 

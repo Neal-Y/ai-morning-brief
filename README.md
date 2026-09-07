@@ -8,7 +8,7 @@
 GitHub Actions cron 驅動，Vercel Edge Runtime 提供 API 服務層。
 自 2026 年 4 月起持續每日運行。
 
-使用者端是 React Native app「Sift」（Expo，封測中）+ 一支 iOS PWA：每日推播新聞 → 滑卡閱讀 → 👍👎 回饋 → 追問 → 收藏同步 Notion；每日 quiz → 遊戲化作答（4 種題型）→ 學習紀錄儀表板。歷史內容可在 Library 回溯。
+使用者端主力是 Web PWA（四分頁：題目／簡報／Library／紀錄）：每日推播新聞 → 滑卡閱讀 → 👍👎 回饋 → 追問 → 收藏同步 Notion；每日 quiz → 遊戲化作答（4 種題型）→ 學習紀錄儀表板。歷史內容可在 Library 回溯。React Native app「Sift」（Expo）程式碼仍在、仍可跑，但 2026-09-07 起暫時擱置——EAS Build / TestFlight 的成本在目前使用量下不划算，四分頁已原樣搬進 PWA。
 
 **Live (Web PWA):** https://ai-morning-brief-chi.vercel.app
 
@@ -83,14 +83,16 @@ Edge Functions (Vercel 獨立路由，不走 Hono)
   ├─ POST /api/feedback        api/feedback.ts — 👍👎 回饋（delete-then-insert）
   └─ POST /api/quiz-attempt    api/quiz-attempt.ts — 寫入 quiz_attempts
 
-React Native App「Sift」(app/) — 主力 client，Expo Go 封測中
-  ├─ 四分頁：Quiz（今日題目）/ Feed（簡報）/ Library / Activity（學習紀錄）
-  └─ device_id（非帳號系統）貫穿五張表，作為多使用者隔離依據
-
-React PWA (web/) — Web Push 入口
-  ├─ 今日滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / streak
-  ├─ /library 歷史頁：日期分組、filter、展開 LLM 內容、收藏/移除收藏、AskSheet + Ask count
+React PWA (web/) — 主力 client，四分頁 bottom tab（鏡像原 Sift app 的分頁配置）
+  ├─ /quiz     題目：今日 quiz 題組（4 題型）+ AskSheet 追問
+  ├─ /         簡報：今日滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / streak（PWA start_url，Web Push 落點，故意留在 `/`）
+  ├─ /library  Library：歷史頁，日期分組、filter、展開 LLM 內容、收藏/移除收藏、AskSheet + Ask count
+  ├─ /activity 紀錄：學習儀表板（年度 heatmap、週 pie、streak、正確率）
   └─ Splash gate：iOS standalone 第一次開啟時請求 notification 權限 + 寫 subscription
+
+React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、非凍結
+  ├─ 程式碼原樣保留，Expo Go 仍可跑；四分頁邏輯已搬進 web PWA
+  └─ EAS Build → TestFlight 在目前使用量下不划算，先不投資；用量提高再重啟
 ```
 
 ### Pipeline Stages（文章管線；quiz 管線是獨立的單步驟：出題 → 寫入，見上方架構圖）
@@ -156,10 +158,10 @@ React PWA (web/) — Web Push 入口
 <summary>展開</summary>
 
 - **雙每日 pipeline**：GitHub Actions 文章（07:30 台北）+ quiz（06:00 台北）各自獨立排程，寫同一顆 Turso DB
-- **Sift app（RN，封測中）**：四分頁 Quiz / Feed / Library / Activity；device_id 做多使用者隔離
+- **Web PWA 四分頁（主力 client）**：題目 (`/quiz`) / 簡報 (`/`) / Library (`/library`) / 紀錄 (`/activity`)；device_id 做多使用者隔離。原 Sift RN app 四分頁邏輯已原樣搬過來，app/ 本身暫時擱置（見上方 Architecture）
 - **Quiz**：4 種互動題型（single_choice / ordering / matching / fill_blank），答對 +20 XP / 答錯 +5 XP，AskSheet 追問重用文章 Ask 基礎設施
 - **Activity 學習紀錄**：年度 heatmap、週 pie、streak、正確率
-- **Web PWA**：滑卡瀏覽、👍👎 回饋、💬 追問（Haiku streaming）、🔖 收藏、streak 計數
+- **簡報滑卡瀏覽**：👍👎 回饋、💬 追問（Haiku streaming）、🔖 收藏、streak 計數
 - **Library / 歷史頁** (`/library`)：所有歷史文章 + 收藏 tab、filter、日期分組、展開 LLM 四段內容、收藏／移除收藏、AskSheet 直接從歷史卡開追問並恢復該篇歷史對話
 - **Web Push (VAPID)**：iOS standalone PWA 支援，通知標題 = lead story headline，body 第 1 行 = lead 文章的 `engineeringImpact`（LLM 判斷直接上鎖屏）
 - **🔖 → Notion 同步**：點收藏自動同步 Notion page；重存時查 DB 快取或直接查 Notion `Article ID` 找回舊 page，避免同篇重複建頁；unsave 是硬刪除 saves row，不動 Notion page
