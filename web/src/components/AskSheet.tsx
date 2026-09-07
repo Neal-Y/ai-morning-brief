@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import type { Theme } from '../theme.ts'
 import type { Article } from '../types.ts'
 import { apiFetch } from '../api.ts'
+import { loadAskHistory, saveAskHistory } from '../askHistory.ts'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -22,12 +23,6 @@ interface AskSheetProps {
   onClose: () => void
   fullScreen?: boolean
   onHistorySaved?: (articleId: string, messageCount: number) => void
-}
-
-interface AskHistoryResponse {
-  ok?: boolean
-  messages?: ApiMessage[]
-  messageCount?: number
 }
 
 const INTRO_MESSAGE: Message = {
@@ -260,20 +255,8 @@ export function AskSheet({
   }, [visible])
 
   const persistHistory = async (articleId: string, history: ApiMessage[]) => {
-    if (history.length === 0) return
-    try {
-      const response = await apiFetch('/api/ask-history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleId, messages: history }),
-      })
-      const data = await response.json().catch(() => ({})) as AskHistoryResponse
-      if (response.ok && data.ok) {
-        onHistorySaved?.(articleId, data.messageCount ?? history.length)
-      }
-    } catch {
-      // Ask still works if history persistence is temporarily unavailable.
-    }
+    const count = await saveAskHistory(articleId, history)
+    if (count !== null) onHistorySaved?.(articleId, count)
   }
 
   // Reset state when article changes
@@ -294,20 +277,15 @@ export function AskSheet({
     let cancelled = false
     const articleId = article.id
     setHistoryLoading(true)
-    apiFetch(`/api/ask-history?articleId=${articleId}`)
-      .then(async response => {
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        return response.json() as Promise<AskHistoryResponse>
-      })
-      .then(data => {
+    loadAskHistory(articleId)
+      .then(({ messages: history, messageCount }) => {
         if (cancelled || article.id !== articleId) return
         historyLoadedArticleRef.current = articleId
-        const history = Array.isArray(data.messages) ? data.messages : []
         setHistoryLoading(false)
         if (history.length === 0) return
         setApiHistory(prev => prev.length > 0 ? prev : history)
         setMessages(prev => prev.some(m => m.role === 'user') ? prev : historyToMessages(history))
-        onHistorySaved?.(articleId, data.messageCount ?? history.length)
+        onHistorySaved?.(articleId, messageCount)
       })
       .catch(() => {
         if (!cancelled) historyLoadedArticleRef.current = articleId
@@ -411,7 +389,10 @@ export function AskSheet({
     <div style={{
       position: 'absolute',
       left: 0, right: 0, bottom: 0,
-      height: fullScreen ? '100dvh' : '82%',
+      // fullScreen fills the host layer (top+bottom pinned) rather than
+      // assuming 100dvh: inside the quiz frame the host is shorter than the
+      // dynamic viewport, and a fixed 100dvh pushed the header off-screen.
+      ...(fullScreen ? { top: 0 } : { height: '82%' }),
       background: theme.card,
       borderTopLeftRadius: fullScreen ? 0 : 16,
       borderTopRightRadius: fullScreen ? 0 : 16,
@@ -419,7 +400,8 @@ export function AskSheet({
       overflow: 'hidden',
       transform: entered ? 'translateY(0)' : 'translateY(100%)',
       transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
-      zIndex: 30,
+      // Above the bottom nav (z 50): the ask sheet is a modal takeover.
+      zIndex: 60,
       display: 'flex', flexDirection: 'column',
       boxShadow: !fullScreen && entered ? '0 -12px 40px rgba(26,22,18,0.18)' : 'none',
     }}>

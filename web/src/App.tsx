@@ -3,16 +3,20 @@ import { THEME_DARK, ACCENT_PRESETS } from './theme.ts'
 import type { Theme } from './theme.ts'
 import { ArticleCard } from './components/Card.tsx'
 import { TopChrome, FeedbackBar } from './components/Chrome.tsx'
-import { navigate } from './router.ts'
 import { isPushSupported, isStandalone, completeSubscription } from './push.ts'
 import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
 import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
 import type { Article, FeedResponse } from './types.ts'
 import { apiFetch } from './api.ts'
+import { useNavInset } from './nav.ts'
 
-const FEEDBACK_BAR_BOTTOM = 56
-const FEEDBACK_DOCK_HEIGHT = 112
+// The bottom nav owns the safe-area band and the home-indicator clearance that
+// FEEDBACK_BAR_BOTTOM = 56 used to provide (Issue 6). The action row now just
+// sits a short gap above the nav.
+const FEEDBACK_BAR_GAP = 14
+const FEEDBACK_DOCK_TOP_PAD = 18
+const FEEDBACK_DOCK_MIN_HEIGHT = 76
 const FEEDBACK_CONTENT_GAP = 16
 
 function parsePublishedAgo(classifiedAt: number | string | null | undefined): string {
@@ -63,6 +67,7 @@ export default function App() {
   })
   const [subscribing, setSubscribing] = useState(false)
 
+  const navInset = useNavInset()
   const T = buildTheme(accent)
   const dragStart = useRef<{ x: number; y: number; axis: 'x' | 'y' | null } | null>(null)
   const velocity = useRef<{ vx: number; lastX: number; lastT: number }>({ vx: 0, lastX: 0, lastT: 0 })
@@ -206,7 +211,10 @@ export default function App() {
       const signal = (isFlick ? vx > 0 : swipeX > 0) ? 'up' : 'down'
       if (!overThreshold) setSwipeX(vx > 0 ? 100 : -100)
       setFeedback(f => ({ ...f, [curArticle.id]: signal }))
-      fetch('/api/feedback', {
+      // apiFetch, not bare fetch: the swipe is the primary way feedback is
+      // given, and bare fetch omits the X-Device-Id header, so those rows were
+      // landing unattributed while the button path recorded them per-device.
+      apiFetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ articleId: curArticle.id, signal }),
@@ -253,9 +261,13 @@ export default function App() {
 
   const dateLabel = formatBriefDateLong(briefDate)
   const showFeedbackBar = !!curArticle && !showAsk
+  const dockHeight = Math.max(
+    FEEDBACK_DOCK_MIN_HEIGHT,
+    feedbackBarHeight + FEEDBACK_BAR_GAP + FEEDBACK_DOCK_TOP_PAD,
+  )
   const cardBottomInset = showFeedbackBar && feedbackBarHeight > 0
-    ? `${feedbackBarHeight + FEEDBACK_BAR_BOTTOM + FEEDBACK_CONTENT_GAP}px`
-    : '0px'
+    ? `${navInset + dockHeight + FEEDBACK_CONTENT_GAP}px`
+    : `${navInset}px`
 
   useLayoutEffect(() => {
     if (!showFeedbackBar || !feedbackBarRef.current) {
@@ -363,7 +375,7 @@ export default function App() {
 
         <div style={{
           position: 'absolute',
-          bottom: 'calc(24px + env(safe-area-inset-bottom))',
+          bottom: navInset + 24,
           display: 'flex', alignItems: 'center', gap: 10,
           fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
           letterSpacing: 2.5, textTransform: 'uppercase',
@@ -413,7 +425,6 @@ export default function App() {
             streak={streak}
             lastReadAgo="today"
             dateLabel={dateLabel}
-            onOpenLibrary={() => navigate('/library')}
           />
         )}
 
@@ -476,7 +487,7 @@ export default function App() {
         {showAsk && (
           <div
             onClick={() => setShowAsk(false)}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(26,22,18,0.35)', zIndex: 25 }}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(26,22,18,0.35)', zIndex: 55 }}
           />
         )}
 
@@ -496,10 +507,10 @@ export default function App() {
             style={{
               position: 'absolute',
               left: '50%',
-              bottom: 0,
+              bottom: navInset,
               width: '100%',
               maxWidth: 480,
-              height: FEEDBACK_DOCK_HEIGHT,
+              height: dockHeight,
               transform: 'translateX(-50%)',
               background: T.bg,
               borderTop: `1px solid ${T.ruleSoft}`,
@@ -512,7 +523,7 @@ export default function App() {
             style={{
               position: 'absolute',
               left: '50%',
-              bottom: FEEDBACK_BAR_BOTTOM,
+              bottom: navInset + FEEDBACK_BAR_GAP,
               width: '100%',
               maxWidth: 480,
               transform: 'translateX(-50%)',

@@ -4,6 +4,7 @@ import { navigate } from './router.ts'
 import { AskSheet } from './components/AskSheet.tsx'
 import type { Article } from './types.ts'
 import { apiFetch } from './api.ts'
+import { useNavInset } from './nav.ts'
 
 const T = THEME_DARK
 // Lighter rule for filter-row separators only — keeps the filter bar visually
@@ -679,6 +680,7 @@ function ActionButton({ label, icon, filled, active, tone, onClick }: {
 
 // ─── Main ────────────────────────────────────────────────────────────────────
 export default function Library() {
+  const navInset = useNavInset()
   const [tab, setTab] = useState<'all' | 'saves'>('all')
   const [query, setQuery] = useState('')
   const [activeCategories, setActiveCategories] = useState<string[]>([])
@@ -874,7 +876,8 @@ export default function Library() {
         .lib-root ::-webkit-scrollbar { display: none; }
       `}</style>
       <div className="lib-root" style={{
-        maxWidth: 720, margin: '0 auto', height: '100dvh',
+        maxWidth: 720, margin: '0 auto', height: '100%',
+        paddingBottom: navInset,
         overflowY: 'auto', WebkitOverflowScrolling: 'touch',
         overscrollBehavior: 'contain',
         display: 'flex', flexDirection: 'column',
@@ -1013,7 +1016,7 @@ export default function Library() {
 
         {askArticle && (
           <div style={{
-            position: 'fixed', inset: 0, zIndex: 30,
+            position: 'fixed', inset: 0, zIndex: 60,
             display: 'flex', justifyContent: 'center',
             pointerEvents: 'auto',
           }}>
