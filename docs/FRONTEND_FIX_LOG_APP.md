@@ -50,12 +50,12 @@ REACT_NATIVE_PACKAGER_HOSTNAME=192.168.0.105 npx expo start   # substitute curre
 
 ---
 
-## Issue 4 — Quiz follow-up (追問) history has never persisted in `app/`
+## Issue 4 — Quiz follow-up (追問) history never persisted in `app/` (fixed 2026-09-29)
 
 **Symptom**: no visible error. Streaming Ask answers on a quiz question work fine, but reopening that quiz question's AskSheet never restores prior turns.
 
 **Root cause**: `app/src/api.ts`'s `saveAskHistory` posts a synthetic `articleId = quiz-<id>` to `/api/ask-history`. The endpoint validates `articleId` against `/^[a-f0-9]{16}$/` and rejects anything else with `400 invalid_article_id` — so the synthetic id never gets past validation. The surrounding `catch {}` swallows the failure silently. This is not fixable by loosening the regex alone: `conversations.article_id` is a `NOT NULL` foreign key into `articles.id`, so a synthetic quiz id could never be persisted there regardless of format validation. Streaming answers themselves are unaffected — `/api/ask` never takes an `articleId`, only the history-save call does.
 
-**Fix**: not fixed in `app/`. The web port (`ebf73c6`) worked around the same synthetic-id problem for its own Quiz tab using localStorage instead of `/api/ask-history`. `app/` was not touched by that change, so this silent failure is still live there. Full write-up lives in [docs/KNOWN_ISSUES.md](./KNOWN_ISSUES.md) — check there before re-investigating.
+**Fix (2026-09-29)**: same approach as the web port (`ebf73c6`, `web/src/askHistory.ts`). In `app/src/api.ts`, `fetchAskHistory` / `saveAskHistory` route `quiz-` threads to AsyncStorage (`sift_quiz_ask_quiz-<id>`) and never call `/api/ask-history` for them. Article threads are unchanged, except that a non-ok save now `console.warn`s instead of being swallowed. `AskSheet.tsx` needed no change. History from before the fix was never stored anywhere, so it can't be recovered. Full write-up lives in [docs/KNOWN_ISSUES.md](./KNOWN_ISSUES.md).
 
 **Guardrail**: don't attempt to fix this by relaxing the `articleId` regex in `api/ask-history.ts` — the FK constraint on `conversations.article_id` blocks synthetic ids independent of format. Any real fix needs either a schema change (nullable/polymorphic reference) or a non-DB persistence path (as the web port chose).

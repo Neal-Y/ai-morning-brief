@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage'
 import Constants from 'expo-constants'
 import { fetch as expoFetch } from 'expo/fetch'
 import { getDeviceId } from './device'
@@ -194,7 +195,37 @@ export async function streamAsk(
   }
 }
 
+// Quiz follow-ups (synthetic articleId `quiz-<id>`) cannot use /api/ask-history:
+// the endpoint only accepts 16-hex article ids, and conversations.article_id has
+// an enforced FK to articles.id. Same fix as web/src/askHistory.ts — quiz threads
+// live on the device (AsyncStorage). Reach is equivalent: the DB rows would be
+// scoped to a device id that is itself just an AsyncStorage UUID.
+const QUIZ_THREAD_PREFIX = 'quiz-'
+const QUIZ_ASK_KEY_PREFIX = 'sift_quiz_ask_'
+
+function isQuizThread(articleId: string): boolean {
+  return articleId.startsWith(QUIZ_THREAD_PREFIX)
+}
+
+function isAskMessage(m: unknown): m is AskMessage {
+  if (!m || typeof m !== 'object') return false
+  const { role, content } = m as { role?: unknown; content?: unknown }
+  return (role === 'user' || role === 'assistant') && typeof content === 'string'
+}
+
+async function loadLocalAskHistory(articleId: string): Promise<AskMessage[]> {
+  try {
+    const raw = await AsyncStorage.getItem(QUIZ_ASK_KEY_PREFIX + articleId)
+    if (!raw) return []
+    const parsed = JSON.parse(raw) as unknown
+    return Array.isArray(parsed) ? parsed.filter(isAskMessage) : []
+  } catch {
+    return []
+  }
+}
+
 export async function fetchAskHistory(articleId: string): Promise<AskMessage[]> {
+  if (isQuizThread(articleId)) return loadLocalAskHistory(articleId)
   try {
     const res = await apiFetch(`/api/ask-history?articleId=${encodeURIComponent(articleId)}`)
     if (!res.ok) return []
@@ -206,14 +237,26 @@ export async function fetchAskHistory(articleId: string): Promise<AskMessage[]> 
 }
 
 export async function saveAskHistory(articleId: string, messages: AskMessage[]): Promise<void> {
+  if (messages.length === 0) return
+  if (isQuizThread(articleId)) {
+    try {
+      await AsyncStorage.setItem(QUIZ_ASK_KEY_PREFIX + articleId, JSON.stringify(messages))
+    } catch (err) {
+      console.warn('[api] saveAskHistory (local) failed:', err)
+    }
+    return
+  }
   try {
-    await apiFetch('/api/ask-history', {
+    const res = await apiFetch('/api/ask-history', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ articleId, messages, messageCount: messages.length }),
     })
-  } catch {
-    // silent failure — history save must never block the user
+    // Still never blocks the user, but a rejected save is no longer invisible —
+    // an empty catch is exactly how the quiz-history 400s went unnoticed.
+    if (!res.ok) console.warn(`[api] saveAskHistory non-ok status: ${res.status}`)
+  } catch (err) {
+    console.warn('[api] saveAskHistory failed:', err)
   }
 }
 

@@ -18,7 +18,7 @@ GitHub Actions cron 驅動，Vercel Edge Runtime 提供 API 服務層。
 
 ### 1. 兩條內容管線解耦，不是硬塞進同一條 pipeline
 
-文章和 quiz 是完全獨立的兩套產出：不同 cron 排程（07:30 / 06:00 台北，刻意錯開）、不同 entry point、不同 dedup 邏輯，只共用 provider 選擇邏輯和同一顆 DB。好處是任一條掛掉不拖累另一條，各自可以獨立重跑、獨立調整節奏。使用者端的 Ask 追問則反過來刻意共用：quiz 題目用合成 `articleId = quiz-${id}` 掛進既有的 conversations 機制，沒有為 quiz 另建一套幾乎一樣的 SSE + 歷史儲存邏輯——同一決策原則（重不重複用）在兩個方向上給出不同答案，取決於失敗域是否該隔離。
+文章和 quiz 是完全獨立的兩套產出：不同 cron 排程（07:30 / 06:00 台北，刻意錯開）、不同 entry point、不同 dedup 邏輯，只共用 provider 選擇邏輯和同一顆 DB。好處是任一條掛掉不拖累另一條，各自可以獨立重跑、獨立調整節奏。使用者端的 Ask 追問則反過來刻意共用：quiz 題目用合成 `articleId = quiz-${id}` 共用同一套 AskSheet + `/api/ask` SSE，沒有為 quiz 另建一套幾乎一樣的串流邏輯（歷史例外：`conversations` 的 FK 擋掉合成 id，quiz 對話改存各 client 本機，見 docs/KNOWN_ISSUES.md）——同一決策原則（重不重複用）在兩個方向上給出不同答案，取決於失敗域是否該隔離。
 
 ### 2. 有回饋迴路的 Feedback Loop，不是一次性腳本
 
@@ -113,7 +113,7 @@ React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、
 | `articles` | 每日文章 + 分類結果 |
 | `feedback` | 👍👎 回饋，用於 classifier 偏好調整 |
 | `saves` | 🔖 收藏紀錄；`(device_id, article_id)` unique；unsave 是硬刪除，不是 soft-delete（2026-08-05 修正，過程見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)） |
-| `conversations` | 💬 追問對話歷史；一 (article, device) 一筆，`messages` JSON + `message_count` 供 Library 輕量顯示；quiz 用合成 article_id 共用此表 |
+| `conversations` | 💬 追問對話歷史；一 (article, device) 一筆，`messages` JSON + `message_count` 供 Library 輕量顯示；只存文章對話——quiz 對話被 FK 擋在外面，存在 client 本機（web localStorage / app AsyncStorage） |
 | `quizzes` | Quiz 題目（4 題型，polymorphic `payload` JSON）|
 | `quiz_attempts` | Quiz 作答紀錄：`quiz_id` / `device_id` / `correct` |
 | `push_subscriptions` | Web Push subscription endpoint + VAPID keys |
