@@ -1,5 +1,5 @@
 import { forwardRef } from 'react'
-import { THEME_DARK } from '../theme.ts'
+import { GLASS_BLUR, THEME_DARK } from '../theme.ts'
 import { navigate } from '../router.ts'
 import { NAV_ROW_H, TABS, type TabId } from '../nav.ts'
 
@@ -26,8 +26,11 @@ export const BottomNav = forwardRef<HTMLElement, Props>(function BottomNav({ act
         position: 'absolute',
         left: 0, right: 0, bottom: 0,
         zIndex: 50,
-        background: T.bg,
-        borderTop: `1px solid ${T.ruleSoft}`,
+        // Frosted glass: page content scrolls underneath, blurred.
+        background: 'rgba(11,18,26,0.78)',
+        backdropFilter: GLASS_BLUR,
+        WebkitBackdropFilter: GLASS_BLUR,
+        borderTop: '1px solid rgba(255,255,255,0.06)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       }}
     >
@@ -41,21 +44,21 @@ export const BottomNav = forwardRef<HTMLElement, Props>(function BottomNav({ act
           return (
             <button
               key={tab.id}
+              className="btn-press"
               onClick={() => navigate(tab.path)}
               aria-current={on ? 'page' : undefined}
               style={{
                 flex: 1,
                 display: 'flex', flexDirection: 'column',
-                alignItems: 'center', justifyContent: 'center', gap: 4,
+                alignItems: 'center', justifyContent: 'center', gap: 3,
                 background: 'none', border: 'none', padding: 0,
-                color: on ? T.ink : T.inkFaint,
-                transition: 'color 0.15s',
+                color: on ? T.accent : T.inkFaint,
               }}
             >
               <TabGlyph id={tab.id} active={on} />
               <span style={{
-                fontFamily: T.mono, fontSize: 9, fontWeight: on ? 700 : 500,
-                letterSpacing: 0.8, textTransform: 'uppercase',
+                fontFamily: T.sans, fontSize: 10, fontWeight: on ? 700 : 600,
+                letterSpacing: 0.2,
                 color: 'inherit',
               }}>{tab.label}</span>
             </button>
@@ -70,9 +73,9 @@ export const BottomNav = forwardRef<HTMLElement, Props>(function BottomNav({ act
  *  so they render identically across platforms. */
 function TabGlyph({ id, active }: { id: TabId; active: boolean }) {
   const stroke = 'currentColor'
-  const w = active ? 1.9 : 1.5
+  const w = active ? 1.8 : 1.5
   const common = {
-    width: 17, height: 17, viewBox: '0 0 20 20',
+    width: 22, height: 22, viewBox: '0 0 20 20',
     fill: 'none', stroke, strokeWidth: w,
     strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const,
   }
@@ -80,7 +83,7 @@ function TabGlyph({ id, active }: { id: TabId; active: boolean }) {
     case 'quiz':
       return (
         <svg {...common}>
-          <path d="M10 2.5 L11.9 8.1 L17.5 10 L11.9 11.9 L10 17.5 L8.1 11.9 L2.5 10 L8.1 8.1 Z" />
+          <path d="M10 2.5 L11.9 8.1 L17.5 10 L11.9 11.9 L10 17.5 L8.1 11.9 L2.5 10 L8.1 8.1 Z" fill={active ? stroke : 'none'} />
         </svg>
       )
     case 'feed':
@@ -93,7 +96,7 @@ function TabGlyph({ id, active }: { id: TabId; active: boolean }) {
     case 'library':
       return (
         <svg {...common}>
-          <rect x="3" y="3.5" width="14" height="13" rx="1.6" />
+          <rect x="3" y="3.5" width="14" height="13" rx="2.4" />
           <path d="M3 8.2 H17" />
           <path d="M7.4 8.2 V16.5" />
         </svg>

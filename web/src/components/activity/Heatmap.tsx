@@ -12,7 +12,7 @@ const TOTAL_W = 52 * STRIDE - GAP
 
 // Level 0 is an opaque hex on purpose: T.ruleSoft is rgba and would let the
 // card colour bleed through, making empty days look inconsistent.
-const HEAT = ['#2E2820', '#5C1F0E', '#9B3218', T.accent] as const
+const HEAT = ['#1E2A37', '#4A3A17', '#8A6418', T.accent] as const
 
 const MONTH_LABELS = [
   { week: 0, label: 'Jan' }, { week: 8, label: 'Mar' }, { week: 17, label: 'May' },
@@ -31,7 +31,7 @@ export function Heatmap({ data }: { data: number[][] }) {
   return (
     <div style={{
       background: T.card, border: `1px solid ${T.ruleSoft}`,
-      borderRadius: 14, padding: 14,
+      borderRadius: 18, padding: 14,
       display: 'flex', alignItems: 'flex-start',
     }}>
       <div style={{

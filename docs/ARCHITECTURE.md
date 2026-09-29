@@ -144,7 +144,7 @@ Plain insert into `quizzes` — no upsert/dedup at the DB layer; dedup happens e
 
 - `GET /api/quiz` (Hono, read-only) — today's question set.
 - `POST /api/quiz-attempt` (`api/quiz-attempt.ts`, Edge) — records `{ quizId, deviceId, correct }` into `quiz_attempts`. `X-Device-Id` required, 400 without it.
-- Ask *streaming* on a quiz question reuses `/api/ask` via a synthetic `articleId = quiz-${id}` — that part works on both clients (the quiz prompt is repurposed as Ask `context.title`, the explanation as `context.summary`, the category as `context.context`). Ask *history persistence* via `conversations` does **not** work for this synthetic id — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) "Quiz follow-up history cannot persist to the DB". `web/src/askHistory.ts` routes quiz threads to `localStorage` instead; `app/`'s equivalent path still silently fails.
+- Ask *streaming* on a quiz question reuses `/api/ask` via a synthetic `articleId = quiz-${id}` — that part works on both clients (the quiz prompt is repurposed as Ask `context.title`, the explanation as `context.summary`, the category as `context.context`). Ask *history persistence* via `conversations` does **not** work for this synthetic id — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) "Quiz follow-up history cannot persist to the DB". `web/src/askHistory.ts` routes quiz threads to `localStorage` instead, and `app/src/api.ts` routes them to AsyncStorage (`sift_quiz_ask_quiz-<id>`, since 2026-09-29).
 
 ---
 

@@ -40,7 +40,9 @@ Added `@expo/vector-icons` to `app/package.json` dependencies explicitly (was pr
 
 `web/src/device.ts` stores its UUID under localStorage key `mb_device_id`; `app/src/device.ts` stores its under AsyncStorage key `sift_device_id`. The two were never meant to line up and weren't migrated when the web port shipped (2026-09-07) — a user who used `app/` in Expo Go and then switches to the web PWA starts Activity/streak/saves history from zero. Accepted tradeoff of the no-account design (same shape as `app/`'s `device_id is client-supplied with no auth` entry above), not a bug — listed for visibility only.
 
-### 🟡 Bottom-nav/quiz port verified only in simulated conditions, not on a real installed iPhone PWA (2026-09-07)
+### ✅ Verified 2026-09-29 — Bottom-nav/quiz port checked on a real installed iPhone PWA
+
+**Update 2026-09-29**: the user checked the four-tab port on a real iPhone, launched from the home-screen shortcut (the acceptance target `FRONTEND_FIX_LOG.md` Issue 6 names), and reported it working well. The original caveat is kept below for history.
 
 The four-tab web port (Quiz/Feed/Library/Activity, see [README.md](./README.md)) was verified with Playwright at an iPhone-13 viewport with a *simulated* 34px bottom safe area: tab switching without a full reload, all four quiz types scoring correct XP with five `POST /api/quiz-attempt` → 200, `Activity` matching `/api/activity` field-by-field, nav rows staying above the home-indicator band at both 0px and 34px insets, and the push-permission gate under emulated standalone mode. The **real installed iPhone PWA has not been checked** — this machine only has Xcode Command Line Tools, no iOS Simulator/device access — and per `FRONTEND_FIX_LOG.md` Issue 6, the installed PWA is the only acceptance target for bottom-chrome layout (`env(safe-area-inset-bottom)` behaves differently in a real installed PWA than in any simulated/emulated viewport). Treat the port as unverified against that guardrail until someone checks it on a real device.
 
@@ -48,7 +50,9 @@ The four-tab web port (Quiz/Feed/Library/Activity, see [README.md](./README.md))
 
 ## Backend / pipelines
 
-### 🟡 Quiz follow-up history cannot persist to the DB — two independent guards block it (found 2026-09-07)
+### ✅ Resolved client-side 2026-09-29 — Quiz follow-up history cannot persist to the DB — two independent guards block it (found 2026-09-07)
+
+**Status**: both clients now keep quiz threads on the device (web: localStorage since 2026-09-07; `app/`: AsyncStorage since 2026-09-29, see Resolution below). The DB still cannot hold them, on purpose. The entry stays so nobody "fixes" it by relaxing the regex.
 
 CLAUDE.md's Key Design Decision #8 and (until this doc's last edit) ARCHITECTURE.md's Quiz pipeline section both describe quiz Ask follow-ups as hanging on the real `conversations` table via a synthetic `articleId = quiz-${id}`. That persistence path has **never actually worked** — verified empirically 2026-09-07, not new behavior from the same-day web port:
 
@@ -59,7 +63,9 @@ Relaxing the regex alone would not be enough; dropping the FK requires a SQLite 
 
 **Blast radius**: `app/`'s `saveAskHistory` swallows the 400 in an empty `catch {}`, so this has failed **silently** for the entire Expo Go beta — quiz follow-up history has never persisted on `app/`, even though the UI never showed an error. `/api/ask` streaming itself is unaffected on either client (it takes `articleTitle`/`articleSummary`/`articleContext`, never `articleId`) — asking always worked, only the "come back later and see your past questions" persistence was broken.
 
-**Resolution — web only**: `web/src/askHistory.ts` (shipped in the same 2026-09-07 web-port commit) routes quiz threads (`articleId` starting `quiz-`) to `localStorage` under `mb_quiz_ask_quiz-<id>` instead of `/api/ask-history`; article threads are unchanged and still hit the API. Chosen over fixing the backend because reach is equivalent in practice — there's no account system, and `device_id` is itself just a localStorage/AsyncStorage UUID, so server-side history isn't meaningfully more durable than local storage for this app. `app/` was not touched and still has the silent-failure behavior described above.
+**Resolution — web (2026-09-07)**: `web/src/askHistory.ts` (shipped in the same 2026-09-07 web-port commit) routes quiz threads (`articleId` starting `quiz-`) to `localStorage` under `mb_quiz_ask_quiz-<id>` instead of `/api/ask-history`; article threads are unchanged and still hit the API. Chosen over fixing the backend because reach is equivalent in practice — there's no account system, and `device_id` is itself just a localStorage/AsyncStorage UUID, so server-side history isn't meaningfully more durable than local storage for this app.
+
+**Resolution — `app/` (2026-09-29)**: `app/src/api.ts` got the same fix. `fetchAskHistory` / `saveAskHistory` send `quiz-` threads to AsyncStorage under `sift_quiz_ask_quiz-<id>` and never call the API for them. Article threads still hit `/api/ask-history`, but a non-ok save now logs `console.warn` instead of disappearing into an empty `catch {}`, which is how this bug stayed invisible. Checked with `tsc --noEmit` on `app/` and a stubbed-module test of the real `api.ts` (round-trip, corrupt JSON, invalid entries dropped, no network call for quiz threads, warning on a 400). Not checked in Expo Go on a device. History from before the fix is not recoverable: the server never stored it.
 
 Same family as the `saves.deleted_at` / `notion_syncing_at` entry below — docs describing more capability than the implementation actually has.
 

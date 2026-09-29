@@ -1,27 +1,27 @@
 import type { Theme } from '../theme.ts'
+import { GLASS_BLUR } from '../theme.ts'
+import { IconFlame, StatChip } from './icons.tsx'
 
 interface TopChromeProps {
   theme: Theme
   current: number
   total: number
   streak: number
-  lastReadAgo: string
   dateLabel: string
   onOpenLibrary?: () => void
 }
 
-export function TopChrome({ theme, current, total, streak, lastReadAgo, dateLabel, onOpenLibrary }: TopChromeProps) {
+export function TopChrome({ theme, current, total, streak, dateLabel, onOpenLibrary }: TopChromeProps) {
   return (
     <div style={{
-      padding: '14px 20px 10px',
+      padding: '14px 20px 12px',
       paddingTop: 'max(14px, env(safe-area-inset-top))',
       background: theme.bg,
-      borderBottom: `1px solid ${theme.ruleSoft}`,
       flexShrink: 0,
     }}>
       <div style={{
         display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
-        marginBottom: 10,
+        marginBottom: 12,
       }}>
         <div style={{
           fontFamily: theme.serif, fontSize: 18, fontWeight: 900,
@@ -30,7 +30,7 @@ export function TopChrome({ theme, current, total, streak, lastReadAgo, dateLabe
         }}>The Morning Brief</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            fontFamily: theme.mono, fontSize: 9, color: theme.inkMuted,
+            fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
             letterSpacing: 1, textTransform: 'uppercase',
           }}>{dateLabel}</div>
           {onOpenLibrary && (
@@ -41,7 +41,7 @@ export function TopChrome({ theme, current, total, streak, lastReadAgo, dateLabe
                 width: 26, height: 26,
                 background: 'transparent',
                 border: `1px solid ${theme.ruleSoft}`,
-                borderRadius: 2,
+                borderRadius: 8,
                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 color: theme.ink, cursor: 'pointer', padding: 0,
               }}
@@ -53,13 +53,13 @@ export function TopChrome({ theme, current, total, streak, lastReadAgo, dateLabe
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{ display: 'flex', gap: 4, flex: 1 }}>
+        <div style={{ display: 'flex', gap: 5, flex: 1 }}>
           {Array.from({ length: total }).map((_, i) => (
             <div
               key={i === current ? `d-active-${current}` : i}
               style={{
-                flex: 1, height: 3,
-                background: i <= current ? theme.accent : theme.ruleSoft,
+                flex: 1, height: 4, borderRadius: 999,
+                background: i <= current ? theme.accent : 'rgba(160,190,220,0.14)',
                 clipPath: 'inset(0)',
                 animation: i === current ? 'wipeIn 0.4s cubic-bezier(0.4,0,0.2,1)' : 'none',
               }}
@@ -69,14 +69,7 @@ export function TopChrome({ theme, current, total, streak, lastReadAgo, dateLabe
         <div style={{ fontFamily: theme.mono, fontSize: 10, color: theme.inkMuted, letterSpacing: 0.5 }}>
           {current + 1}/{total}
         </div>
-        <div style={{ width: 1, height: 10, background: theme.ruleSoft }} />
-        <div style={{ fontFamily: theme.mono, fontSize: 10, color: theme.accent, fontWeight: 600 }}>
-          🔥 {streak}
-        </div>
-        <div style={{ width: 1, height: 10, background: theme.ruleSoft }} />
-        <div style={{ fontFamily: theme.mono, fontSize: 10, color: theme.inkFaint }}>
-          {lastReadAgo}
-        </div>
+        <StatChip icon={<IconFlame />} value={streak} color={theme.accent} background={theme.accentSoft} />
       </div>
     </div>
   )
@@ -94,6 +87,10 @@ interface FeedbackBarProps {
 }
 
 export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, onSave, onOpen }: FeedbackBarProps) {
+  // Tonal buttons on a frosted-glass capsule: no outlines, an inset top
+  // highlight for the raised read, colour only when a state is on.
+  const tonal = 'rgba(255,255,255,0.05)'
+
   const primaryBtn = (
     onClick: () => void,
     content: React.ReactNode,
@@ -103,18 +100,21 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
     <button
       className="btn-press"
       onClick={onClick}
+      aria-pressed={active}
       style={{
-        background: active ? (variant === 'like' ? theme.positive : theme.negative) : theme.bgDeep,
-        color: active ? theme.card : theme.ink,
-        border: `1px solid rgba(242,237,228,0.7)`,
-        borderRadius: 4,
-        minHeight: 44,
+        background: active
+          ? (variant === 'like' ? 'rgba(61,214,140,0.16)' : 'rgba(255,107,107,0.16)')
+          : tonal,
+        color: active ? (variant === 'like' ? '#5BE3A0' : '#FF8A8A') : theme.ink,
+        border: 'none',
+        boxShadow: theme.highlight,
+        borderRadius: 18,
+        minHeight: 50,
         padding: '0 2px',
         flex: 1,
-        fontFamily: theme.mono, fontSize: 12, fontWeight: 700,
-        letterSpacing: 0.5,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-        transition: 'all 0.15s',
+        fontFamily: theme.mono, fontSize: 11, fontWeight: 700,
+        letterSpacing: 0.6,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
         cursor: 'pointer',
       }}
     >{content}</button>
@@ -129,101 +129,111 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
     <button
       className="btn-press"
       onClick={onClick}
+      aria-pressed={active}
       style={{
-        background: active ? theme.ink : theme.bgDeep,
-        color: active ? theme.card : theme.ink,
-        border: `1px solid rgba(242,237,228,0.7)`,
-        borderRadius: 4,
-        minHeight: 44,
+        background: active ? 'rgba(245,165,36,0.16)' : tonal,
+        color: active ? theme.accent : theme.ink,
+        border: 'none',
+        boxShadow: theme.highlight,
+        borderRadius: 18,
+        minHeight: 50,
         padding: '0 2px',
         flex: 1,
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
-        transition: 'all 0.15s',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
         cursor: 'pointer',
       }}
     >
       {icon}
-      <span style={{ fontFamily: theme.mono, fontSize: 8, fontWeight: 600, letterSpacing: 0.5, lineHeight: 1 }}>{label}</span>
+      <span style={{ fontFamily: theme.mono, fontSize: 8.5, fontWeight: 600, letterSpacing: 0.5, lineHeight: 1 }}>{label}</span>
     </button>
   )
 
   return (
     <div style={{
-      padding: '0 16px',
-      display: 'flex', gap: 7,
+      margin: '0 12px',
+      padding: 6,
+      display: 'flex', gap: 6,
       alignItems: 'stretch',
       flexShrink: 0,
+      borderRadius: 24,
+      background: theme.glass,
+      backdropFilter: GLASS_BLUR,
+      WebkitBackdropFilter: GLASS_BLUR,
+      border: `1px solid ${theme.glassEdge}`,
+      boxShadow: '0 12px 30px rgba(0,0,0,0.4)',
     }}>
       {primaryBtn(onDislike, (
         <>
           <span
             key={feedback === 'down' ? 'dislike-on' : 'dislike-off'}
             style={{ display: 'inline-flex', animation: feedback === 'down' ? 'thumbDown 0.5s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none' }}
-          ><IconThumbDown size={14} /></span>
-          {' LESS'}
+          ><IconThumbDown size={16} /></span>
+          {'LESS'}
         </>
       ), feedback === 'down', 'dislike')}
 
-      {iconBtn(onAsk, <IconChat size={14} />, 'ASK')}
+      {iconBtn(onAsk, <IconChat size={17} />, 'ASK')}
 
       {iconBtn(onSave, (
         <span
           key={saved ? 'bm-on' : 'bm-off'}
-          style={{ display: 'inline-flex', animation: saved ? 'stampIn 0.38s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none', color: saved ? theme.accent : theme.ink }}
-        ><IconBookmark size={14} filled={saved} /></span>
+          style={{ display: 'inline-flex', animation: saved ? 'stampIn 0.38s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none' }}
+        ><IconBookmark size={17} filled={saved} /></span>
       ), saved ? 'SAVED' : 'SAVE', saved)}
 
-      {iconBtn(onOpen, <IconExternal size={14} />, 'READ')}
+      {iconBtn(onOpen, <IconExternal size={17} />, 'READ')}
 
       {primaryBtn(onLike, (
         <>
-          {'MORE '}
+          {'MORE'}
           <span
             key={feedback === 'up' ? 'like-on' : 'like-off'}
             style={{ display: 'inline-flex', animation: feedback === 'up' ? 'thumbUp 0.5s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none' }}
-          ><IconThumbUp size={14} /></span>
+          ><IconThumbUp size={16} /></span>
         </>
       ), feedback === 'up', 'like')}
     </div>
   )
 }
 
+const THUMB = 'M7 11v9H4.5A1.5 1.5 0 0 1 3 18.5v-6A1.5 1.5 0 0 1 4.5 11H7zm0 0 3.6-7.2A1.8 1.8 0 0 1 14 5v4h4.6a2 2 0 0 1 2 2.3l-1.2 7A2 2 0 0 1 17.4 20H7'
+
 function IconThumbUp({ size = 14 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M7 10v11M7 10l4-7 2 1v6h7l-2 10H7" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={THUMB} />
     </svg>
   )
 }
 
 function IconThumbDown({ size = 14 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M17 14V3M17 14l-4 7-2-1v-6H4l2-10h11" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" style={{ transform: 'scaleY(-1)' }} aria-hidden="true">
+      <path d={THUMB} />
     </svg>
   )
 }
 
 function IconBookmark({ size = 14, filled = false }: { size?: number; filled?: boolean }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-      <path d="M5 3h14v18l-7-5-7 5V3z" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" aria-hidden="true">
+      <path d="M6.5 4.5A1.5 1.5 0 0 1 8 3h8a1.5 1.5 0 0 1 1.5 1.5V21L12 17l-5.5 4z" />
     </svg>
   )
 }
 
 function IconChat({ size = 14 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M4 4h16v12H8l-4 4V4z" strokeLinejoin="round" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.3-4.6A7.5 7.5 0 1 1 20 11.5z" />
     </svg>
   )
 }
 
 function IconExternal({ size = 14 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M14 4h6v6M10 14L20 4M20 14v6H4V4h6" strokeLinejoin="round" strokeLinecap="round" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 17 17 7M9 7h8v8" />
     </svg>
   )
 }

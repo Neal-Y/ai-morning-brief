@@ -1,5 +1,6 @@
 import type { Theme } from '../theme.ts'
 import { formatBriefDateShort } from '../date.ts'
+import { IconFlame } from './icons.tsx'
 
 interface CelebrationProps {
   theme: Theme
@@ -24,8 +25,7 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
     }}>
       {/* Editorial header — stays at top */}
       <div style={{ flexShrink: 0 }}>
-        <div style={{ height: 3, background: theme.ink, marginBottom: 6 }} />
-        <div style={{ height: 1, background: theme.ink, marginBottom: 24 }} />
+        <div style={{ width: 40, height: 4, borderRadius: 999, background: theme.accent, marginBottom: 24 }} />
 
         <div style={{
           fontFamily: theme.mono, fontSize: 10, color: theme.inkFaint,
@@ -52,8 +52,8 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
         paddingTop: 24, paddingBottom: 24,
       }}>
         <div style={{
-          background: theme.bg, border: `1.5px solid ${theme.ink}`, borderRadius: 2,
-          padding: '16px',
+          background: theme.raised, boxShadow: theme.highlight, borderRadius: 20,
+          padding: '16px 18px',
           display: 'flex', alignItems: 'center', gap: 14,
         }}>
           <div style={{
@@ -69,20 +69,20 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
               fontFamily: theme.sans, fontSize: 13, color: theme.ink, fontWeight: 500,
             }}>keep going — see you tomorrow</div>
           </div>
-          <div style={{ fontSize: 28 }}>🔥</div>
+          <IconFlame size={28} color={theme.accent} />
         </div>
 
         <div style={{
           display: 'grid', gridTemplateColumns: '1fr 1fr',
-          gap: 1,
-          background: theme.ink, border: `1.5px solid ${theme.ink}`, borderRadius: 2,
+          gap: 10,
         }}>
           {[
             { label: 'READ', value: String(readCount), unit: '篇' },
             { label: 'SAVED', value: String(savedCount), unit: '篇' },
           ].map(s => (
             <div key={s.label} style={{
-              background: theme.card, padding: '14px 8px', textAlign: 'center',
+              background: theme.raised, boxShadow: theme.highlight, borderRadius: 18,
+              padding: '14px 8px', textAlign: 'center',
             }}>
               <div style={{
                 fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,

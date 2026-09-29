@@ -31,7 +31,8 @@ export function StatCard({ value, label, delay = 0 }: {
   return (
     <div style={{
       flex: 1, background: T.card,
-      border: `1px solid ${T.ruleSoft}`, borderRadius: 14,
+      border: `1px solid ${T.ruleSoft}`, borderRadius: 18,
+      boxShadow: T.highlight,
       padding: '14px 12px',
     }}>
       <div style={{

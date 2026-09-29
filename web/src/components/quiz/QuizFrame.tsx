@@ -3,6 +3,7 @@ import { THEME_DARK } from '../../theme.ts'
 import type { Article } from '../../types.ts'
 import { AskSheet } from '../AskSheet.tsx'
 import { Q, RADIUS, XP } from './tokens.ts'
+import { IconBolt, IconFlame, StatChip } from '../icons.tsx'
 
 const T = THEME_DARK
 
@@ -77,16 +78,16 @@ export function QuizFrame({
         <div style={{ flex: 1, display: 'flex', gap: 5 }}>
           {Array.from({ length: total }).map((_, i) => (
             <div key={i} style={{
-              flex: 1, height: 3, borderRadius: 999,
+              flex: 1, height: 4, borderRadius: 999,
               background: i < index ? T.accent : i === index ? T.ink : Q.track,
               transition: 'background 0.25s',
             }} />
           ))}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <span style={{ fontFamily: T.mono, fontSize: 12, color: T.ink }}>🔥 {streak}</span>
-          <span style={{ position: 'relative', fontFamily: T.mono, fontSize: 12, color: T.ink }}>
-            ⚡ {xpToday}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <StatChip icon={<IconFlame />} value={streak} color={T.accent} background={T.accentSoft} />
+          <span style={{ position: 'relative' }}>
+            <StatChip icon={<IconBolt color={T.accent} />} value={xpToday} color={T.ink} background={T.raised} />
             {resolved && correct && (
               <span
                 key={id}
@@ -144,14 +145,20 @@ export function QuizFrame({
               </a>
             ) : <span />}
             <button
+              className="btn-press"
               onClick={() => setAskOpen(true)}
               style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                background: 'none', border: `1px solid ${T.ruleSoft}`,
-                borderRadius: RADIUS.pill, padding: '5px 12px',
-                fontFamily: T.mono, fontSize: 11, color: T.inkMuted,
+                display: 'flex', alignItems: 'center', gap: 6,
+                background: T.raised, border: 'none', boxShadow: T.highlight,
+                borderRadius: RADIUS.pill, padding: '7px 13px 7px 11px',
+                fontFamily: T.sans, fontSize: 12, fontWeight: 600, color: T.ink,
               }}
-            >追問</button>
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+                <path d="M20 11.5a7.5 7.5 0 0 1-10.9 6.7L4 19.5l1.3-4.6A7.5 7.5 0 1 1 20 11.5z" />
+              </svg>
+              追問
+            </button>
           </div>
 
           <div style={{ marginTop: 20 }}>{children({ resolved, resolve })}</div>
@@ -160,6 +167,7 @@ export function QuizFrame({
             <div style={{
               marginTop: 16, borderRadius: RADIUS.card, padding: 16,
               background: correct ? Q.correctTint : Q.wrongTint,
+              border: `1px solid ${correct ? 'rgba(61,214,140,0.25)' : 'rgba(255,107,107,0.25)'}`,
               animation: 'quizFadeUp 0.35s ease-out 0.12s both',
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -168,13 +176,14 @@ export function QuizFrame({
                   background: correct ? Q.correct : Q.wrong, color: Q.onSolid,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontFamily: T.sans, fontSize: 13, fontWeight: 700,
-                }}>{correct ? '✓' : '✗'}</span>
+                }}>{correct ? '✓' : '✕'}</span>
                 <span style={{
                   flex: 1, fontFamily: T.serif, fontSize: 16, fontWeight: 700, color: T.ink,
                 }}>{correct ? '答對了！' : '答錯了'}</span>
                 <span style={{
                   fontFamily: T.mono, fontSize: 13, fontWeight: 700,
                   color: correct ? Q.correct : Q.wrong,
+                  fontVariantNumeric: 'tabular-nums',
                 }}>+{correct ? XP.correct : XP.wrong} XP</span>
               </div>
               <p style={{
@@ -218,16 +227,20 @@ export function PrimaryButton({ label, onClick, arrow = true }: {
       className="btn-press"
       onClick={onClick}
       style={{
-        width: '100%', height: 52, borderRadius: RADIUS.button, border: 'none',
-        background: `linear-gradient(180deg, #EFE6D4 0%, #D8CCB4 100%)`,
-        color: '#1A1612', fontFamily: T.sans, fontSize: 15, fontWeight: 700,
+        width: '100%', height: 54, borderRadius: RADIUS.button, border: 'none',
+        background: T.accent,
+        color: T.onAccent, fontFamily: T.sans, fontSize: 15, fontWeight: 700,
         letterSpacing: 0.3,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-        boxShadow: '0 8px 22px rgba(0,0,0,0.35)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+        boxShadow: '0 10px 28px rgba(245,165,36,0.28), inset 0 1px 0 rgba(255,255,255,0.35)',
       }}
     >
       {label}
-      {arrow && <span style={{ color: T.accent, fontWeight: 700 }}>→</span>}
+      {arrow && (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      )}
     </button>
   )
 }

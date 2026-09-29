@@ -97,7 +97,7 @@ function AssistantMarkdown({ text, theme }: { text: string; theme: Theme }) {
             fontSize: '0.92em',
             background: theme.card,
             border: `1px solid ${theme.ruleSoft}`,
-            borderRadius: 3,
+            borderRadius: 5,
             padding: '1px 4px',
           }}>{children}</code>
         ),
@@ -394,20 +394,20 @@ export function AskSheet({
       // dynamic viewport, and a fixed 100dvh pushed the header off-screen.
       ...(fullScreen ? { top: 0 } : { height: '82%' }),
       background: theme.card,
-      borderTopLeftRadius: fullScreen ? 0 : 16,
-      borderTopRightRadius: fullScreen ? 0 : 16,
-      borderTop: fullScreen ? 'none' : `2px solid ${theme.ink}`,
+      borderTopLeftRadius: fullScreen ? 0 : 24,
+      borderTopRightRadius: fullScreen ? 0 : 24,
+      borderTop: fullScreen ? 'none' : `1px solid ${theme.glassEdge}`,
       overflow: 'hidden',
       transform: entered ? 'translateY(0)' : 'translateY(100%)',
       transition: 'transform 0.3s cubic-bezier(0.22, 1, 0.36, 1)',
       // Above the bottom nav (z 50): the ask sheet is a modal takeover.
       zIndex: 60,
       display: 'flex', flexDirection: 'column',
-      boxShadow: !fullScreen && entered ? '0 -12px 40px rgba(26,22,18,0.18)' : 'none',
+      boxShadow: !fullScreen && entered ? '0 -16px 48px rgba(0,0,0,0.45)' : 'none',
     }}>
       {!fullScreen && (
         <div style={{ padding: '8px 0 2px', display: 'flex', justifyContent: 'center' }}>
-          <div style={{ width: 32, height: 3, background: theme.ruleSoft }} />
+          <div style={{ width: 36, height: 5, borderRadius: 999, background: 'rgba(160,190,220,0.25)' }} />
         </div>
       )}
 
@@ -429,9 +429,10 @@ export function AskSheet({
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{article.title}</div>
         </div>
-        <button onClick={onClose} style={{
-          background: 'transparent', border: `1px solid ${theme.ink}`, borderRadius: 8,
-          width: 26, height: 26, flexShrink: 0,
+        <button className="btn-press" aria-label="關閉" onClick={onClose} style={{
+          background: theme.raised, border: 'none', borderRadius: 999,
+          boxShadow: theme.highlight,
+          width: 30, height: 30, flexShrink: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontFamily: theme.mono, fontSize: 12, color: theme.ink,
           cursor: 'pointer',
@@ -454,10 +455,10 @@ export function AskSheet({
             <div key={i} style={{
               alignSelf: 'flex-start',
               maxWidth: '85%',
-              background: theme.bg,
-              border: `1px solid ${theme.ruleSoft}`,
-              borderRadius: 2,
-              padding: '10px 14px',
+              background: theme.raised,
+              borderRadius: 18,
+              borderBottomLeftRadius: 6,
+              padding: '12px 14px',
               display: 'flex', gap: 5, alignItems: 'center',
             }}>
               {[0, 1, 2].map(j => (
@@ -473,12 +474,12 @@ export function AskSheet({
             <div key={i} style={{
               alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
               maxWidth: m.role === 'user' ? '85%' : '92%',
-              background: m.role === 'user' ? theme.ink : theme.bg,
-              color: m.role === 'user' ? theme.card : theme.ink,
+              background: m.role === 'user' ? theme.accent : theme.raised,
+              color: m.role === 'user' ? theme.onAccent : theme.ink,
               padding: '10px 14px',
-              borderRadius: 2,
+              borderRadius: 18,
+              ...(m.role === 'user' ? { borderBottomRightRadius: 6 } : { borderBottomLeftRadius: 6 }),
               fontFamily: theme.sans, fontSize: 14, lineHeight: 1.5,
-              border: m.role === 'user' ? 'none' : `1px solid ${theme.ruleSoft}`,
               overflowWrap: 'anywhere',
             }}>
               {m.role === 'assistant'
@@ -493,10 +494,11 @@ export function AskSheet({
             {SUGGESTIONS.map((s, i) => (
               <button key={i} onClick={() => sendMessage(s)} style={{
                 textAlign: 'left',
-                background: theme.card,
-                border: `1px dashed ${theme.ink}`,
-                borderRadius: 8,
-                padding: '10px 12px',
+                background: theme.raised,
+                border: 'none',
+                boxShadow: theme.highlight,
+                borderRadius: 14,
+                padding: '11px 14px',
                 fontFamily: theme.serif, fontSize: 13, fontStyle: 'italic',
                 color: theme.ink, cursor: 'pointer',
               }}>→ {s}</button>
@@ -520,9 +522,9 @@ export function AskSheet({
           placeholder={historyLoading ? '載入對話…' : loading ? '思考中…' : '繼續追問…'}
           disabled={loading || historyLoading}
           style={{
-            flex: 1, background: theme.bg,
-            border: `1px solid ${theme.ruleSoft}`, borderRadius: 8,
-            padding: '10px 12px',
+            flex: 1, background: theme.raised,
+            border: `1px solid ${theme.ruleSoft}`, borderRadius: 999,
+            padding: '11px 16px',
             fontFamily: theme.sans, fontSize: 14, color: theme.ink,
             outline: 'none', opacity: loading ? 0.6 : 1,
           }}
@@ -531,8 +533,8 @@ export function AskSheet({
           onClick={() => sendMessage(input.trim())}
           disabled={loading || historyLoading || !input.trim()}
           style={{
-            background: theme.ink, color: theme.card,
-            border: 'none', borderRadius: 8,
+            background: theme.accent, color: theme.onAccent,
+            border: 'none', borderRadius: 999,
             padding: '0 16px',
             fontFamily: theme.mono, fontSize: 11, fontWeight: 600,
             letterSpacing: 0.5, cursor: loading ? 'not-allowed' : 'pointer',

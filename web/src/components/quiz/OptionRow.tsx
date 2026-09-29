@@ -31,16 +31,17 @@ export function OptionRow({ letter, text, state, wasSelected, disabled, onClick 
         display: 'flex', alignItems: 'center', gap: 12, width: '100%',
         minHeight: 58, padding: '12px 14px', textAlign: 'left',
         borderRadius: RADIUS.option,
-        border: `1.5px solid ${p.border}`,
+        border: `${state === 'idle' || state === 'dimmed' ? 1 : 1.5}px solid ${p.border}`,
         background: p.bg,
-        opacity: state === 'dimmed' ? 0.55 : 1,
+        boxShadow: state === 'idle' ? T.highlight : 'none',
+        opacity: state === 'dimmed' ? 0.5 : 1,
         transform: state === 'correct' && wasSelected ? 'scale(1)' : undefined,
         animation,
         transition: 'background 0.18s, border-color 0.18s, opacity 0.18s',
       }}
     >
       <span style={{
-        width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+        width: 28, height: 28, borderRadius: 10, flexShrink: 0,
         background: p.badgeBg, color: p.badgeText,
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: T.mono, fontSize: 12, fontWeight: 700,
@@ -49,7 +50,7 @@ export function OptionRow({ letter, text, state, wasSelected, disabled, onClick 
         flex: 1, fontFamily: T.sans, fontSize: 15, lineHeight: 1.42, color: p.text,
       }}>{text}</span>
       {state === 'correct' && <span style={{ color: Q.correct, fontWeight: 700 }}>✓</span>}
-      {state === 'wrong' && <span style={{ color: Q.wrong, fontWeight: 700 }}>✗</span>}
+      {state === 'wrong' && <span style={{ color: Q.wrong, fontWeight: 700 }}>✕</span>}
     </button>
   )
 }
