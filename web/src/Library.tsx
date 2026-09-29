@@ -5,12 +5,13 @@ import { AskSheet } from './components/AskSheet.tsx'
 import type { Article } from './types.ts'
 import { apiFetch } from './api.ts'
 import { useNavInset } from './nav.ts'
+import { IconSparkle } from './components/icons.tsx'
 
 const T = THEME_DARK
 // Lighter rule for filter-row separators only — keeps the filter bar visually
 // distinct from group headers without bumping ruleSoft globally.
-const RULE_FAINT = 'rgba(242,237,228,0.10)'
-const RULE_MID = 'rgba(242,237,228,0.18)'
+const RULE_FAINT = 'rgba(160,190,220,0.08)'
+const RULE_MID = 'rgba(160,190,220,0.14)'
 
 interface LibraryArticle extends Omit<Article, 'skillTags' | 'publishedAgo'> {
   skillTags: string
@@ -192,7 +193,7 @@ function CategoryTag({ tag }: { tag: string }) {
       fontFamily: T.mono, fontSize: 9, fontWeight: 600,
       letterSpacing: 0.5, textTransform: 'uppercase',
       color: colors.fg, background: colors.bg,
-      padding: '2px 6px', borderRadius: 2, whiteSpace: 'nowrap',
+      padding: '2px 7px', borderRadius: 999, whiteSpace: 'nowrap',
       flexShrink: 0,
     }}>{tag}</span>
   )
@@ -207,7 +208,7 @@ function SkeletonRow({ wide = false }: { wide?: boolean }) {
     }}>
       <div className="lib-skeleton" style={{ height: 14, width: wide ? '85%' : '70%', marginBottom: 8 }} />
       <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-        <div className="lib-skeleton" style={{ height: 17, width: 72, borderRadius: 2 }} />
+        <div className="lib-skeleton" style={{ height: 17, width: 72, borderRadius: 999 }} />
         <div className="lib-skeleton" style={{ height: 10, width: 90 }} />
         <div className="lib-skeleton" style={{ height: 10, width: 24 }} />
       </div>
@@ -250,11 +251,7 @@ function EmptyState({ type, onClearFilters }: {
       display: 'flex', flexDirection: 'column', alignItems: 'center',
       textAlign: 'center',
     }}>
-      <div style={{ width: 52, marginBottom: 20 }}>
-        <div style={{ height: 3, background: T.ink }} />
-        <div style={{ height: 5 }} />
-        <div style={{ height: 1, background: T.ink }} />
-      </div>
+      <div style={{ width: 40, height: 4, borderRadius: 999, background: T.accent, marginBottom: 20 }} />
       <div style={{
         fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
         letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12,
@@ -272,9 +269,9 @@ function EmptyState({ type, onClearFilters }: {
         <button onClick={onClearFilters} style={{
           fontFamily: T.mono, fontSize: 10, fontWeight: 600,
           letterSpacing: 0.5, textTransform: 'uppercase',
-          padding: '9px 20px', borderRadius: 2, cursor: 'pointer',
-          background: 'transparent', color: T.ink,
-          border: `1.5px solid rgba(242,237,228,0.35)`,
+          padding: '10px 20px', borderRadius: 999, cursor: 'pointer',
+          background: T.raised, color: T.ink,
+          border: 'none', boxShadow: T.highlight,
         }}>{action}</button>
       )}
     </div>
@@ -358,9 +355,9 @@ function FilterBar({
           <button onClick={onClearAll} style={{
             fontFamily: T.mono, fontSize: 9, fontWeight: 600,
             letterSpacing: 0.5, textTransform: 'uppercase',
-            padding: '4px 8px', borderRadius: 2, cursor: 'pointer',
-            background: 'transparent', color: T.accent,
-            border: `1px solid ${T.accent}`,
+            padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
+            background: T.accentSoft, color: T.accent,
+            border: 'none',
           }}>清除</button>
         )}
       </div>
@@ -373,8 +370,8 @@ function FilterBar({
         <div style={{
           display: 'flex', gap: 5, alignItems: 'center',
           padding: '2px 6px 2px 4px',
-          border: `1px solid rgba(242,237,228,0.12)`,
-          borderRadius: 2, flexShrink: 0,
+          border: `1px solid ${T.ruleSoft}`,
+          borderRadius: 999, flexShrink: 0,
         }}>
           {[
             { id: 'up', label: '👍', title: '篩選：我喜歡過的' },
@@ -385,9 +382,9 @@ function FilterBar({
             return (
               <button key={chip.id} onClick={() => toggleFeedback(chip.id)} title={chip.title} style={{
                 fontFamily: T.mono, fontSize: 13, lineHeight: 1,
-                padding: '4px 6px', borderRadius: 2, cursor: 'pointer',
-                background: active ? T.ink : 'transparent',
-                border: `1px solid ${active ? T.ink : 'transparent'}`,
+                padding: '4px 7px', borderRadius: 999, cursor: 'pointer',
+                background: active ? 'rgba(245,165,36,0.20)' : 'transparent',
+                border: 'none',
                 opacity: active ? 1 : 0.65,
                 transition: 'all 0.15s',
               }}>{chip.label}</button>
@@ -395,7 +392,7 @@ function FilterBar({
           })}
         </div>
 
-        <div style={{ width: 1, height: 18, background: 'rgba(242,237,228,0.15)', flexShrink: 0, margin: '0 3px' }} />
+        <div style={{ width: 1, height: 18, background: T.ruleSoft, flexShrink: 0, margin: '0 3px' }} />
 
         {ALL_CATEGORIES.map(cat => {
           const active = activeCategories.includes(cat)
@@ -404,10 +401,10 @@ function FilterBar({
             <button key={cat} onClick={() => toggleCategory(cat)} style={{
               fontFamily: T.mono, fontSize: 9, fontWeight: 600,
               letterSpacing: 0.4, whiteSpace: 'nowrap',
-              padding: '5px 8px', borderRadius: 2, cursor: 'pointer',
+              padding: '5px 10px', borderRadius: 999, cursor: 'pointer',
               background: active ? colors.bg : 'transparent',
               color: active ? colors.fg : T.inkFaint,
-              border: `1px solid ${active ? colors.bg : 'rgba(242,237,228,0.15)'}`,
+              border: `1px solid ${active ? 'transparent' : T.ruleSoft}`,
               transition: 'all 0.15s', textTransform: 'uppercase', flexShrink: 0,
             }}>{cat}</button>
           )
@@ -564,26 +561,23 @@ function ExpandedBody({ article, onToggleSave, onAsk, variant }: {
       </div>
 
       <div style={{
-        background: T.bgDeep,
-        border: `1.5px solid rgba(242,237,228,0.18)`,
-        borderRadius: 2, padding: '12px 14px',
-        position: 'relative', marginBottom: 10,
+        background: T.raised, boxShadow: T.highlight,
+        borderRadius: 14, padding: '12px 14px',
+        marginBottom: 10,
       }}>
         <div style={{
-          position: 'absolute', top: -7, left: 10,
-          background: T.bg, padding: '0 5px',
           fontFamily: T.mono, fontSize: 8, fontWeight: 700,
-          color: T.inkFaint, letterSpacing: 2, textTransform: 'uppercase',
-        }}>▸ Engineering Impact</div>
+          color: T.accent, letterSpacing: 1.6, textTransform: 'uppercase',
+        }}>Engineering Impact</div>
         <p style={{
           fontFamily: T.sans, fontSize: 13, lineHeight: 1.5,
-          color: T.ink, margin: 0, fontWeight: 500,
+          color: T.ink, margin: '6px 0 0', fontWeight: 500,
         }}>{article.engineeringImpact}</p>
       </div>
 
       {article.reason && (
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 14 }}>
-          <div style={{ width: 3, height: 12, background: T.accent, marginTop: 2, flexShrink: 0 }} />
+          <span style={{ display: 'inline-flex', color: T.accent, marginTop: 1, flexShrink: 0 }}><IconSparkle size={12} /></span>
           <span style={{
             fontFamily: T.sans, fontSize: 12, fontStyle: 'italic',
             color: T.accent, fontWeight: 500, lineHeight: 1.4,
@@ -653,23 +647,24 @@ function ActionButton({ label, icon, filled, active, tone, onClick }: {
   onClick: (e: React.MouseEvent) => void
 }) {
   let color = T.ink
-  let borderColor = 'rgba(242,237,228,0.28)'
-  let background: string = 'transparent'
+  let borderColor = 'transparent'
+  let background: string = T.raised
   if (active) {
-    color = '#fff'
+    color = T.onAccent
     background = T.accent
     borderColor = T.accent
   } else if (tone === 'negative') {
     color = T.negative
-    borderColor = T.negative
+    background = T.negativeSoft
   }
   return (
     <button onClick={onClick} style={{
       display: 'flex', alignItems: 'center', gap: 5,
       fontFamily: T.mono, fontSize: 10, fontWeight: 600,
       letterSpacing: 0.5, textTransform: 'uppercase',
-      padding: '7px 12px', borderRadius: 2, cursor: 'pointer',
-      background, color, border: `1.5px solid ${borderColor}`,
+      padding: '8px 13px', borderRadius: 999, cursor: 'pointer',
+      background, color, border: `1px solid ${borderColor}`,
+      boxShadow: active ? 'none' : T.highlight,
       transition: 'all 0.15s',
     }}>
       <Icon name={icon} size={11} color={color} strokeWidth={2} filled={filled} />
@@ -867,10 +862,10 @@ export default function Library() {
         @keyframes libFadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
         @keyframes libShimmer { 0% { background-position: -400px 0; } 100% { background-position: 400px 0; } }
         .lib-skeleton {
-          background: linear-gradient(90deg, ${T.card} 25%, #2A2520 50%, ${T.card} 75%);
+          background: linear-gradient(90deg, ${T.card} 25%, ${T.raised} 50%, ${T.card} 75%);
           background-size: 800px 100%;
           animation: libShimmer 1.4s infinite linear;
-          border-radius: 2px;
+          border-radius: 6px;
         }
         .lib-root input::placeholder { color: ${T.inkFaint}; }
         .lib-root ::-webkit-scrollbar { display: none; }
@@ -921,7 +916,7 @@ export default function Library() {
               <button key={t.id} onClick={() => setTab(t.id)} style={{
                 flex: 1, padding: '10px 0',
                 background: 'none', border: 'none',
-                borderBottom: tab === t.id ? `2px solid ${T.ink}` : '2px solid transparent',
+                borderBottom: tab === t.id ? `2px solid ${T.accent}` : '2px solid transparent',
                 cursor: 'pointer',
                 fontFamily: T.mono, fontSize: 10, fontWeight: 700,
                 letterSpacing: 0.8, textTransform: 'uppercase',

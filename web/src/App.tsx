@@ -1,6 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { THEME_DARK, ACCENT_PRESETS } from './theme.ts'
-import type { Theme } from './theme.ts'
+import { THEME_DARK } from './theme.ts'
 import { ArticleCard } from './components/Card.tsx'
 import { TopChrome, FeedbackBar } from './components/Chrome.tsx'
 import { isPushSupported, isStandalone, completeSubscription } from './push.ts'
@@ -18,6 +17,16 @@ const FEEDBACK_BAR_GAP = 14
 const FEEDBACK_DOCK_TOP_PAD = 18
 const FEEDBACK_DOCK_MIN_HEIGHT = 76
 const FEEDBACK_CONTENT_GAP = 16
+
+// Cards float inset from the screen edges as rounded, raised sheets. They still
+// run down under the glass dock + nav; ArticleCard's bottomInset keeps the text
+// scrollable clear of both.
+const CARD_FRAME: React.CSSProperties = {
+  top: 4, left: 12, right: 12, bottom: 12,
+  borderRadius: 24,
+  overflow: 'hidden',
+  border: '1px solid rgba(160,190,220,0.10)',
+}
 
 function parsePublishedAgo(classifiedAt: number | string | null | undefined): string {
   if (!classifiedAt) return ''
@@ -39,11 +48,6 @@ function parseArticles(raw: FeedResponse['articles']): Article[] {
     }))
 }
 
-function buildTheme(accentValue: string): Theme {
-  const preset = ACCENT_PRESETS.find(p => p.value === accentValue) ?? ACCENT_PRESETS[0]!
-  return { ...THEME_DARK, accent: preset.value, accentSoft: preset.soft }
-}
-
 export default function App() {
   const [articles, setArticles] = useState<Article[]>([])
   const [idx, setIdx] = useState(0)
@@ -57,9 +61,6 @@ export default function App() {
   const [briefDate, setBriefDate] = useState(() => getTaipeiDateString())
   const [springing, setSpringing] = useState(false)
   const [streak, setStreak] = useState(() => parseInt(localStorage.getItem('mb_streak') ?? '1'))
-  const [accent] = useState<string>(
-    () => localStorage.getItem('accent') ?? ACCENT_PRESETS[0]!.value
-  )
   const [feedbackBarHeight, setFeedbackBarHeight] = useState(0)
   const [permissionResolved, setPermissionResolved] = useState(() => {
     if (!isPushSupported() || !isStandalone()) return true
@@ -68,7 +69,7 @@ export default function App() {
   const [subscribing, setSubscribing] = useState(false)
 
   const navInset = useNavInset()
-  const T = buildTheme(accent)
+  const T = THEME_DARK
   const dragStart = useRef<{ x: number; y: number; axis: 'x' | 'y' | null } | null>(null)
   const velocity = useRef<{ vx: number; lastX: number; lastT: number }>({ vx: 0, lastX: 0, lastT: 0 })
   const flyRotRef = useRef(12)
@@ -333,8 +334,8 @@ export default function App() {
               disabled={subscribing}
               style={{
                 fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 1,
-                color: T.card, background: T.accent,
-                border: 'none', borderRadius: 8, padding: '10px 24px',
+                color: T.onAccent, background: T.accent,
+                border: 'none', borderRadius: 14, padding: '12px 24px',
                 cursor: 'pointer', opacity: subscribing ? 0.6 : 1,
                 textTransform: 'uppercase',
               }}
@@ -423,7 +424,6 @@ export default function App() {
             current={currentChrome}
             total={articles.length}
             streak={streak}
-            lastReadAgo="today"
             dateLabel={dateLabel}
           />
         )}
@@ -443,7 +443,7 @@ export default function App() {
               {/* Next card — always visible underneath, floats up as current card flies */}
               {articles[idx + 1] && (
                 <div style={{
-                  position: 'absolute', inset: 0, pointerEvents: 'none',
+                  position: 'absolute', pointerEvents: 'none',
                   transform: `scale(${0.96 + Math.min(Math.abs(swipeX) / 90, 1) * 0.04}) translateY(${transitioning ? 0 : 10 - Math.min(Math.abs(swipeX) / 90, 1) * 10}px)`,
                   transition: transitioning
                     ? 'transform 0.42s cubic-bezier(0.22,1,0.36,1)'
@@ -451,8 +451,7 @@ export default function App() {
                     ? 'transform 0.35s cubic-bezier(0.22,1,0.36,1)'
                     : 'none',
                   transformOrigin: 'top center',
-                  borderRadius: 2,
-                  overflow: 'hidden',
+                  ...CARD_FRAME,
                 }}>
                   <ArticleCard article={articles[idx + 1]!} theme={T} swipeX={0} bottomInset={cardBottomInset} />
                 </div>
@@ -460,7 +459,7 @@ export default function App() {
 
               {/* Current card */}
               <div style={{
-                position: 'absolute', inset: 0,
+                position: 'absolute',
                 transform: transitioning
                   ? `translateX(${swipeX > 0 ? 500 : -500}px) rotate(${swipeX > 0 ? 8 : -8}deg)`
                   : `translateX(${swipeX}px) rotate(${swipeX * 0.035}deg)`,
@@ -471,11 +470,10 @@ export default function App() {
                   : 'none',
                 transformOrigin: 'center center',
                 willChange: 'transform',
-                borderRadius: 2,
-                overflow: 'hidden',
+                ...CARD_FRAME,
                 boxShadow: Math.abs(swipeX) > 10
-                  ? `0 ${8 + Math.abs(swipeX) * 0.1}px ${24 + Math.abs(swipeX) * 0.2}px rgba(0,0,0,0.4)`
-                  : '0 2px 8px rgba(0,0,0,0.2)',
+                  ? `0 ${12 + Math.abs(swipeX) * 0.1}px ${32 + Math.abs(swipeX) * 0.2}px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04)`
+                  : '0 18px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.04)',
               }}>
                 <ArticleCard article={curArticle} theme={T} swipeX={swipeX} bottomInset={cardBottomInset} />
               </div>
@@ -487,7 +485,7 @@ export default function App() {
         {showAsk && (
           <div
             onClick={() => setShowAsk(false)}
-            style={{ position: 'absolute', inset: 0, background: 'rgba(26,22,18,0.35)', zIndex: 55 }}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(4,8,12,0.55)', zIndex: 55 }}
           />
         )}
 
@@ -503,21 +501,6 @@ export default function App() {
       </div>
       {showFeedbackBar && (
         <>
-          <div
-            style={{
-              position: 'absolute',
-              left: '50%',
-              bottom: navInset,
-              width: '100%',
-              maxWidth: 480,
-              height: dockHeight,
-              transform: 'translateX(-50%)',
-              background: T.bg,
-              borderTop: `1px solid ${T.ruleSoft}`,
-              zIndex: 30,
-              pointerEvents: 'none',
-            }}
-          />
           <div
             ref={feedbackBarRef}
             style={{

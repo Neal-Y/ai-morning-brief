@@ -2,6 +2,7 @@ import type { Article } from '../types.ts'
 import type { Theme } from '../theme.ts'
 import { TAG_COLORS } from '../theme.ts'
 import { useLayoutEffect, useRef, useState } from 'react'
+import { IconBolt, IconSparkle } from './icons.tsx'
 
 interface CategoryTagProps {
   tag: string
@@ -9,20 +10,24 @@ interface CategoryTagProps {
 }
 
 export function CategoryTag({ tag, theme }: CategoryTagProps) {
-  const colors = TAG_COLORS[tag] ?? { fg: theme.ink, bg: theme.bgDeep }
+  const colors = TAG_COLORS[tag] ?? { fg: theme.inkMuted, bg: theme.raised }
   return (
     <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
       fontFamily: theme.mono,
       fontSize: 10,
-      fontWeight: 500,
-      letterSpacing: 0.5,
+      fontWeight: 600,
+      letterSpacing: 0.6,
       textTransform: 'uppercase',
-      color: colors.fg,
-      background: colors.bg,
-      padding: '3px 7px',
-      borderRadius: 2,
+      color: theme.ink,
+      background: theme.raised,
+      padding: '4px 10px 4px 8px',
+      borderRadius: 999,
       whiteSpace: 'nowrap',
-    }}>{tag}</span>
+    }}>
+      <span style={{ width: 6, height: 6, borderRadius: 999, background: colors.fg, flexShrink: 0 }} />
+      {tag.replace(/^#/, '')}
+    </span>
   )
 }
 
@@ -87,6 +92,7 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           color: swipeX > 0 ? theme.positive : theme.negative,
           border: `${Math.abs(swipeX) > 90 ? 4 : 3}px solid ${swipeX > 0 ? theme.positive : theme.negative}`,
           padding: '6px 14px',
+          borderRadius: 12,
           transform: `rotate(${swipeX > 0 ? -8 : 8}deg) scale(${Math.abs(swipeX) > 90 ? 1.08 : 1})`,
           textTransform: 'uppercase',
           background: theme.card,
@@ -98,9 +104,8 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
 
       {/* Meta bar */}
       <div style={{
-        padding: '14px 24px 10px',
+        padding: '18px 20px 12px',
         display: 'flex', alignItems: 'center', gap: 8,
-        borderBottom: `1px solid ${theme.ruleSoft}`,
         flexShrink: 0,
       }}>
         <CategoryTag tag={article.categoryTag} theme={theme} />
@@ -113,8 +118,10 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
         <div style={{ flex: 1 }} />
         {article.renderLevel === 'LIGHT' && (
           <span style={{
-            fontFamily: theme.mono, fontSize: 9, fontWeight: 600,
-            color: theme.accent, textTransform: 'uppercase', letterSpacing: 1,
+            fontFamily: theme.mono, fontSize: 9, fontWeight: 700,
+            color: theme.accent, background: theme.accentSoft,
+            padding: '3px 8px', borderRadius: 999,
+            textTransform: 'uppercase', letterSpacing: 1,
           }}>Signal</span>
         )}
       </div>
@@ -130,28 +137,28 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           paddingBottom: needsBottomInset ? bottomInset : 0,
         } as React.CSSProperties}
       >
-        <div style={{ padding: '18px 24px 8px' }}>
+        <div style={{ padding: '2px 20px 10px' }}>
           <h1 style={{
             fontFamily: theme.serif,
-            fontSize: 30, lineHeight: 1.12, fontWeight: 700,
+            fontSize: 28, lineHeight: 1.16, fontWeight: 700,
             color: theme.ink,
-            letterSpacing: -0.3,
+            letterSpacing: -0.4,
             margin: 0,
           }}>{article.title}</h1>
         </div>
 
-        <div style={{ padding: '0 24px 14px' }}>
+        <div style={{ padding: '0 20px 16px' }}>
           <p style={{
             fontFamily: theme.serif,
-            fontSize: 17, lineHeight: 1.42, fontWeight: 400, fontStyle: 'italic',
+            fontSize: 16.5, lineHeight: 1.45, fontWeight: 400, fontStyle: 'italic',
             color: theme.inkMuted,
             margin: 0,
           }}>{article.summary}</p>
         </div>
 
-        <div style={{ height: 1, background: theme.rule, margin: '0 24px', opacity: 0.8 }} />
+        <div style={{ height: 1, background: theme.ruleSoft, margin: '0 20px' }} />
 
-        <div style={{ padding: '14px 24px 10px' }}>
+        <div style={{ padding: '14px 20px 8px' }}>
           <div style={{
             fontFamily: theme.mono, fontSize: 9, fontWeight: 600,
             color: theme.inkFaint, letterSpacing: 1.5,
@@ -164,8 +171,8 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
         </div>
 
         {article.reason && (
-          <div style={{ padding: '4px 24px 14px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 3, height: 12, background: theme.accent, flexShrink: 0 }} />
+          <div style={{ padding: '4px 20px 14px', display: 'flex', alignItems: 'center', gap: 7, color: theme.accent }}>
+            <span style={{ display: 'inline-flex', flexShrink: 0 }}><IconSparkle /></span>
             <span style={{
               fontFamily: theme.sans, fontSize: 13, fontStyle: 'italic',
               color: theme.accent, fontWeight: 500,
@@ -174,7 +181,7 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
         )}
 
         {article.skillTags.length > 0 && (
-          <div style={{ padding: '0 24px 12px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <div style={{ padding: '0 20px 12px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {article.skillTags.map(t => (
               <span key={t} style={{
                 fontFamily: theme.mono, fontSize: 10,
@@ -186,24 +193,22 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
         )}
 
         <div style={{
-          margin: '4px 16px 24px',
-          background: theme.bg,
-          border: `1.5px solid ${theme.ink}`,
-          borderRadius: 2,
+          margin: '4px 12px 20px',
+          background: theme.raised,
+          boxShadow: theme.highlight,
+          borderRadius: 18,
           padding: '14px 16px',
-          position: 'relative',
         }}>
           <div style={{
-            position: 'absolute', top: -8, left: 12,
-            background: theme.card,
-            padding: '0 6px',
+            display: 'flex', alignItems: 'center', gap: 6,
+            color: theme.accent,
             fontFamily: theme.mono, fontSize: 9, fontWeight: 700,
-            color: theme.ink, letterSpacing: 2,
+            letterSpacing: 1.6,
             textTransform: 'uppercase',
-          }}>▸ Engineering Impact</div>
+          }}><IconBolt />Engineering Impact</div>
           <p style={{
             fontFamily: theme.sans, fontSize: 15, lineHeight: 1.5,
-            color: theme.ink, margin: 0, fontWeight: 500,
+            color: theme.ink, margin: '8px 0 0', fontWeight: 500,
           }}>{article.engineeringImpact}</p>
         </div>
       </div>

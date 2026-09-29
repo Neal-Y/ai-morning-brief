@@ -6,6 +6,7 @@ import { StatCard } from './components/activity/StatCard.tsx'
 import { Heatmap } from './components/activity/Heatmap.tsx'
 import { WeekPie } from './components/activity/WeekPie.tsx'
 import { Q } from './components/quiz/tokens.ts'
+import { IconFlame, StatChip } from './components/icons.tsx'
 
 const T = THEME_DARK
 
@@ -48,11 +49,7 @@ export default function Activity() {
             color: T.ink, letterSpacing: -0.3,
           }}>學習紀錄</span>
           {streak > 0 && (
-            <span style={{
-              display: 'flex', alignItems: 'center', gap: 5,
-              background: T.accentSoft, borderRadius: 999, padding: '6px 12px',
-              fontFamily: T.mono, fontSize: 12, fontWeight: 700, color: T.accent,
-            }}>🔥 {streak} 天</span>
+            <StatChip icon={<IconFlame />} value={`${streak} 天`} color={T.accent} background={T.accentSoft} />
           )}
         </div>
 
@@ -79,7 +76,7 @@ export default function Activity() {
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
                 <div style={{
-                  flex: 1, height: 5, borderRadius: 3, background: '#2E2820', overflow: 'hidden',
+                  flex: 1, height: 5, borderRadius: 3, background: Q.track, overflow: 'hidden',
                 }}>
                   <div style={{
                     height: '100%', borderRadius: 3, background: T.accent,
@@ -125,7 +122,7 @@ export default function Activity() {
                       {i === 0 && (
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div style={{
-                            flex: 1, height: 5, borderRadius: 3, background: '#2E2820', overflow: 'hidden',
+                            flex: 1, height: 5, borderRadius: 3, background: Q.track, overflow: 'hidden',
                           }}>
                             <div style={{
                               height: '100%', borderRadius: 3, background: T.accent,

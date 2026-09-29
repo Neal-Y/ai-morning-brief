@@ -30,13 +30,13 @@ export function WeekPie({ segments, total }: { segments: PieSegment[]; total: nu
     <div style={{
       display: 'flex', alignItems: 'center', gap: 18,
       background: T.card, border: `1px solid ${T.ruleSoft}`,
-      borderRadius: 14, padding: '16px 18px',
+      borderRadius: 18, padding: '16px 18px',
     }}>
       <div style={{ position: 'relative', width: SIZE, height: SIZE, flexShrink: 0 }}>
         <svg width={SIZE} height={SIZE} style={{ transform: 'rotate(-90deg)' }}>
           <circle
             cx={SIZE / 2} cy={SIZE / 2} r={R}
-            fill="none" stroke="#2E2820" strokeWidth={STROKE}
+            fill="none" stroke="#1E2A37" strokeWidth={STROKE}
           />
           {arcs.map(a => (
             <circle

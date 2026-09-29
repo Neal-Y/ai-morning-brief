@@ -765,9 +765,40 @@ A component that can be hosted inside more than one layer (a viewport-sized fixe
 
 ---
 
+## Issue 18: "Signal" visual redesign (2026-09-29)
+
+### Symptom
+
+Not a bug: the user was tired of the warm-brown / ember / newspaper-outline look. Two real defects surfaced while reviewing it: the home-screen icon (ink navy + amber funnel) didn't match the app's palette, and `inkFaint` labels were 3.2:1 on `bg` and 2.9:1 on `card`, below 4.5:1.
+
+### Fix
+
+Picked from three mocked-up directions (design canvas, option A):
+
+- **Palette** (`web/src/theme.ts`): `bg #0B121A`, `card #131C26`, `raised #1A2531`, `ink #EAF0F6`, `inkFaint #7C8CA0` (≥4.5:1 on both surfaces), `accent #F5A524` with dark `onAccent` text, `positive #3DD68C`, `negative #FF6B6B`. Dead `THEME_LIGHT` / `ACCENT_PRESETS` and the never-written `localStorage.accent` override were removed. `TAG_COLORS` became dark-friendly hues; article chips are now a coloured dot + label.
+- **Materials**: inset rounded cards (`CARD_FRAME` in `App.tsx`, radius 24), tonal borderless buttons with an inset top highlight, a frosted-glass feedback capsule and bottom nav (`backdrop-filter: blur(24px) saturate(160%)`, with the `-webkit-` prefix). The old full-width opaque dock surface behind the feedback row is gone; the capsule carries its own glass.
+- **Native feel** (`index.css`): no tap highlight, no text selection / callout on buttons, nav and links, `overscroll-behavior: none` on html, `.btn-press` gets an eased scale + brightness, and reduced-motion disables it.
+- 🔥⚡ emoji replaced with SVG glyphs (`components/icons.tsx`).
+- `theme-color` meta, manifest `theme_color` / `background_color` and the html/body background in `index.css` all moved to `#0B121A` together (Issue 14 rule).
+
+**Not changed**: fonts, the Issue 6 layout model (extended root, absolute nav at `bottom: 0`, dock at `navInset + FEEDBACK_BAR_GAP`), `sw.js`, and `app/` (still on the old palette).
+
+### Risk / follow-up
+
+- iOS may keep the old manifest `background_color` for the launch splash until the shortcut is re-added. That only affects the first frame, and re-adding is **not** recommended just for this: a new home-screen install gets fresh storage (`mb_device_id`, streak, quiz ask history) and a new push subscription.
+- `backdrop-filter` over a scrolling card costs GPU. It's fine on recent iPhones, but if scrolling ever stutters, drop the blur on the dock first.
+
+### Validation
+
+- `cd web && npm run build` passed.
+- Playwright at 390×844 @2x with mocked API: Feed (idle + saved), Ask sheet, Quiz resolved-wrong state, Library expanded row, Activity. No page errors.
+- Not yet checked on the installed iPhone PWA, which is the acceptance target for anything touching bottom chrome (Issue 6).
+
+---
+
 ## What Was Intentionally Not Changed
 
-- `lastReadAgo="today"` in the header is still a placeholder string. It is cosmetic, not a correctness bug.
+- ~~`lastReadAgo="today"` placeholder~~: removed from the header in Issue 18 along with the streak row redesign.
 
 ## Verification Commands
 

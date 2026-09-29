@@ -1,71 +1,64 @@
+/**
+ * "Signal" palette (2026-09-29): the app icon's ink navy + amber, carried into
+ * the whole UI. Materials: raised tonal surfaces, rounded cards, frosted-glass
+ * chrome (bottom nav + feedback dock). This file is the single source of truth;
+ * `components/quiz/tokens.ts` and `app/src/theme.ts` derive from it.
+ *
+ * `bg` must stay in sync with `theme-color` in index.html and
+ * `theme_color` / `background_color` in public/manifest.json and the
+ * html/body background in index.css (FRONTEND_FIX_LOG Issue 14).
+ */
 export interface Theme {
-  bg: string; bgDeep: string; card: string; cardEdge: string
+  bg: string; bgDeep: string; card: string; raised: string
   ink: string; inkMuted: string; inkFaint: string
   rule: string; ruleSoft: string
-  accent: string; accentSoft: string
-  positive: string; positiveSoft: string; negative: string
+  accent: string; accentSoft: string; onAccent: string
+  positive: string; positiveSoft: string; negative: string; negativeSoft: string
+  glass: string; glassEdge: string; highlight: string
   serif: string; sans: string; mono: string
 }
 
 export const THEME_DARK: Theme = {
-  bg:          '#14110D',
-  bgDeep:      '#0D0B08',
-  card:        '#1F1B15',
-  cardEdge:    '#F2EDE4',
-  ink:         '#F2EDE4',
-  inkMuted:    '#9E9587',
-  inkFaint:    '#6B6358',
-  rule:        '#F2EDE4',
-  ruleSoft:    'rgba(242,237,228,0.18)',
-  accent:      '#E8654F',
-  accentSoft:  '#5A2318',
-  positive:    '#7FB57F',
-  positiveSoft:'#26402A',
-  negative:    '#C54444',
+  bg:          '#0B121A',
+  bgDeep:      '#070C12',
+  card:        '#131C26',
+  raised:      '#1A2531',
+  ink:         '#EAF0F6',
+  inkMuted:    '#9AA8B8',
+  inkFaint:    '#7C8CA0',
+  rule:        'rgba(160,190,220,0.22)',
+  ruleSoft:    'rgba(160,190,220,0.12)',
+  accent:      '#F5A524',
+  accentSoft:  '#2C271B',   // accent at ~14% over bg, opaque so it never bleeds
+  onAccent:    '#1B1203',
+  positive:    '#3DD68C',
+  positiveSoft:'#193634',
+  negative:    '#FF6B6B',
+  negativeSoft:'#342730',
+  // Frosted chrome: translucent fill + backdrop blur, 1px light edge, and an
+  // inset top highlight that gives tonal buttons their "raised" read.
+  glass:       'rgba(14,22,31,0.74)',
+  glassEdge:   'rgba(255,255,255,0.08)',
+  highlight:   'inset 0 1px 0 rgba(255,255,255,0.06)',
   serif: '"Source Serif 4", "Noto Serif TC", "PT Serif", Georgia, serif',
   sans:  '"Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
   mono:  '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
 }
 
-export const THEME_LIGHT: Theme = {
-  bg:          '#F2EDE4',
-  bgDeep:      '#E8E2D5',
-  card:        '#FBF7EE',
-  cardEdge:    '#1A1612',
-  ink:         '#1A1612',
-  inkMuted:    '#5A4F42',
-  inkFaint:    '#8B7F6F',
-  rule:        '#1A1612',
-  ruleSoft:    'rgba(26,22,18,0.18)',
-  accent:      '#E8654F',
-  accentSoft:  '#E8BFB6',
-  positive:    '#2D5A3D',
-  positiveSoft:'#C9DCC9',
-  negative:    '#8B1A1A',
-  serif: '"Source Serif 4", "Noto Serif TC", "PT Serif", Georgia, serif',
-  sans:  '"Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-  mono:  '"JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace',
-}
+/** Backdrop filter for glass surfaces (spread with -webkit- prefix for iOS). */
+export const GLASS_BLUR = 'blur(24px) saturate(160%)'
 
-export const ACCENT_PRESETS: Array<{ name: string; value: string; soft: string }> = [
-  { name: 'ember',  value: '#E8654F', soft: '#5A2318' },
-  { name: 'red',    value: '#C8321E', soft: '#5A1810' },
-  { name: 'ink',    value: '#1A1612', soft: '#0D0B09' },
-  { name: 'forest', value: '#2D5A3D', soft: '#152E1F' },
-  { name: 'navy',   value: '#1E3D8A', soft: '#0A1E4A' },
-  { name: 'ochre',  value: '#8A5A1E', soft: '#452D0F' },
-]
-
+/** Category hue per tag: `fg` is the dot / active-chip text, `bg` its tint. */
 export const TAG_COLORS: Record<string, { fg: string; bg: string }> = {
-  '#model-release': { fg: '#6B2E8A', bg: '#EBDCF0' },
-  '#api-platform':  { fg: '#1E5A8A', bg: '#D4E2EE' },
-  '#infra':         { fg: '#2D5A3D', bg: '#D4E2D4' },
-  '#tooling':       { fg: '#8A5A1E', bg: '#EEE0D4' },
-  '#eval':          { fg: '#6B1E3D', bg: '#EED4DC' },
-  '#agent':         { fg: '#1E3D8A', bg: '#D4D8EE' },
-  '#policy':        { fg: '#5A2D1E', bg: '#EED8D4' },
-  '#market':        { fg: '#2D2D2D', bg: '#E0DCD4' },
-  '#opinion':       { fg: '#5A5A2D', bg: '#EAE8D4' },
-  '#research':      { fg: '#3D5A6B', bg: '#D4E0E6' },
-  '#event-promo':   { fg: '#8A3D1E', bg: '#EEE0D4' },
+  '#model-release': { fg: '#B794F6', bg: 'rgba(183,148,246,0.16)' },
+  '#api-platform':  { fg: '#63B3ED', bg: 'rgba(99,179,237,0.16)' },
+  '#infra':         { fg: '#4FD1C5', bg: 'rgba(79,209,197,0.16)' },
+  '#tooling':       { fg: '#F6AD55', bg: 'rgba(246,173,85,0.16)' },
+  '#eval':          { fg: '#F687B3', bg: 'rgba(246,135,179,0.16)' },
+  '#agent':         { fg: '#7F9CF5', bg: 'rgba(127,156,245,0.16)' },
+  '#policy':        { fg: '#FC8181', bg: 'rgba(252,129,129,0.16)' },
+  '#market':        { fg: '#A0AEC0', bg: 'rgba(160,174,192,0.16)' },
+  '#opinion':       { fg: '#C6D57E', bg: 'rgba(198,213,126,0.16)' },
+  '#research':      { fg: '#76E4F7', bg: 'rgba(118,228,247,0.16)' },
+  '#event-promo':   { fg: '#ED8936', bg: 'rgba(237,137,54,0.16)' },
 }
