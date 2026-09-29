@@ -58,7 +58,7 @@ export function WeekPie({ segments, total }: { segments: PieSegment[]; total: nu
             fontFamily: T.mono, fontSize: 21, fontWeight: 700, color: T.ink,
             fontVariantNumeric: 'tabular-nums',
           }}>{count}</span>
-          <span style={{ fontFamily: T.mono, fontSize: 9, color: T.inkFaint }}>題</span>
+          <span style={{ fontFamily: T.mono, fontSize: 11, color: T.inkFaint }}>題</span>
         </div>
       </div>
 

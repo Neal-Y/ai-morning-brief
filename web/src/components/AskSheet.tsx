@@ -420,12 +420,12 @@ export function AskSheet({
       }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
-            letterSpacing: 1.5, textTransform: 'uppercase',
+            fontFamily: theme.mono, fontSize: 11, color: theme.inkFaint,
+            letterSpacing: 1, textTransform: 'uppercase',
           }}>Ask Claude · Haiku 4.5</div>
           <div style={{
             fontFamily: theme.serif, fontSize: 14, color: theme.ink,
-            fontWeight: 600, fontStyle: 'italic',
+            fontWeight: 600,
             whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
           }}>{article.title}</div>
         </div>
@@ -499,7 +499,7 @@ export function AskSheet({
                 boxShadow: theme.highlight,
                 borderRadius: 14,
                 padding: '11px 14px',
-                fontFamily: theme.serif, fontSize: 13, fontStyle: 'italic',
+                fontFamily: theme.sans, fontSize: 14,
                 color: theme.ink, cursor: 'pointer',
               }}>→ {s}</button>
             ))}

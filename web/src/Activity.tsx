@@ -45,7 +45,7 @@ export default function Activity() {
           padding: 'calc(env(safe-area-inset-top, 0px) + 18px) 20px 6px',
         }}>
           <span style={{
-            fontFamily: T.serif, fontSize: 21, fontWeight: 900, fontStyle: 'italic',
+            fontFamily: T.serif, fontSize: 21, fontWeight: 900,
             color: T.ink, letterSpacing: -0.3,
           }}>學習紀錄</span>
           {streak > 0 && (
@@ -56,7 +56,7 @@ export default function Activity() {
         {!data ? (
           <div style={{
             padding: '48px 20px', textAlign: 'center',
-            fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 1,
+            fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 0,
           }}>{error ? '無法載入學習紀錄' : '載入中…'}</div>
         ) : (
           <>
@@ -111,7 +111,7 @@ export default function Activity() {
                         <span style={{
                           border: `1px solid ${T.accent}`, borderRadius: 999,
                           padding: '2px 8px',
-                          fontFamily: T.mono, fontSize: 9.5, fontWeight: 700,
+                          fontFamily: T.mono, fontSize: 11.5, fontWeight: 700,
                           letterSpacing: 0.5, color: T.accent,
                         }}>{row.category}</span>
                         <span style={{ flex: 1 }} />
@@ -159,8 +159,8 @@ function Section({ label, children }: { label: string; children: React.ReactNode
   return (
     <div style={{ padding: '20px 20px 0' }}>
       <div style={{
-        fontFamily: T.mono, fontSize: 10, color: T.inkFaint,
-        letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8,
+        fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
+        letterSpacing: 0.3, textTransform: 'uppercase', marginBottom: 8,
       }}>{label}</div>
       {children}
     </div>

@@ -30,7 +30,7 @@ export function TopChrome({ theme, current, total, streak, dateLabel, onOpenLibr
         }}>The Morning Brief</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
-            fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
+            fontFamily: theme.mono, fontSize: 11, color: theme.inkFaint,
             letterSpacing: 1, textTransform: 'uppercase',
           }}>{dateLabel}</div>
           {onOpenLibrary && (
@@ -66,7 +66,7 @@ export function TopChrome({ theme, current, total, streak, dateLabel, onOpenLibr
             />
           ))}
         </div>
-        <div style={{ fontFamily: theme.mono, fontSize: 10, color: theme.inkMuted, letterSpacing: 0.5 }}>
+        <div style={{ fontFamily: theme.mono, fontSize: 11, color: theme.inkMuted, letterSpacing: 0.5 }}>
           {current + 1}/{total}
         </div>
         <StatChip icon={<IconFlame />} value={streak} color={theme.accent} background={theme.accentSoft} />
@@ -144,7 +144,7 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
       }}
     >
       {icon}
-      <span style={{ fontFamily: theme.mono, fontSize: 8.5, fontWeight: 600, letterSpacing: 0.5, lineHeight: 1 }}>{label}</span>
+      <span style={{ fontFamily: theme.mono, fontSize: 11.5, fontWeight: 600, letterSpacing: 0.5, lineHeight: 1 }}>{label}</span>
     </button>
   )
 

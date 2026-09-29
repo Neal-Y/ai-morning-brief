@@ -295,8 +295,8 @@ export default function App() {
         alignItems: 'center', justifyContent: 'center', gap: 10,
       }}>
         <div style={{
-          fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
-          letterSpacing: 2.5, textTransform: 'uppercase',
+          fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
+          letterSpacing: 1.5, textTransform: 'uppercase',
           position: 'absolute',
           top: 'calc(24px + env(safe-area-inset-top))',
         }}>
@@ -333,7 +333,7 @@ export default function App() {
               }}
               disabled={subscribing}
               style={{
-                fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 1,
+                fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
                 color: T.onAccent, background: T.accent,
                 border: 'none', borderRadius: 14, padding: '12px 24px',
                 cursor: 'pointer', opacity: subscribing ? 0.6 : 1,
@@ -355,9 +355,9 @@ export default function App() {
             <button
               onClick={() => setPermissionResolved(true)}
               style={{
-                fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
+                fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
                 background: 'transparent', border: 'none',
-                cursor: 'pointer', letterSpacing: 1, textTransform: 'uppercase',
+                cursor: 'pointer', letterSpacing: 0.3, textTransform: 'uppercase',
               }}
             >
               略過
@@ -378,8 +378,8 @@ export default function App() {
           position: 'absolute',
           bottom: navInset + 24,
           display: 'flex', alignItems: 'center', gap: 10,
-          fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
-          letterSpacing: 2.5, textTransform: 'uppercase',
+          fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
+          letterSpacing: 1.5, textTransform: 'uppercase',
         }}>
           <div style={{ width: 20, height: 1, background: T.ruleSoft }} />
           <span>{formatBriefDateLong(briefDate)} · Taipei</span>

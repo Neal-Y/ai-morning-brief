@@ -40,7 +40,7 @@ export function StatCard({ value, label, delay = 0 }: {
         fontVariantNumeric: 'tabular-nums',
       }}>{display}</div>
       <div style={{
-        fontFamily: T.mono, fontSize: 10, color: T.inkMuted,
+        fontFamily: T.mono, fontSize: 11, color: T.inkMuted,
         marginTop: 4, letterSpacing: 0.3,
       }}>{label}</div>
     </div>

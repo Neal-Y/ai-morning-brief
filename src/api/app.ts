@@ -1,7 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { db } from '../db/client.js'
-import { getTaipeiDateString } from '../date.js'
 import { articles, feedback, saves, quizzes, quizAttempts } from '../db/schema.js'
 import { eq, desc, and, inArray, notInArray, gte, sql } from 'drizzle-orm'
 
@@ -15,24 +14,9 @@ const app = new Hono()
 
 app.use('*', cors())
 
-app.get('/api/feed', async (c) => {
-  const date = c.req.query('date') ?? getTaipeiDateString()
-  const rows = await db
-    .select()
-    .from(articles)
-    .where(eq(articles.briefDate, date))
-    .orderBy(desc(articles.score))
-  // Cache populated days at the edge (rows are immutable once the daily
-  // pipeline finishes). For empty responses we use a short cache so a PWA
-  // opened before the cron run isn't stuck on stale empty data for 5 minutes.
-  c.header(
-    'Cache-Control',
-    rows.length > 0
-      ? 'public, s-maxage=300, stale-while-revalidate=300'
-      : 'public, s-maxage=30',
-  )
-  return c.json({ date, articles: rows })
-})
+// GET /api/feed lives in api/feed.ts (Edge Runtime, 2026-09-29) — it is the
+// first request every morning and the Node function's cold start was the
+// visible part of the app's load time. Don't re-add a Hono copy.
 
 app.get('/api/library', async (c) => {
   // Library is read-only history. Three small tables, joined in JS to avoid
