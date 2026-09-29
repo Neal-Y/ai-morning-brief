@@ -80,7 +80,7 @@ Edge Functions (Vercel 獨立路由，不走 Hono)
   ├─ POST /api/push-subscribe  api/push-subscribe.ts — 寫 push_subscriptions
   ├─ POST /api/save            api/save.ts — Notion Article ID 去重 + upsert/restore saves
   ├─ POST /api/unsave          api/unsave.ts — 硬刪除 saves row（Notion page 不動，dedupe 靠直查 Notion）
-  ├─ POST /api/feedback        api/feedback.ts — 👍👎 回饋（delete-then-insert）
+  ├─ POST /api/feedback        api/feedback.ts — 👍👎 回饋（delete-then-insert；`clear` = 撤回）
   └─ POST /api/quiz-attempt    api/quiz-attempt.ts — 寫入 quiz_attempts
 
 React PWA (web/) — 主力 client，四分頁 bottom tab（鏡像原 Sift app 的分頁配置）

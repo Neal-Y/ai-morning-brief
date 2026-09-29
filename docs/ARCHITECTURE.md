@@ -178,7 +178,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 |---|---|---|
 | `GET /api/library` | — | All-history articles JOINed with feedback/saves/notionSynced/ask-message-count (JS-join, no `messages` JSON) |
 | `GET /api/quiz` | `count`, `type` (comma list) | `RawQuizItem[]` |
-| `GET /api/activity` | — | `{ streak, heatmap, weekStats, recent, ... }`, scoped by `X-Device-Id` |
+| `GET /api/activity` | — | `{ streak, activeToday, heatmap, weekStats, recent, totalCorrect }`, scoped by `X-Device-Id`. Since 2026-09-29 a day counts for `streak` / `heatmap` if the device read (any `feedback` row) **or** answered (`quiz_attempts`). `weekStats` / `recent` / `totalCorrect` stay quiz-only. `activeToday` says whether today already counts |
 
 ### Edge Runtime, body-reading POST (root `api/*.ts` — see [../CLAUDE.md](../CLAUDE.md) Conventions for *why* these can't be Hono routes)
 
@@ -189,7 +189,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 | `POST /api/push-subscribe` | subscription object | Writes `push_subscriptions` |
 | `POST /api/save` | `{ articleId, userNote? }` | Notion dedupe (DB `notion_page_id` cache, else direct Article ID lookup via `findSavePageByArticleId`) + upsert `saves` |
 | `POST /api/unsave` | `{ articleId }` | Hard delete the `saves` row (`DELETE`) — never touches `articles` or the Notion page |
-| `POST /api/feedback` | `{ articleId, signal }` | Delete-then-insert `feedback` |
+| `POST /api/feedback` | `{ articleId, signal: 'up' \| 'down' \| 'clear' }` | `up` / `down`: delete-then-insert `feedback`. `clear` (2026-09-29, swipe undo): only delete this device's row |
 | `POST /api/quiz-attempt` | `{ quizId, correct }` | Insert `quiz_attempts` |
 
 All 7 Edge routes require `X-Device-Id` — every one returns `400 { ok: false, error: 'missing_device_id' }` without it (verified against `api/*.ts`, 2026-08-04). `deviceId` is nullable at the schema level only for rows written before multi-user support landed, not for anything writable today.

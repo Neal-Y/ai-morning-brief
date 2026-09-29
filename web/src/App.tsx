@@ -7,7 +7,8 @@ import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
 import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
 import type { Article, FeedResponse } from './types.ts'
-import { apiFetch } from './api.ts'
+import { apiFetch, fetchActivity } from './api.ts'
+import { navigate } from './router.ts'
 import { useNavInset } from './nav.ts'
 
 // The bottom nav owns the safe-area band and the home-indicator clearance that
@@ -60,7 +61,10 @@ export default function App() {
   const [error, setError] = useState<string | null>(null)
   const [briefDate, setBriefDate] = useState(() => getTaipeiDateString())
   const [springing, setSpringing] = useState(false)
-  const [streak, setStreak] = useState(() => parseInt(localStorage.getItem('mb_streak') ?? '1'))
+  // One streak for the whole app, computed server-side from reading (feedback)
+  // and quiz days. Replaces the old localStorage `mb_streak`, which +1'd on
+  // every finish regardless of date and never reset.
+  const [activity, setActivity] = useState<{ streak: number; activeToday: boolean }>({ streak: 0, activeToday: false })
   const [feedbackBarHeight, setFeedbackBarHeight] = useState(0)
   const [permissionResolved, setPermissionResolved] = useState(() => {
     if (!isPushSupported() || !isStandalone()) return true
@@ -96,6 +100,12 @@ export default function App() {
   }, [subscribing])
 
   useEffect(() => {
+    fetchActivity()
+      .then(a => setActivity({ streak: a.streak, activeToday: a.activeToday ?? false }))
+      .catch(() => {}) // streak chip just reads 0; never block the feed on it
+  }, [])
+
+  useEffect(() => {
     const today = getTaipeiDateString()
     setBriefDate(today)
     apiFetch(`/api/feed?date=${today}`)
@@ -123,16 +133,31 @@ export default function App() {
       setSwipeX(0)
       dragStart.current = null
       velocity.current = { vx: 0, lastX: 0, lastT: 0 }
-      setIdx(i => {
-        if (i === articles.length - 1) {
-          const next = streak + 1
-          setStreak(next)
-          localStorage.setItem('mb_streak', String(next))
-        }
-        return i + 1
-      })
+      setIdx(i => i + 1)
       setTransitioning(false)
     }, 260)
+  }
+
+  // Undo: step back one card and withdraw the 👍/👎 it received, so a
+  // mis-swipe doesn't feed the classifier's preference signal.
+  const undo = () => {
+    if (transitioning || idx === 0) return
+    const prev = articles[idx - 1]
+    if (!prev) return
+    setSwipeX(0)
+    setIdx(idx - 1)
+    if (feedback[prev.id]) {
+      setFeedback(f => {
+        const next = { ...f }
+        delete next[prev.id]
+        return next
+      })
+      apiFetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ articleId: prev.id, signal: 'clear' }),
+      }).catch(() => {})
+    }
   }
 
   const registerFeedback = (signal: 'up' | 'down') => {
@@ -398,9 +423,13 @@ export default function App() {
       <Celebration
         theme={T}
         savedCount={savedCount}
-        streak={streak}
+        // Finishing the brief makes today count, even if /api/activity was
+        // fetched before the last swipe landed.
+        streak={activity.activeToday ? activity.streak : activity.streak + 1}
         readCount={articles.length}
         briefDate={briefDate}
+        onGoQuiz={() => navigate('/quiz')}
+        onUndo={undo}
       />
     )}
     <div style={{
@@ -423,8 +452,9 @@ export default function App() {
             theme={T}
             current={currentChrome}
             total={articles.length}
-            streak={streak}
+            streak={activity.streak}
             dateLabel={dateLabel}
+            onUndo={idx > 0 ? undo : undefined}
           />
         )}
 

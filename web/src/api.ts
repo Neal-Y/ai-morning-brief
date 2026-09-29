@@ -51,6 +51,8 @@ export async function submitQuizAttempt(quizId: number, correct: boolean): Promi
 
 export interface ActivityData {
   streak: number
+  /** Whether today (Taipei) already counts toward the streak. */
+  activeToday?: boolean
   totalCorrect: number
   weekStats: { correct: number; wrong: number; total: number }
   heatmap: number[][]

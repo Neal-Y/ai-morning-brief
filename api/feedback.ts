@@ -51,13 +51,14 @@ export default async function handler(req: Request): Promise<Response> {
   if (!deviceId) return jsonResponse({ ok: false, error: 'missing_device_id' }, 400)
 
   let articleId: string
-  let signal: 'up' | 'down'
+  let signal: 'up' | 'down' | 'clear'
   try {
     const body = (await req.json()) as { articleId?: unknown; signal?: unknown }
     if (typeof body.articleId !== 'string' || !/^[a-f0-9]{16}$/.test(body.articleId)) {
       return jsonResponse({ ok: false, error: 'invalid_article_id' }, 400)
     }
-    if (body.signal !== 'up' && body.signal !== 'down') {
+    // 'clear' = undo: delete this device's feedback on the article (swipe undo).
+    if (body.signal !== 'up' && body.signal !== 'down' && body.signal !== 'clear') {
       return jsonResponse({ ok: false, error: 'invalid_signal' }, 400)
     }
     articleId = body.articleId
@@ -67,6 +68,18 @@ export default async function handler(req: Request): Promise<Response> {
   }
 
   try {
+    if (signal === 'clear') {
+      await tursoPipeline([
+        {
+          type: 'execute',
+          stmt: {
+            sql: 'DELETE FROM feedback WHERE article_id = ? AND device_id = ?',
+            args: [{ type: 'text', value: articleId }, { type: 'text', value: deviceId }],
+          },
+        },
+      ])
+      return jsonResponse({ ok: true })
+    }
     const now = String(Math.floor(Date.now() / 1000))
     await tursoPipeline([
       {

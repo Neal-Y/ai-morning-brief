@@ -1,6 +1,7 @@
 import type { Theme } from '../theme.ts'
 import { formatBriefDateShort } from '../date.ts'
 import { IconFlame } from './icons.tsx'
+import { useNavInset } from '../nav.ts'
 
 interface CelebrationProps {
   theme: Theme
@@ -8,10 +9,14 @@ interface CelebrationProps {
   streak: number
   readCount: number
   briefDate: string
+  onGoQuiz: () => void
+  onUndo: () => void
 }
 
-export function Celebration({ theme, savedCount, streak, readCount, briefDate }: CelebrationProps) {
+export function Celebration({ theme, savedCount, streak, readCount, briefDate, onGoQuiz, onUndo }: CelebrationProps) {
   const dateStr = formatBriefDateShort(briefDate)
+  // The bottom nav (z 50) floats over this fixed layer; keep the actions above it.
+  const navInset = useNavInset()
 
   return (
     <div style={{
@@ -19,7 +24,7 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
       background: theme.card,
       display: 'flex', flexDirection: 'column',
       paddingTop: 'max(40px, env(safe-area-inset-top))',
-      paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
+      paddingBottom: navInset > 0 ? navInset + 20 : 'max(24px, env(safe-area-inset-bottom))',
       paddingLeft: 24, paddingRight: 24,
       overflowY: 'auto',
     }}>
@@ -98,6 +103,33 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Next step: the morning loop continues into today's quiz. */}
+      <div style={{ flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
+        <button
+          className="btn-press"
+          onClick={onGoQuiz}
+          style={{
+            height: 54, border: 'none', borderRadius: 18,
+            background: theme.accent, color: theme.onAccent,
+            fontFamily: theme.sans, fontSize: 15, fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+            boxShadow: '0 10px 28px rgba(245,165,36,0.28), inset 0 1px 0 rgba(255,255,255,0.35)',
+          }}
+        >
+          去答今天的判斷題
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </button>
+        <button
+          onClick={onUndo}
+          style={{
+            alignSelf: 'center', background: 'none', border: 'none', padding: '6px 10px',
+            fontFamily: theme.sans, fontSize: 13, fontWeight: 600, color: theme.inkMuted,
+          }}
+        >回上一篇</button>
       </div>
 
       {/* Footer — pinned at bottom of scroll area */}

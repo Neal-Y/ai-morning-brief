@@ -192,13 +192,20 @@ app.get('/api/activity', async (c) => {
   const deviceId = c.req.header('X-Device-Id') ?? null
   if (!deviceId) {
     const emptyHeatmap = Array.from({ length: 52 }, () => Array(7).fill(0))
-    return c.json({ streak: 0, totalCorrect: 0, weekStats: { correct: 0, wrong: 0, total: 0 }, heatmap: emptyHeatmap, recent: [] })
+    return c.json({ streak: 0, activeToday: false, totalCorrect: 0, weekStats: { correct: 0, wrong: 0, total: 0 }, heatmap: emptyHeatmap, recent: [] })
   }
 
   const cutoff = Math.floor((Date.now() - 400 * 86400_000) / 1000) // 400 days for streak safety
 
-  // Two parallel queries: windowed rows for streak/heatmap/recent, and all-time correct count
-  const [rows, totalCorrectRows] = await Promise.all([
+  // Three parallel queries: windowed quiz rows (streak/heatmap/recent/week),
+  // windowed reading days, and the all-time correct count.
+  //
+  // Reading = a 👍/👎 on an article (every swipe or LESS/MORE writes one
+  // feedback row). Since 2026-09-29 a day counts toward the streak and the
+  // heatmap if the device read OR answered that day — one streak for the whole
+  // app instead of the old per-page counters. Week stats and "recent" stay
+  // quiz-only: they describe answers.
+  const [rows, readRows, totalCorrectRows] = await Promise.all([
     db
       .select({
         day: sql<string>`date(${quizAttempts.answeredAt}, 'unixepoch', '+8 hours')`,
@@ -210,6 +217,14 @@ app.get('/api/activity', async (c) => {
       .where(and(eq(quizAttempts.deviceId, deviceId), gte(quizAttempts.answeredAt, new Date(cutoff * 1000))))
       .orderBy(sql`date(${quizAttempts.answeredAt}, 'unixepoch', '+8 hours') desc`),
     db
+      .select({
+        day: sql<string>`date(${feedback.createdAt}, 'unixepoch', '+8 hours')`,
+        count: sql<number>`cast(count(*) as int)`,
+      })
+      .from(feedback)
+      .where(and(eq(feedback.deviceId, deviceId), gte(feedback.createdAt, new Date(cutoff * 1000))))
+      .groupBy(sql`date(${feedback.createdAt}, 'unixepoch', '+8 hours')`),
+    db
       .select({ count: sql<number>`cast(count(*) as int)` })
       .from(quizAttempts)
       .where(and(eq(quizAttempts.deviceId, deviceId), eq(quizAttempts.correct, true))),
@@ -217,8 +232,9 @@ app.get('/api/activity', async (c) => {
   const totalCorrect = totalCorrectRows[0]?.count ?? 0
 
   // ── streak ─────────────────────────────────────────────────────────────────
-  const daySet = [...new Set(rows.map(r => r.day))].sort().reverse()
+  const daySet = [...new Set([...rows.map(r => r.day), ...readRows.map(r => r.day)])].sort().reverse()
   const streak = computeStreak(daySet)
+  const activeToday = daySet[0] === new Date(taipeiNowMs()).toISOString().slice(0, 10)
 
   // ── this week's stats (Mon → today, Taipei time) ───────────────────────────
   const tMs = taipeiNowMs()
@@ -232,6 +248,9 @@ app.get('/api/activity', async (c) => {
   const dayCounts = new Map<string, number>()
   for (const r of rows) {
     dayCounts.set(r.day, (dayCounts.get(r.day) ?? 0) + 1)
+  }
+  for (const r of readRows) {
+    dayCounts.set(r.day, (dayCounts.get(r.day) ?? 0) + r.count)
   }
   const heatmap = buildHeatmap(dayCounts)
 
@@ -253,7 +272,7 @@ app.get('/api/activity', async (c) => {
     })
 
   c.header('Cache-Control', 'private, no-store')
-  return c.json({ streak, totalCorrect, weekStats: { correct: weekCorrect, wrong: weekWrong, total: weekCorrect + weekWrong }, heatmap, recent })
+  return c.json({ streak, activeToday, totalCorrect, weekStats: { correct: weekCorrect, wrong: weekWrong, total: weekCorrect + weekWrong }, heatmap, recent })
 })
 
 // NOTE: /api/save, /api/push-subscribe, /api/feedback, and /api/quiz-attempt
