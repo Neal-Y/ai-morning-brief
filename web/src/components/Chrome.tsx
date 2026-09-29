@@ -9,9 +9,11 @@ interface TopChromeProps {
   streak: number
   dateLabel: string
   onOpenLibrary?: () => void
+  /** Present when there is a previous card to go back to. */
+  onUndo?: () => void
 }
 
-export function TopChrome({ theme, current, total, streak, dateLabel, onOpenLibrary }: TopChromeProps) {
+export function TopChrome({ theme, current, total, streak, dateLabel, onOpenLibrary, onUndo }: TopChromeProps) {
   return (
     <div style={{
       padding: '14px 20px 12px',
@@ -66,6 +68,25 @@ export function TopChrome({ theme, current, total, streak, dateLabel, onOpenLibr
             />
           ))}
         </div>
+        {onUndo && (
+          <button
+            className="btn-press"
+            onClick={onUndo}
+            aria-label="回上一篇"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              height: 24, padding: '0 9px 0 7px',
+              background: theme.raised, border: 'none', borderRadius: 999,
+              boxShadow: theme.highlight, color: theme.inkMuted,
+              fontFamily: theme.sans, fontSize: 11, fontWeight: 600,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 14 4 9l5-5" /><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+            </svg>
+            上一篇
+          </button>
+        )}
         <div style={{ fontFamily: theme.mono, fontSize: 11, color: theme.inkMuted, letterSpacing: 0.5 }}>
           {current + 1}/{total}
         </div>
