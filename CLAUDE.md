@@ -140,6 +140,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 - [x] Sift app 四分頁在 Expo Go 封測跑起來（Quiz/Feed/Library/Activity）
 - [x] web PWA 四分頁 Playwright 驗證（2026-09-07，模擬 iPhone 13 viewport + 34px safe-area）：四分頁切換 + 瀏覽器 Back 無整頁重載、四種 quiz 題型作答 + XP 正確（+20/+5）、五次 `POST /api/quiz-attempt` 皆 200、Activity 數字與 `/api/activity` 逐欄位比對一致、nav 在 0px 與 34px inset 下都完全在 home indicator 之上、standalone push permission gate 正常
 - [x] **真實 iPhone 安裝的 PWA 驗證**（2026-09-29，使用者實機確認 OK）：`docs/FRONTEND_FIX_LOG.md` Issue 6 的驗收基準是「從主畫面捷徑開啟的真實 standalone PWA」，四分頁 port 已過這關
+- [x] **Signal 改版真實 iPhone PWA 驗證**（2026-09-29，使用者實機確認 OK）：bottom nav / 毛玻璃 dock 位置正常
 - EAS Build → TestFlight：延後（見下一步 #5），不是待辦項目，等用量提高再排
 - ~~Notion 30 天回看~~：作廢，不會回去看，但整合維持現狀不拆（見 TL;DR）
 

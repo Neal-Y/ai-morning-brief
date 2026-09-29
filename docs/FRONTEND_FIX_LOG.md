@@ -792,7 +792,7 @@ Picked from three mocked-up directions (design canvas, option A):
 
 - `cd web && npm run build` passed.
 - Playwright at 390×844 @2x with mocked API: Feed (idle + saved), Ask sheet, Quiz resolved-wrong state, Library expanded row, Activity. No page errors.
-- Not yet checked on the installed iPhone PWA, which is the acceptance target for anything touching bottom chrome (Issue 6).
+- 2026-09-29: the user checked the installed iPhone PWA (the acceptance target for anything touching bottom chrome, Issue 6) after the prod deploy and found no problems.
 
 ---
 
