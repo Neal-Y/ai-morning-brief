@@ -783,6 +783,13 @@ Picked from three mocked-up directions (design canvas, option A):
 
 **Not changed**: fonts, the Issue 6 layout model (extended root, absolute nav at `bottom: 0`, dock at `navInset + FEEDBACK_BAR_GAP`), `sw.js`, and `app/` (still on the old palette).
 
+### Typography pass (2026-09-29, same day)
+
+- Minimum text size is now 11px (was 8–10px mono labels), except the heatmap axis labels, which must fit a 10px cell.
+- Letter spacing capped at 1px on Latin uppercase labels. CJK labels get none, because tracking made 「第 1 題 · 共 2 題」 read one glyph at a time; that counter also moved from mono to sans.
+- No italics on CJK-heavy text (summaries, reasons, Library group headers and empty states, Ask title and suggestions). CJK fonts have no italic, so the browser synthesises an oblique. Latin italics (the masthead, Celebration copy) stay.
+- Quiz prompt 26→24px; article body and Engineering Impact 15→16px; Library detail body 13→14px.
+
 ### Risk / follow-up
 
 - iOS may keep the old manifest `background_color` for the launch splash until the shortcut is re-added. That only affects the first frame, and re-adding is **not** recommended just for this: a new home-screen install gets fresh storage (`mb_device_id`, streak, quiz ask history) and a new push subscription.

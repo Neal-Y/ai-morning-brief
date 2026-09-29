@@ -149,7 +149,7 @@ function AskCountMark({ count }: { count: number }) {
   return (
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 3,
-      color: T.inkFaint, fontFamily: T.mono, fontSize: 9,
+      color: T.inkFaint, fontFamily: T.mono, fontSize: 11,
       letterSpacing: 0.4, whiteSpace: 'nowrap',
     }}>
       <Icon name="chat" size={10} color={T.inkFaint} strokeWidth={2} />
@@ -190,7 +190,7 @@ function CategoryTag({ tag }: { tag: string }) {
   const colors = TAG_COLORS[tag] ?? { fg: T.inkMuted, bg: T.card }
   return (
     <span style={{
-      fontFamily: T.mono, fontSize: 9, fontWeight: 600,
+      fontFamily: T.mono, fontSize: 11, fontWeight: 600,
       letterSpacing: 0.5, textTransform: 'uppercase',
       color: colors.fg, background: colors.bg,
       padding: '2px 7px', borderRadius: 999, whiteSpace: 'nowrap',
@@ -253,21 +253,21 @@ function EmptyState({ type, onClearFilters }: {
     }}>
       <div style={{ width: 40, height: 4, borderRadius: 999, background: T.accent, marginBottom: 20 }} />
       <div style={{
-        fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
-        letterSpacing: 2, textTransform: 'uppercase', marginBottom: 12,
+        fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
+        letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12,
       }}>The Morning Brief · Library</div>
       <div style={{
-        fontFamily: T.serif, fontSize: 30, fontWeight: 900, fontStyle: 'italic',
+        fontFamily: T.serif, fontSize: 30, fontWeight: 900,
         color: T.ink, lineHeight: 1.05, letterSpacing: -0.5, marginBottom: 10,
       }}>{headline}</div>
       <p style={{
-        fontFamily: T.serif, fontSize: 15, fontStyle: 'italic',
+        fontFamily: T.serif, fontSize: 15,
         color: T.inkMuted, lineHeight: 1.55, whiteSpace: 'pre-line',
         marginBottom: action ? 20 : 0,
       }}>{body}</p>
       {action && onClearFilters && (
         <button onClick={onClearFilters} style={{
-          fontFamily: T.mono, fontSize: 10, fontWeight: 600,
+          fontFamily: T.mono, fontSize: 11, fontWeight: 600,
           letterSpacing: 0.5, textTransform: 'uppercase',
           padding: '10px 20px', borderRadius: 999, cursor: 'pointer',
           background: T.raised, color: T.ink,
@@ -294,10 +294,10 @@ function DateGroupHeader({ label, count, topOffset }: {
     }}>
       <span style={{
         fontFamily: T.serif, fontSize: 13, fontWeight: 700,
-        fontStyle: 'italic', color: T.ink, letterSpacing: -0.1,
+        color: T.ink, letterSpacing: -0.1,
       }}>{label}</span>
       <span style={{
-        fontFamily: T.mono, fontSize: 10, color: T.inkFaint,
+        fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
         textTransform: 'uppercase', letterSpacing: 1,
       }}>{count} 篇</span>
     </div>
@@ -353,7 +353,7 @@ function FilterBar({
         )}
         {hasAnyFilter && !query && (
           <button onClick={onClearAll} style={{
-            fontFamily: T.mono, fontSize: 9, fontWeight: 600,
+            fontFamily: T.mono, fontSize: 11, fontWeight: 600,
             letterSpacing: 0.5, textTransform: 'uppercase',
             padding: '4px 10px', borderRadius: 999, cursor: 'pointer',
             background: T.accentSoft, color: T.accent,
@@ -399,7 +399,7 @@ function FilterBar({
           const colors = TAG_COLORS[cat] ?? { fg: T.ink, bg: T.card }
           return (
             <button key={cat} onClick={() => toggleCategory(cat)} style={{
-              fontFamily: T.mono, fontSize: 9, fontWeight: 600,
+              fontFamily: T.mono, fontSize: 11, fontWeight: 600,
               letterSpacing: 0.4, whiteSpace: 'nowrap',
               padding: '5px 10px', borderRadius: 999, cursor: 'pointer',
               background: active ? colors.bg : 'transparent',
@@ -449,11 +449,11 @@ function ArticleRow({ article, onToggleSave, onAsk }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
             <CategoryTag tag={article.categoryTag} />
             <span style={{
-              fontFamily: T.mono, fontSize: 10, color: T.inkFaint,
+              fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
               textTransform: 'uppercase', letterSpacing: 0.3, whiteSpace: 'nowrap',
             }}>{article.source}</span>
-            <span style={{ color: T.inkFaint, fontFamily: T.mono, fontSize: 10 }}>·</span>
-            <span style={{ fontFamily: T.mono, fontSize: 10, color: T.inkFaint }}>{article.score}</span>
+            <span style={{ color: T.inkFaint, fontFamily: T.mono, fontSize: 11 }}>·</span>
+            <span style={{ fontFamily: T.mono, fontSize: 11, color: T.inkFaint }}>{article.score}</span>
             {reaction && (
               <span style={{ display: 'flex', alignItems: 'center', marginLeft: 1 }}>
                 <Icon name={reaction.icon} size={11} color={reaction.color} strokeWidth={2}
@@ -502,7 +502,7 @@ function SavesRow({ article, onToggleSave, onAsk }: {
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <CategoryTag tag={article.categoryTag} />
             <span style={{
-              fontFamily: T.mono, fontSize: 10, color: T.inkFaint, letterSpacing: 0.3,
+              fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 0.3,
             }}>{article.dateLabel.split(' ')[0]}</span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
               <span style={{
@@ -512,7 +512,7 @@ function SavesRow({ article, onToggleSave, onAsk }: {
                 flexShrink: 0, display: 'inline-block',
               }} />
               <span style={{
-                fontFamily: T.mono, fontSize: 9, letterSpacing: 0.5,
+                fontFamily: T.mono, fontSize: 11, letterSpacing: 0.5,
                 color: synced ? T.positive : T.inkFaint, textTransform: 'uppercase',
               }}>{synced ? 'Notion' : '待同步'}</span>
             </span>
@@ -542,7 +542,7 @@ function ExpandedBody({ article, onToggleSave, onAsk, variant }: {
     }}>
       <p style={{
         fontFamily: T.serif, fontSize: 15, lineHeight: 1.52,
-        fontStyle: 'italic', color: T.inkMuted,
+        color: T.inkMuted,
         margin: '12px 0 10px',
       }}>{article.summary}</p>
 
@@ -550,12 +550,12 @@ function ExpandedBody({ article, onToggleSave, onAsk, variant }: {
 
       <div style={{ marginBottom: 12 }}>
         <div style={{
-          fontFamily: T.mono, fontSize: 9, fontWeight: 700,
-          color: T.inkFaint, letterSpacing: 1.5,
+          fontFamily: T.mono, fontSize: 11, fontWeight: 700,
+          color: T.inkFaint, letterSpacing: 1,
           textTransform: 'uppercase', marginBottom: 5,
         }}>Context</div>
         <p style={{
-          fontFamily: T.sans, fontSize: 13, lineHeight: 1.6,
+          fontFamily: T.sans, fontSize: 14, lineHeight: 1.6,
           color: T.ink, margin: 0,
         }}>{article.context}</p>
       </div>
@@ -566,8 +566,8 @@ function ExpandedBody({ article, onToggleSave, onAsk, variant }: {
         marginBottom: 10,
       }}>
         <div style={{
-          fontFamily: T.mono, fontSize: 8, fontWeight: 700,
-          color: T.accent, letterSpacing: 1.6, textTransform: 'uppercase',
+          fontFamily: T.mono, fontSize: 11, fontWeight: 700,
+          color: T.accent, letterSpacing: 1, textTransform: 'uppercase',
         }}>Engineering Impact</div>
         <p style={{
           fontFamily: T.sans, fontSize: 13, lineHeight: 1.5,
@@ -579,7 +579,7 @@ function ExpandedBody({ article, onToggleSave, onAsk, variant }: {
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, marginBottom: 14 }}>
           <span style={{ display: 'inline-flex', color: T.accent, marginTop: 1, flexShrink: 0 }}><IconSparkle size={12} /></span>
           <span style={{
-            fontFamily: T.sans, fontSize: 12, fontStyle: 'italic',
+            fontFamily: T.sans, fontSize: 13,
             color: T.accent, fontWeight: 500, lineHeight: 1.4,
           }}>{article.reason}</span>
         </div>
@@ -589,7 +589,7 @@ function ExpandedBody({ article, onToggleSave, onAsk, variant }: {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginBottom: 14 }}>
           {article.skillTags.map(t => (
             <span key={t} style={{
-              fontFamily: T.mono, fontSize: 9, color: T.inkFaint, letterSpacing: 0.3,
+              fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 0.3,
             }}>{t}</span>
           ))}
         </div>
@@ -623,7 +623,7 @@ function ExpandedBody({ article, onToggleSave, onAsk, variant }: {
           }}
           style={{
             display: 'flex', alignItems: 'center', gap: 5,
-            fontFamily: T.mono, fontSize: 10, fontWeight: 600,
+            fontFamily: T.mono, fontSize: 11, fontWeight: 600,
             letterSpacing: 0.5, textTransform: 'uppercase',
             padding: '7px 4px', cursor: 'pointer',
             background: 'transparent', color: T.inkMuted,
@@ -660,7 +660,7 @@ function ActionButton({ label, icon, filled, active, tone, onClick }: {
   return (
     <button onClick={onClick} style={{
       display: 'flex', alignItems: 'center', gap: 5,
-      fontFamily: T.mono, fontSize: 10, fontWeight: 600,
+      fontFamily: T.mono, fontSize: 11, fontWeight: 600,
       letterSpacing: 0.5, textTransform: 'uppercase',
       padding: '8px 13px', borderRadius: 999, cursor: 'pointer',
       background, color, border: `1px solid ${borderColor}`,
@@ -894,7 +894,7 @@ export default function Library() {
                 display: 'flex', alignItems: 'center', gap: 5,
                 background: 'none', border: 'none', cursor: 'pointer',
                 color: T.inkMuted, padding: 0,
-                fontFamily: T.mono, fontSize: 10, fontWeight: 600,
+                fontFamily: T.mono, fontSize: 11, fontWeight: 600,
                 letterSpacing: 0.5, textTransform: 'uppercase',
               }}
             >
@@ -918,14 +918,14 @@ export default function Library() {
                 background: 'none', border: 'none',
                 borderBottom: tab === t.id ? `2px solid ${T.accent}` : '2px solid transparent',
                 cursor: 'pointer',
-                fontFamily: T.mono, fontSize: 10, fontWeight: 700,
-                letterSpacing: 0.8, textTransform: 'uppercase',
+                fontFamily: T.mono, fontSize: 11, fontWeight: 700,
+                letterSpacing: 0.3, textTransform: 'uppercase',
                 color: tab === t.id ? T.ink : T.inkFaint,
                 transition: 'color 0.15s',
               }}>
                 {t.label}
                 <span style={{
-                  marginLeft: 5, fontFamily: T.mono, fontSize: 9,
+                  marginLeft: 5, fontFamily: T.mono, fontSize: 11,
                   color: tab === t.id ? T.accent : T.inkFaint,
                 }}>{t.count}</span>
               </button>
@@ -950,7 +950,7 @@ export default function Library() {
               ) : error ? (
                 <div style={{
                   padding: '40px 20px', textAlign: 'center',
-                  fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 1,
+                  fontFamily: T.mono, fontSize: 11, color: T.inkFaint, letterSpacing: 0,
                 }}>{error}</div>
               ) : articles.length === 0 ? (
                 <EmptyState type="noData" />
@@ -995,8 +995,8 @@ export default function Library() {
                         fontFamily: T.mono, fontSize: 14, fontWeight: 700, color: stat.color,
                       }}>{stat.value}</span>
                       <span style={{
-                        fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
-                        letterSpacing: 1, textTransform: 'uppercase',
+                        fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
+                        letterSpacing: 0.3, textTransform: 'uppercase',
                       }}>{stat.label}</span>
                     </div>
                   ))}

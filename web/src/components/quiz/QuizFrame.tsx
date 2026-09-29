@@ -105,7 +105,7 @@ export function QuizFrame({
 
       <div style={{
         padding: '10px 20px 0',
-        fontFamily: T.mono, fontSize: 9, letterSpacing: 2, textTransform: 'uppercase',
+        fontFamily: T.sans, fontSize: 12, letterSpacing: 0.3,
         color: T.inkFaint,
       }}>第 {index + 1} 題 · 共 {total} 題</div>
 
@@ -120,11 +120,11 @@ export function QuizFrame({
           <div style={{
             display: 'inline-block', background: T.accentSoft, color: T.accent,
             borderRadius: RADIUS.pill, padding: '5px 12px', marginBottom: 14,
-            fontFamily: T.mono, fontSize: 10, fontWeight: 700, letterSpacing: 1.2,
+            fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 1,
           }}>{category}</div>
 
           <h1 style={{
-            fontFamily: T.serif, fontSize: 26, lineHeight: 1.28, fontWeight: 700,
+            fontFamily: T.serif, fontSize: 24, lineHeight: 1.32, fontWeight: 700,
             color: T.ink, letterSpacing: -0.3, margin: 0,
           }}>{prompt}</h1>
 

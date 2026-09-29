@@ -28,8 +28,8 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
         <div style={{ width: 40, height: 4, borderRadius: 999, background: theme.accent, marginBottom: 24 }} />
 
         <div style={{
-          fontFamily: theme.mono, fontSize: 10, color: theme.inkFaint,
-          letterSpacing: 2, textTransform: 'uppercase', marginBottom: 10,
+          fontFamily: theme.mono, fontSize: 11, color: theme.inkFaint,
+          letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10,
         }}>End of edition · {dateStr}</div>
 
         <h1 style={{
@@ -62,8 +62,8 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
           }}>{streak}</div>
           <div style={{ flex: 1 }}>
             <div style={{
-              fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
-              letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2,
+              fontFamily: theme.mono, fontSize: 11, color: theme.inkFaint,
+              letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2,
             }}>Day streak</div>
             <div style={{
               fontFamily: theme.sans, fontSize: 13, color: theme.ink, fontWeight: 500,
@@ -85,7 +85,7 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
               padding: '14px 8px', textAlign: 'center',
             }}>
               <div style={{
-                fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
+                fontFamily: theme.mono, fontSize: 11, color: theme.inkFaint,
                 letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2,
               }}>{s.label}</div>
               <div style={{
@@ -93,7 +93,7 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
                 color: theme.ink, lineHeight: 1,
               }}>{s.value}</div>
               <div style={{
-                fontFamily: theme.sans, fontSize: 10, color: theme.inkMuted, marginTop: 2,
+                fontFamily: theme.sans, fontSize: 11, color: theme.inkMuted, marginTop: 2,
               }}>{s.unit}</div>
             </div>
           ))}
@@ -102,8 +102,8 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate }:
 
       {/* Footer — pinned at bottom of scroll area */}
       <div style={{
-        fontFamily: theme.mono, fontSize: 9, color: theme.inkFaint,
-        letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center',
+        fontFamily: theme.mono, fontSize: 11, color: theme.inkFaint,
+        letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center',
         flexShrink: 0,
       }}>— next edition · tomorrow 07:30 —</div>
     </div>

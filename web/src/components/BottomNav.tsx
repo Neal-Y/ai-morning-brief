@@ -57,7 +57,7 @@ export const BottomNav = forwardRef<HTMLElement, Props>(function BottomNav({ act
             >
               <TabGlyph id={tab.id} active={on} />
               <span style={{
-                fontFamily: T.sans, fontSize: 10, fontWeight: on ? 700 : 600,
+                fontFamily: T.sans, fontSize: 11, fontWeight: on ? 700 : 600,
                 letterSpacing: 0.2,
                 color: 'inherit',
               }}>{tab.label}</span>

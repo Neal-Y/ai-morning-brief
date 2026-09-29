@@ -15,7 +15,7 @@ export function CategoryTag({ tag, theme }: CategoryTagProps) {
     <span style={{
       display: 'inline-flex', alignItems: 'center', gap: 6,
       fontFamily: theme.mono,
-      fontSize: 10,
+      fontSize: 11,
       fontWeight: 600,
       letterSpacing: 0.6,
       textTransform: 'uppercase',
@@ -110,7 +110,7 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
       }}>
         <CategoryTag tag={article.categoryTag} theme={theme} />
         <span style={{
-          fontFamily: theme.mono, fontSize: 10, color: theme.inkFaint,
+          fontFamily: theme.mono, fontSize: 11, color: theme.inkFaint,
           textTransform: 'uppercase', letterSpacing: 0.5,
         }}>
           {article.source ?? ''}{article.publishedAgo ? ` · ${article.publishedAgo}` : ''}
@@ -118,7 +118,7 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
         <div style={{ flex: 1 }} />
         {article.renderLevel === 'LIGHT' && (
           <span style={{
-            fontFamily: theme.mono, fontSize: 9, fontWeight: 700,
+            fontFamily: theme.mono, fontSize: 11, fontWeight: 700,
             color: theme.accent, background: theme.accentSoft,
             padding: '3px 8px', borderRadius: 999,
             textTransform: 'uppercase', letterSpacing: 1,
@@ -150,7 +150,7 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
         <div style={{ padding: '0 20px 16px' }}>
           <p style={{
             fontFamily: theme.serif,
-            fontSize: 16.5, lineHeight: 1.45, fontWeight: 400, fontStyle: 'italic',
+            fontSize: 16.5, lineHeight: 1.5, fontWeight: 400,
             color: theme.inkMuted,
             margin: 0,
           }}>{article.summary}</p>
@@ -160,12 +160,12 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
 
         <div style={{ padding: '14px 20px 8px' }}>
           <div style={{
-            fontFamily: theme.mono, fontSize: 9, fontWeight: 600,
-            color: theme.inkFaint, letterSpacing: 1.5,
+            fontFamily: theme.mono, fontSize: 11, fontWeight: 600,
+            color: theme.inkFaint, letterSpacing: 1,
             textTransform: 'uppercase', marginBottom: 6,
           }}>Context</div>
           <p style={{
-            fontFamily: theme.sans, fontSize: 15, lineHeight: 1.55,
+            fontFamily: theme.sans, fontSize: 16, lineHeight: 1.6,
             color: theme.ink, margin: 0,
           }}>{article.context}</p>
         </div>
@@ -174,7 +174,7 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           <div style={{ padding: '4px 20px 14px', display: 'flex', alignItems: 'center', gap: 7, color: theme.accent }}>
             <span style={{ display: 'inline-flex', flexShrink: 0 }}><IconSparkle /></span>
             <span style={{
-              fontFamily: theme.sans, fontSize: 13, fontStyle: 'italic',
+              fontFamily: theme.sans, fontSize: 14,
               color: theme.accent, fontWeight: 500,
             }}>{article.reason}</span>
           </div>
@@ -184,7 +184,7 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           <div style={{ padding: '0 20px 12px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {article.skillTags.map(t => (
               <span key={t} style={{
-                fontFamily: theme.mono, fontSize: 10,
+                fontFamily: theme.mono, fontSize: 11,
                 color: theme.inkMuted,
                 letterSpacing: 0.3,
               }}>{t}</span>
@@ -202,12 +202,12 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           <div style={{
             display: 'flex', alignItems: 'center', gap: 6,
             color: theme.accent,
-            fontFamily: theme.mono, fontSize: 9, fontWeight: 700,
-            letterSpacing: 1.6,
+            fontFamily: theme.mono, fontSize: 11, fontWeight: 700,
+            letterSpacing: 1,
             textTransform: 'uppercase',
           }}><IconBolt />Engineering Impact</div>
           <p style={{
-            fontFamily: theme.sans, fontSize: 15, lineHeight: 1.5,
+            fontFamily: theme.sans, fontSize: 16, lineHeight: 1.55,
             color: theme.ink, margin: '8px 0 0', fontWeight: 500,
           }}>{article.engineeringImpact}</p>
         </div>

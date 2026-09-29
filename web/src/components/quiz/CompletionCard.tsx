@@ -47,7 +47,7 @@ export function CompletionCard({ correctCount, total, xpToday, bottomInset, onRe
             border: `1px solid ${T.ruleSoft}`, padding: '18px 8px', textAlign: 'center',
           }}>
             <div style={{ fontFamily: T.mono, fontSize: 22, fontWeight: 700, color: T.ink }}>{s.value}</div>
-            <div style={{ fontFamily: T.mono, fontSize: 10, color: T.inkMuted, marginTop: 6 }}>{s.label}</div>
+            <div style={{ fontFamily: T.mono, fontSize: 11, color: T.inkMuted, marginTop: 6 }}>{s.label}</div>
           </div>
         ))}
       </div>

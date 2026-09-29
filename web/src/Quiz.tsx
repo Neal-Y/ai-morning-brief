@@ -73,7 +73,7 @@ export default function Quiz() {
             <button
               onClick={load}
               style={{
-                fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 1,
+                fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
                 color: T.bg, background: T.accent, border: 'none',
                 borderRadius: 8, padding: '9px 22px', textTransform: 'uppercase',
               }}
