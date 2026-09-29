@@ -48,12 +48,12 @@ GitHub Actions cron — 兩條獨立 pipeline，錯開時間互不影響
        └─ db/quiz-writer.ts            # 寫入 quizzes table
 
 Hono API (src/api/app.ts → api/index.ts on Vercel) — read-only GET
-  ├─ GET  /api/feed?date=   # 從 Turso 讀當日文章
   ├─ GET  /api/library      # 全歷史 + feedback / saved / notionSynced + ask message_count 多表 JS-join（不撈 messages JSON），read-only no-store
   ├─ GET  /api/quiz         # 今日 quiz 題組
   └─ GET  /api/activity     # 學習紀錄：heatmap / streak / 正確率等統計（device_id 範圍）
 
 Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
+  ├─ GET      /api/feed          # api/feed.ts — 當日文章（2026-09-29 從 Hono 搬來 Edge：每天第一個請求，Node 冷啟動是載入慢的主因）
   ├─ POST     /api/ask           # api/ask.ts — Haiku 4.5 SSE streaming 追問（文章與 quiz 共用；quiz 用合成 articleId=`quiz-${id}`）
   ├─ GET/POST /api/ask-history   # api/ask-history.ts — per-(article, device) conversations 讀 / upsert messages JSON
   ├─ POST     /api/push-subscribe# api/push-subscribe.ts — 寫 push_subscriptions
@@ -90,7 +90,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | 功能 | 狀態 | 備註 |
 |---|---|---|
 | RSS → 分類 → 寫 Turso | ✅ | V1 遺留，穩定 |
-| Web Push 推播 | ✅ | 標題 = lead story title, body = 「Hard Tech AI／Signals」section labels |
+| Web Push 推播 | ✅ | 標題 = lead story title，body = lead 的 engineeringImpact + `今日 N 篇 · 還有 K 題判斷題等你` |
 | Turso DB 寫入 | ✅ | article id = SHA-256(url).slice(0,16)；client 用 `https://` 而非 `libsql://`（serverless friendly） |
 | Vercel 部署 | ✅ | `api/index.ts` (Hono read-only) + Edge：`ask` / `ask-history` / `push-subscribe` / `save` / `unsave` / `feedback` |
 | PWA 卡片 UI | ✅ | iPhone standalone 已穩定，細節見 `docs/FRONTEND_FIX_LOG.md` |
@@ -169,9 +169,10 @@ src/
   notion/client.ts    # raw fetch Notion REST API（createSavePage）
   db/schema.ts        # articles / feedback / saves / conversations / quizzes / quiz_attempts / push_subscriptions — feedback/saves/conversations/quiz_attempts/push_subscriptions 皆有 device_id 欄位
   db/client.ts        # libSQL client (https://) + getRecentFeedback() + getRecentQuizPrompts()
-  api/app.ts          # Hono app（GET /api/feed + /api/library + /api/quiz + /api/activity，全部 read-only）
+  api/app.ts          # Hono app（GET /api/library + /api/quiz + /api/activity，全部 read-only；/api/feed 已搬到 Edge）
   api/server.ts       # 本地 dev (port 3001)
 api/index.ts             # Vercel entry (hono/vercel handle)
+api/feed.ts              # Edge Runtime GET → Turso HTTP API（當日文章，回傳格式跟原 Hono/drizzle 一致：camelCase、score 數字、classifiedAt ISO）
 api/ask.ts               # Edge Runtime SSE for /api/ask（文章與 quiz 共用，quiz 用合成 articleId）
 api/ask-history.ts       # Edge Runtime GET/POST → Turso HTTP API（per-(article, device) conversations upsert / fetch）
 api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
@@ -326,8 +327,8 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
 - `/api/quiz-attempt` → `api/quiz-attempt.ts`（寫 `quiz_attempts`；`X-Device-Id` header 必填，缺就 400）
 - **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。
-- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/feed`、`/api/library`、`/api/quiz`、`/api/activity` 皆 GET）。
-- `vercel.json` 的 rewrite 順序：`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback`、`/api/quiz-attempt` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
+- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/library`、`/api/quiz`、`/api/activity` 皆 GET；`/api/feed` 2026-09-29 搬到 Edge 以避開 Node 冷啟動，不要在 Hono 補回一份）。
+- `vercel.json` 的 rewrite 順序：`/api/feed`、`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback`、`/api/quiz-attempt` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 
@@ -340,7 +341,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 **Web 前端 nav / Quiz+Activity port（2026-09-07）：**
 - 新頁面一律用 `useNavInset()`（`web/src/nav.ts`）拿 nav 高度，不要用 `env(safe-area-inset-bottom)` 猜——那個值在 JS 讀不到 px 數字，nav 高度是 `Shell.tsx` 量測後用 `NavInsetContext` 發佈的
 - bottom-docked 控制項要蓋過 nav 就疊 z-index，不要用 fixed footer 或 negative safe-area offset——這是 `docs/FRONTEND_FIX_LOG.md` Issue 6 的教訓，nav 本身也遵守同一條規則
-- `vite.config.ts` 把 Edge-only route（`ask` / `ask-history` / `save` / `unsave` / `feedback` / `quiz-attempt` / `push-subscribe`）proxy 到 prod Vercel，因為本地 Hono dev server 沒有這些 function；純 GET route（`feed` / `library` / `quiz` / `activity`）仍打 `localhost:3001`。**這代表本地 dev 的寫入操作（👍/🔖/quiz attempt）會真的寫進 prod Turso DB**——不是新風險（本地 API server 本來就讀寫同一顆 DB），但測試時要注意會留下真實資料
+- `vite.config.ts` 把 Edge-only route（`feed` / `ask` / `ask-history` / `save` / `unsave` / `feedback` / `quiz-attempt` / `push-subscribe`）proxy 到 prod Vercel，因為本地 Hono dev server 沒有這些 function；純 GET route（`library` / `quiz` / `activity`）仍打 `localhost:3001`。**這代表本地 dev 的寫入操作（👍/🔖/quiz attempt）會真的寫進 prod Turso DB**——不是新風險（本地 API server 本來就讀寫同一顆 DB），但測試時要注意會留下真實資料
 - Quiz port 沒加新 npm dependency：matching 題型的連接線是手刻 SVG bezier，不是新圖形庫
 - `web/src/theme.ts` 是唯一真理（authoritative）；quiz-only palette 放在 `web/src/components/quiz/tokens.ts`，從 `theme.ts` 衍生；改色從 `theme.ts` 改起，不要在元件裡寫死色碼——`app/src/theme.ts` 才是鏡像 web/ 的那一邊，方向不能反過來
 
@@ -354,7 +355,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - iOS Web Push **只在 standalone 模式下支援**（首頁捷徑開啟，不是 Safari 直接開網址）。所以 `App.tsx` 的 splash gate `permissionResolved` 初始判定要先過 `isStandalone()`。
 - `Notification.requestPermission()` 必須由 user gesture 觸發（按鈕 onClick），不能在 `useEffect` 內自動呼叫。
 - `Notification.permission` 已是 `granted` 時，App startup useEffect 會自動 call `completeSubscription()` 補寫 `push_subscriptions`（fire-and-forget，使用者無感）。
-- 當天有文章：通知標題 = `displayedItems[0].title`（lead story），body 兩行：第 1 行 = lead 文章的 `engineeringImpact`（讓 LLM 生的判斷上鎖屏，不只是頭條），第 2 行 = active section labels + 額外篇數（例：`Hard Tech AI · Signals · +2 篇`）。當天無文章：標題 = `AI Morning Brief {date}`、body = `今日無重大 AI 新聞`。
+- 當天有文章：通知標題 = `displayedItems[0].title`（lead story），body 兩行：第 1 行 = lead 文章的 `engineeringImpact`（讓 LLM 生的判斷上鎖屏，不只是頭條），第 2 行 = `今日 N 篇 · 還有 K 題判斷題等你`（K = min(5, 題庫數)，查題庫失敗就只留篇數，不影響推播；2026-09-29 從 section labels「Hard Tech AI · Signals · +2 篇」改掉，那行對要不要點開沒資訊）。當天無文章：標題 = `AI Morning Brief {date}`、body = `今日無重大 AI 新聞`。
 - 通知格式 2026-04-26 重做過一次：拿掉「from Sift」（icon 已表示來源）、`／` 改 `·`、釋出空間放 lead 的 `engineeringImpact`。看 `src/index.ts` Stage 6 的 comment，不要回退。
 
 ---

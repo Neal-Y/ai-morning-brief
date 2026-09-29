@@ -69,7 +69,7 @@ GitHub Actions cron — 兩條獨立 pipeline
        └─ db/quiz-writer.ts    寫入 quizzes table
 
 Hono API  (src/api/app.ts → api/index.ts on Vercel) — read-only
-  ├─ GET  /api/feed?date=      從 Turso 讀當日文章
+  ├─ GET  /api/feed?date=      api/feed.ts（Edge）— 當日文章
   ├─ GET  /api/library         歷史文章 + feedback/saves/ask count 狀態
   ├─ GET  /api/quiz            今日 quiz 題組
   └─ GET  /api/activity        學習紀錄：heatmap / streak / 正確率（device_id 範圍）
@@ -104,7 +104,7 @@ React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、
 | 3 Select | `src/index.ts` | 全部分類 → 3 篇（HARD_TECH ≤2, SIGNALS ≤1，不足補 filler）|
 | 4 Brief | `ai/brief.ts` | 3 篇 → `BriefResult`（summary / context / engineeringImpact）|
 | 5 Persist | `notify/db-writer.ts` | `BriefResult` → Turso upsert |
-| 6 Push | `notify/web-push.ts` | lead title + section labels → 所有訂閱者 |
+| 6 Push | `notify/web-push.ts` | lead title + engineeringImpact + 「今日 N 篇 · 還有 K 題判斷題等你」→ 訂閱者 |
 
 ### Database Schema（Turso / libSQL）
 

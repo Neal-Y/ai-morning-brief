@@ -8,15 +8,13 @@ import { classifyArticles, buildPreferenceContext } from './ai/classifier.js';
 import { generateBrief, buildDegradedBrief } from './ai/brief.js';
 import { sendWebPush } from './notify/web-push.js';
 import { writeArticlesToDB } from './notify/db-writer.js';
-import { db, getRecentFeedback } from './db/client.js';
+import { db, getRecentFeedback, getQuizPoolSize } from './db/client.js';
 import type { FeedbackRow } from './db/client.js';
 import { pushSubscriptions } from './db/schema.js';
 import { getTaipeiDateString } from './date.js';
 
-const BUCKET_LABEL: Record<string, string> = {
-  HARD_TECH_AI: 'Hard Tech AI',
-  IMPORTANT_AI_SIGNALS: 'Signals',
-}
+// Size of one quiz set on the client (web/src/api.ts fetchQuizzes default).
+const QUIZ_SET_SIZE = 5
 
 /** Adjust classification scores based on per-user feedback history. */
 function applyFeedbackBoost(
@@ -260,9 +258,13 @@ async function main(): Promise<void> {
   }
 
   // ── Stage 6: Push ────────────────────────────────────────────────────────
-  // Web Push composition (2026-04-26 redesign):
+  // Web Push composition (2026-04-26 redesign, second line 2026-09-29):
   //   title = lead story headline (the strongest reason to open)
-  //   body  = lead.engineeringImpact + section line with extras count
+  //   body  = lead.engineeringImpact + "今日 N 篇 · 還有 K 題判斷題等你"
+  // The second line used to be the bucket names ("Hard Tech AI · Signals"),
+  // which told the reader nothing; it now counts the brief and points at the
+  // quiz. The quiz half is best-effort: a failed pool lookup drops it, never
+  // the push.
   //
   // In per-user mode: each device gets a push built from THEIR lead article
   // (the top article from their personal selection), sent only to THEIR
@@ -271,17 +273,21 @@ async function main(): Promise<void> {
   //
   // Fallback (no device IDs or query failure): global push to all subscriptions.
 
+  let quizCount = 0
+  try {
+    quizCount = Math.min(QUIZ_SET_SIZE, await getQuizPoolSize())
+  } catch (err) {
+    console.warn('[web-push] Quiz pool lookup failed, omitting quiz line:', err instanceof Error ? err.message : err)
+  }
+
   function buildPushContent(userArticles: ClassifiedArticle[]): { title: string; body: string } {
     const lead = userArticles[0]
     const title = lead?.title ?? `AI Morning Brief ${date}`
     const teaser = lead ? (lead.classification.engineeringImpact || lead.classification.summary || '') : ''
-    const activeBuckets = [...new Set(userArticles.map((a) => a.classification.bucket))]
-    const activeSectionNames = activeBuckets.map((b) => BUCKET_LABEL[b] ?? b)
-    const extraCount = Math.max(0, userArticles.length - 1)
-    const sectionLine = extraCount > 0
-      ? `${activeSectionNames.join(' · ')} · +${extraCount} 篇`
-      : activeSectionNames.join(' · ')
-    const body = teaser ? `${teaser}\n${sectionLine}` : sectionLine
+    const parts = [userArticles.length > 0 ? `今日 ${userArticles.length} 篇` : '今日無重大 AI 新聞']
+    if (quizCount > 0) parts.push(`還有 ${quizCount} 題判斷題等你`)
+    const countLine = parts.join(' · ')
+    const body = teaser ? `${teaser}\n${countLine}` : countLine
     return { title, body }
   }
 

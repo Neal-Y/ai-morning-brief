@@ -20,8 +20,8 @@ npm run dev            # Vite dev (port 5173)
 
 `web/vite.config.ts` proxies two different targets depending on the route (2026-09-07):
 
-- `/api/feed`, `/api/library`, `/api/quiz`, `/api/activity` → `http://localhost:3001` (local Hono dev server, read-only GET)
-- `/api/ask`, `/api/ask-history`, `/api/save`, `/api/unsave`, `/api/feedback`, `/api/quiz-attempt`, `/api/push-subscribe` → `https://ai-morning-brief-chi.vercel.app` (these are Edge Runtime functions and only exist on Vercel; the local Hono server has no equivalent)
+- `/api/library`, `/api/quiz`, `/api/activity` → `http://localhost:3001` (local Hono dev server, read-only GET)
+- `/api/feed`, `/api/ask`, `/api/ask-history`, `/api/save`, `/api/unsave`, `/api/feedback`, `/api/quiz-attempt`, `/api/push-subscribe` → `https://ai-morning-brief-chi.vercel.app` (these are Edge Runtime functions and only exist on Vercel; the local Hono server has no equivalent)
 
 This means `cd web && npm run dev` alone (no `npm run dev:api` needed for POST routes) can exercise quiz answering, follow-ups, saving, and feedback. **Side effect on purpose: local 👍 / 🔖 / quiz attempts write to the production Turso DB.** This isn't new exposure — the local API server already reads/writes that same DB — but know that clicks during local dev are real rows, not sandboxed.
 
@@ -75,7 +75,7 @@ cd app && npx expo start --ios   # iOS Simulator
 vercel deploy
 ```
 
-`api/index.ts`（Hono read-only：`/api/feed`、`/api/library`、`/api/quiz`、`/api/activity`）+ `api/ask.ts` + `api/ask-history.ts` + `api/push-subscribe.ts` + `api/save.ts` + `api/unsave.ts` + `api/feedback.ts` + `api/quiz-attempt.ts`（皆 Edge Runtime）分別部署為 Vercel Functions。`web/` 為靜態 React PWA。
+`api/index.ts`（Hono read-only：`/api/library`、`/api/quiz`、`/api/activity`）+ `api/feed.ts` + `api/ask.ts` + `api/ask-history.ts` + `api/push-subscribe.ts` + `api/save.ts` + `api/unsave.ts` + `api/feedback.ts` + `api/quiz-attempt.ts`（皆 Edge Runtime）分別部署為 Vercel Functions。`web/` 為靜態 React PWA。
 
 `vercel.json` 的 rewrite 順序：所有 Edge endpoint 必須排在 `/api/:path* → /api/index` catch-all **前面**，否則會被吞進 Hono。
 

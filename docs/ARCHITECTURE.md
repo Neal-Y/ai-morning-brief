@@ -113,7 +113,7 @@ Single LLM call for all selected articles.
 
 ### Stage 6 — Web Push (`notify/web-push.ts`)
 
-Only fires after Stage 5 succeeds (strict serial order — see [../CLAUDE.md](../CLAUDE.md) Conventions). Title = lead story headline. Body line 1 = lead article's `engineeringImpact`. Body line 2 = active section labels + extra count (e.g. `Hard Tech AI · Signals · +2 篇`).
+Only fires after Stage 5 succeeds (strict serial order — see [../CLAUDE.md](../CLAUDE.md) Conventions). Title = lead story headline. Body line 1 = lead article's `engineeringImpact`. Body line 2 = `今日 N 篇 · 還有 K 題判斷題等你`, where K = min(5, quiz pool size). If the pool lookup fails the quiz half is dropped and the push still goes out. Before 2026-09-29 this line was the section labels (`Hard Tech AI · Signals · +2 篇`).
 
 ---
 
@@ -166,11 +166,16 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 
 ## API Contract
 
+### Edge GET
+
+| Route | Query params | Returns |
+|---|---|---|
+| `GET /api/feed` (`api/feed.ts`) | `date` (YYYY-MM-DD, default today in Taipei; anything else → 400) | `{ date, articles: RawArticle[] }`, the same shape the Hono/drizzle route returned. `Cache-Control` is `s-maxage=300, swr=300` when the day has articles and `s-maxage=30` when it is empty |
+
 ### Hono, read-only GET (`src/api/app.ts` → `api/index.ts` on Vercel)
 
 | Route | Query params | Returns |
 |---|---|---|
-| `GET /api/feed` | `date` (YYYY-MM-DD) | `{ date, articles: RawArticle[] }` |
 | `GET /api/library` | — | All-history articles JOINed with feedback/saves/notionSynced/ask-message-count (JS-join, no `messages` JSON) |
 | `GET /api/quiz` | `count`, `type` (comma list) | `RawQuizItem[]` |
 | `GET /api/activity` | — | `{ streak, heatmap, weekStats, recent, ... }`, scoped by `X-Device-Id` |

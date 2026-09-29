@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
-import { and, desc, eq, gte } from 'drizzle-orm'
+import { and, count, desc, eq, gte } from 'drizzle-orm'
 import * as schema from './schema.js'
 import { articles, feedback, quizzes } from './schema.js'
 
@@ -59,6 +59,12 @@ export async function getRecentFeedback(deviceId?: string): Promise<FeedbackRow[
 
 const QUIZ_DEDUP_WINDOW_DAYS = 30
 const QUIZ_DEDUP_MAX_ROWS = 60
+
+/** Total questions in the pool. /api/quiz recycles, so any non-empty pool serves a full set. */
+export async function getQuizPoolSize(): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(quizzes)
+  return row?.n ?? 0
+}
 
 /** Recent quiz prompts, used to steer the generator away from repeats. */
 export async function getRecentQuizPrompts(): Promise<string[]> {
