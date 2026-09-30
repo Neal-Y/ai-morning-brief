@@ -132,10 +132,18 @@ function useKeyboardFrame(sheetRef: React.RefObject<HTMLDivElement>, active: boo
   useEffect(() => {
     const vv = window.visualViewport
     if (!active || !vv) { setFrame(null); return }
+    // Baseline = the keyboard-free height. NOT window.innerHeight: iOS shrinks
+    // innerHeight together with the visual viewport when the keyboard opens,
+    // so innerHeight − vv.height stays ~0 and the keyboard was never detected
+    // (first real-device test, 2026-09-30). The layout viewport
+    // (documentElement.clientHeight) doesn't move with the keyboard; the
+    // tallest vv height seen while open backs it up.
+    let baseline = Math.max(document.documentElement.clientHeight, vv.height)
     const update = () => {
+      baseline = Math.max(baseline, vv.height)
       const host = sheetRef.current?.offsetParent as HTMLElement | null | undefined
       // A keyboard takes well over 120px; smaller deltas are toolbar/URL-bar noise.
-      if (!host || window.innerHeight - vv.height < 120) { setFrame(null); return }
+      if (!host || baseline - vv.height < 120) { setFrame(null); return }
       setFrame({ top: vv.offsetTop - host.getBoundingClientRect().top, height: vv.height })
     }
     update()
@@ -535,8 +543,10 @@ export function AskSheet({
         ? { top: keyboardFrame.top, height: keyboardFrame.height }
         : fullScreen ? { top: 0, bottom: 0 } : { bottom: 0, height: '82%' }),
       background: theme.card,
-      borderTopLeftRadius: fullScreen ? 0 : 24,
-      borderTopRightRadius: fullScreen ? 0 : 24,
+      // With the keyboard up every sheet reaches the top of the screen, so it
+      // takes the full-screen chrome (square corners, status-bar padding).
+      borderTopLeftRadius: fullScreen || keyboardFrame ? 0 : 24,
+      borderTopRightRadius: fullScreen || keyboardFrame ? 0 : 24,
       borderTop: fullScreen ? 'none' : `1px solid ${theme.glassEdge}`,
       overflow: 'hidden',
       transform: entered ? 'translateY(0)' : 'translateY(100%)',
@@ -546,14 +556,14 @@ export function AskSheet({
       display: 'flex', flexDirection: 'column',
       boxShadow: !fullScreen && entered ? '0 -16px 48px rgba(0,0,0,0.45)' : 'none',
     }}>
-      {!fullScreen && (
+      {!fullScreen && !keyboardFrame && (
         <div style={{ padding: '8px 0 2px', display: 'flex', justifyContent: 'center' }}>
           <div style={{ width: 36, height: 5, borderRadius: 999, background: 'rgba(160,190,220,0.25)' }} />
         </div>
       )}
 
       <div style={{
-        padding: fullScreen
+        padding: fullScreen || keyboardFrame
           ? 'calc(env(safe-area-inset-top, 0px) + 12px) 20px 12px'
           : '8px 20px 12px',
         borderBottom: `1px solid ${theme.ruleSoft}`,
