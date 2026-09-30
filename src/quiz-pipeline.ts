@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { loadConfig } from './config.js'
-import { selectProvider } from './ai/select-provider.js'
+import { fallbackProvider, selectProvider } from './ai/select-provider.js'
 import { generateQuizzes } from './quiz/generate.js'
 import { getRecentQuizPrompts, getReportedQuizzes } from './db/client.js'
 import { writeQuizzesToDB } from './db/quiz-writer.js'
@@ -18,7 +18,7 @@ async function main(): Promise<void> {
 
   console.log(`[quiz-pipeline] Generating ${QUIZ_COUNT} quizzes`)
 
-  const provider = selectProvider(config)
+  let provider = selectProvider(config)
   console.log(`[quiz-pipeline] Provider: ${provider.name}`)
 
   let recentPrompts: string[] = []
@@ -41,8 +41,17 @@ async function main(): Promise<void> {
   try {
     generated = await generateQuizzes(provider, recentPrompts, QUIZ_COUNT, reported)
   } catch (err) {
-    console.error('[quiz-pipeline] Generation failed:', err instanceof Error ? err.message : err)
-    process.exit(1)
+    console.error(`[quiz-pipeline] Generation failed on ${provider.name}:`, err instanceof Error ? err.message : err)
+    const fallback = fallbackProvider(config, provider)
+    if (!fallback) process.exit(1)
+    console.warn(`[quiz-pipeline] Falling back to ${fallback.name}`)
+    provider = fallback
+    try {
+      generated = await generateQuizzes(provider, recentPrompts, QUIZ_COUNT, reported)
+    } catch (err2) {
+      console.error(`[quiz-pipeline] Generation failed on ${provider.name} too:`, err2 instanceof Error ? err2.message : err2)
+      process.exit(1)
+    }
   }
 
   provider.logUsageSummary()

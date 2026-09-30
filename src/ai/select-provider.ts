@@ -4,6 +4,17 @@ import { AnthropicProvider } from './anthropic.js'
 import type { AIProvider } from './provider.js'
 import { getTaipeiDayOfYear } from '../date.js'
 
+/**
+ * The other provider, when its key is configured — used when the day's primary
+ * fails wholesale (2026-10-01: the OpenAI account ran out of credits and every
+ * classification 429'd). Null when there is nothing to fall back to.
+ */
+export function fallbackProvider(config: Config, primary: AIProvider): AIProvider | null {
+  if (primary.name === 'GPT' && config.anthropicApiKey) return new AnthropicProvider(config.anthropicApiKey)
+  if (primary.name === 'Claude' && config.openaiApiKey) return new OpenAIProvider(config.openaiApiKey)
+  return null
+}
+
 export function selectProvider(config: Config): AIProvider {
   // Single-provider mode
   if (config.aiProvider === 'openai') return new OpenAIProvider(config.openaiApiKey!)
