@@ -95,10 +95,13 @@ export function MatchingCard({ quiz, ...chrome }: Props) {
         const allLinked = Object.keys(links).length === quiz.left.length
         const confirm = () => {
           if (resolved || !allLinked) return
-          resolve(quiz.left.every((_, i) => {
-            const r = links[i]
-            return r !== undefined && right[r]!.originalIndex === i
-          }))
+          resolve(
+            quiz.left.every((_, i) => {
+              const r = links[i]
+              return r !== undefined && right[r]!.originalIndex === i
+            }),
+            quiz.left.map((l, i) => `${l} → ${right[links[i]!]!.value}`).join('\n'),
+          )
         }
 
         const colW = geom.w > 0 ? (geom.w - CHANNEL) / 2 : 0

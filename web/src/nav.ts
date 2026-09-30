@@ -3,6 +3,15 @@ import { createContext, useContext } from 'react'
 /** Height of the tappable nav row, excluding the bottom safe-area inset. */
 export const NAV_ROW_H = 54
 
+/**
+ * Dead strip between the tab row and the home indicator (2026-09-30). A swipe
+ * up to go home often started a few px above the indicator — right on 簡報 /
+ * Library, the two centre tabs — and pressed them instead. The strip is part
+ * of the nav's base (not tappable), so it raises the tabs without growing
+ * them toward the gesture zone.
+ */
+export const NAV_GESTURE_GAP = 10
+
 export type TabId = 'quiz' | 'feed' | 'library' | 'activity'
 
 export interface TabDef {

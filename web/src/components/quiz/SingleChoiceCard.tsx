@@ -25,7 +25,7 @@ export function SingleChoiceCard({ quiz, ...chrome }: Props) {
         const pick = (i: number) => {
           if (resolved) return
           setSelected(i)
-          resolve(i === quiz.correctIndex)
+          resolve(i === quiz.correctIndex, `${LETTERS[i] ?? i + 1}. ${quiz.options[i]}`)
         }
         const stateOf = (i: number): OptionState => {
           if (!resolved) return 'idle'

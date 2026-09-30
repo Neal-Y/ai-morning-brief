@@ -16,9 +16,27 @@ interface ApiMessage {
   content: string
 }
 
+/**
+ * Quiz follow-ups: what the model is allowed to know tracks the question's
+ * state. Before answering it gets the question + answer-free material only
+ * (api/ask.ts is told not to reveal the answer); once answered it also gets
+ * the user's answer, the key and the explanation.
+ */
+export interface QuizAskContext {
+  prompt: string
+  material: string
+  answered: boolean
+  correct?: boolean
+  yourAnswer?: string
+  correctAnswer?: string
+  explanation?: string
+}
+
 interface AskSheetProps {
   theme: Theme
   article: Article
+  /** Present when the sheet is asking about a quiz question, not an article. */
+  quiz?: QuizAskContext
   visible: boolean
   onClose: () => void
   fullScreen?: boolean
@@ -30,11 +48,108 @@ const INTRO_MESSAGE: Message = {
   text: '讀完這篇，有幾個後端工程師視角的追問想跟你聊：',
 }
 
-const SUGGESTIONS = [
-  '這跟競品比有什麼 trade-off？',
-  'production 導入，第一個要擔心什麼？',
-  '對我的 backend 架構影響最大的點是？',
+// Shown when per-article suggestions can't be generated (offline, API error).
+const FALLBACK_SUGGESTIONS = [
+  '這件事對後端工程師實際的影響是？',
+  '如果要導入，第一個要擔心什麼？',
 ]
+
+function quizIntro(q: QuizAskContext): string {
+  if (!q.answered) return '還沒作答也可以問，我不會直接講答案：'
+  return q.correct ? '答對了。想再挖深一點可以問：' : '這題哪裡卡住？可以從這裡開始：'
+}
+
+function quizSuggestions(q: QuizAskContext): string[] {
+  if (!q.answered) return ['給我一個提示，先別講答案', '這題在考什麼觀念？']
+  if (q.correct) return ['什麼情況下答案會不一樣？', '實務上哪裡會踩到這個？']
+  const mine = q.yourAnswer && !q.yourAnswer.includes('\n') && q.yourAnswer.length <= 28
+    ? `我選「${q.yourAnswer}」為什麼不對？`
+    : '我的答案錯在哪裡？'
+  return [mine, '用一個實際例子解釋正確答案']
+}
+
+// Article suggestions are generated per article by api/ask.ts (mode: 'suggest')
+// and cached per article, so each article costs at most one small Haiku call.
+const SUGGEST_CACHE_PREFIX = 'mb_ask_suggest_'
+
+function readCachedSuggestions(articleId: string): string[] | null {
+  try {
+    const raw = localStorage.getItem(SUGGEST_CACHE_PREFIX + articleId)
+    const parsed = raw ? JSON.parse(raw) as unknown : null
+    return Array.isArray(parsed) && parsed.every(s => typeof s === 'string') && parsed.length > 0
+      ? parsed as string[]
+      : null
+  } catch {
+    return null
+  }
+}
+
+function useArticleSuggestions(article: Article, enabled: boolean): string[] | null {
+  const [suggestions, setSuggestions] = useState<string[] | null>(() => readCachedSuggestions(article.id))
+
+  useEffect(() => {
+    const cached = readCachedSuggestions(article.id)
+    setSuggestions(cached)
+    if (cached || !enabled) return
+    let cancelled = false
+    apiFetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mode: 'suggest',
+        articleTitle: article.title,
+        articleSummary: article.summary,
+        articleContext: article.context,
+      }),
+    })
+      .then(r => r.ok ? r.json() as Promise<{ suggestions?: unknown }> : Promise.reject(new Error(`HTTP ${r.status}`)))
+      .then(({ suggestions: s }) => {
+        if (cancelled) return
+        const list = Array.isArray(s) ? s.filter((x): x is string => typeof x === 'string' && x.length > 0).slice(0, 3) : []
+        if (list.length === 0) throw new Error('empty suggestions')
+        try { localStorage.setItem(SUGGEST_CACHE_PREFIX + article.id, JSON.stringify(list)) } catch { /* quota */ }
+        setSuggestions(list)
+      })
+      .catch(() => { if (!cancelled) setSuggestions(FALLBACK_SUGGESTIONS) })
+    return () => { cancelled = true }
+  }, [article.id, enabled])
+
+  return suggestions
+}
+
+/**
+ * iOS standalone doesn't shrink the layout when the keyboard opens — it
+ * scrolls the page so the input is visible, which pushed the sheet's header
+ * (and the question) off the top. While the keyboard is up, pin the sheet to
+ * the visual viewport instead: top = where the visible area starts, height =
+ * what's left above the keyboard. Only the modal sheet does this; the app
+ * shell keeps its CSS layout (FRONTEND_FIX_LOG Issue 6 rejected sizing the
+ * shell from visualViewport).
+ */
+function useKeyboardFrame(sheetRef: React.RefObject<HTMLDivElement>, active: boolean) {
+  const [frame, setFrame] = useState<{ top: number; height: number } | null>(null)
+
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!active || !vv) { setFrame(null); return }
+    const update = () => {
+      const host = sheetRef.current?.offsetParent as HTMLElement | null | undefined
+      // A keyboard takes well over 120px; smaller deltas are toolbar/URL-bar noise.
+      if (!host || window.innerHeight - vv.height < 120) { setFrame(null); return }
+      setFrame({ top: vv.offsetTop - host.getBoundingClientRect().top, height: vv.height })
+    }
+    update()
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+      setFrame(null)
+    }
+  }, [active, sheetRef])
+
+  return frame
+}
 
 function AssistantMarkdown({ text, theme }: { text: string; theme: Theme }) {
   return (
@@ -150,6 +265,7 @@ function historyToMessages(history: ApiMessage[]): Message[] {
 export function AskSheet({
   theme,
   article,
+  quiz,
   visible,
   onClose,
   fullScreen = false,
@@ -168,6 +284,16 @@ export function AskSheet({
   const flushFrameRef = useRef<number | null>(null)
   const activeRequestRef = useRef<AbortController | null>(null)
   const historyLoadedArticleRef = useRef<string | null>(null)
+  const sheetRef = useRef<HTMLDivElement>(null)
+  const [contextExpanded, setContextExpanded] = useState(false)
+  const keyboardFrame = useKeyboardFrame(sheetRef, visible)
+  const hasConversation = messages.some(m => m.role === 'user')
+  // Only generate once history has loaded and turned out empty — a thread with
+  // history never shows suggestions, so don't pay for them.
+  const articleSuggestions = useArticleSuggestions(
+    article,
+    visible && !quiz && !hasConversation && !historyLoading && historyLoadedArticleRef.current === article.id,
+  )
 
   const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
     const el = messageListRef.current
@@ -267,6 +393,7 @@ export function AskSheet({
     setInput('')
     setLoading(false)
     setHistoryLoading(false)
+    setContextExpanded(false)
     historyLoadedArticleRef.current = null
     shouldStickToBottomRef.current = true
   }, [article.id])
@@ -302,7 +429,17 @@ export function AskSheet({
 
   if (!mounted) return null
 
-  const hasConversation = messages.some(m => m.role === 'user')
+  // Quiz suggestions follow the question's state, so they stay available mid-
+  // thread (e.g. ask for a hint, answer wrong, then "why was mine wrong?").
+  // Article suggestions only open an empty thread.
+  const asked = new Set(messages.filter(m => m.role === 'user').map(m => m.text))
+  const suggestions = quiz
+    ? (loading ? [] : quizSuggestions(quiz).filter(s => !asked.has(s)))
+    : hasConversation ? [] : articleSuggestions
+  // Once a thread exists its opener stays put rather than rewriting history.
+  const introText = quiz
+    ? (hasConversation ? '關於這題：' : quizIntro(quiz))
+    : INTRO_MESSAGE.text
 
   const sendMessage = async (text: string) => {
     if (loading || historyLoading || !text.trim()) return
@@ -328,6 +465,7 @@ export function AskSheet({
           articleTitle: article.title,
           articleSummary: article.summary,
           articleContext: article.context,
+          ...(quiz ? { quiz } : {}),
           messages: newApiHistory,
         }),
       })
@@ -386,13 +524,16 @@ export function AskSheet({
   }
 
   return (
-    <div style={{
+    <div ref={sheetRef} style={{
       position: 'absolute',
-      left: 0, right: 0, bottom: 0,
-      // fullScreen fills the host layer (top+bottom pinned) rather than
-      // assuming 100dvh: inside the quiz frame the host is shorter than the
-      // dynamic viewport, and a fixed 100dvh pushed the header off-screen.
-      ...(fullScreen ? { top: 0 } : { height: '82%' }),
+      left: 0, right: 0,
+      // Keyboard up: occupy exactly the visible area above it (useKeyboardFrame).
+      // Otherwise fullScreen fills the host layer (top+bottom pinned) rather
+      // than assuming 100dvh: inside the quiz frame the host is shorter than
+      // the dynamic viewport, and a fixed 100dvh pushed the header off-screen.
+      ...(keyboardFrame
+        ? { top: keyboardFrame.top, height: keyboardFrame.height }
+        : fullScreen ? { top: 0, bottom: 0 } : { bottom: 0, height: '82%' }),
       background: theme.card,
       borderTopLeftRadius: fullScreen ? 0 : 24,
       borderTopRightRadius: fullScreen ? 0 : 24,
@@ -426,8 +567,10 @@ export function AskSheet({
           <div style={{
             fontFamily: theme.serif, fontSize: 14, color: theme.ink,
             fontWeight: 600,
-            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-          }}>{article.title}</div>
+            // Two lines: one line cut most titles mid-thought.
+            display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}>{quiz ? '追問這題' : article.title}</div>
         </div>
         <button className="btn-press" aria-label="關閉" onClick={onClose} style={{
           background: theme.raised, border: 'none', borderRadius: 999,
@@ -438,6 +581,55 @@ export function AskSheet({
           cursor: 'pointer',
         }}>✕</button>
       </div>
+
+      {quiz && (
+        // Pinned outside the scrolling thread, so the question stays in view
+        // while typing. Collapsed to three lines; tap to see all of it plus
+        // (once answered) your answer next to the key.
+        <button
+          onClick={() => setContextExpanded(v => !v)}
+          aria-expanded={contextExpanded}
+          style={{
+            display: 'block', width: '100%', textAlign: 'left',
+            background: theme.raised, border: 'none',
+            borderBottom: `1px solid ${theme.ruleSoft}`,
+            padding: '12px 20px', cursor: 'pointer',
+            maxHeight: contextExpanded ? '45%' : undefined,
+            overflowY: contextExpanded ? 'auto' : 'hidden',
+            flexShrink: 0,
+          }}
+        >
+          <div style={{
+            fontFamily: theme.sans, fontSize: 14, lineHeight: 1.5, color: theme.ink, fontWeight: 600,
+            ...(contextExpanded ? {} : {
+              display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+            }),
+          }}>{quiz.prompt}</div>
+          {quiz.answered && !contextExpanded && (
+            <div style={{
+              marginTop: 6, fontFamily: theme.sans, fontSize: 12,
+              color: quiz.correct ? theme.positive : theme.negative,
+            }}>{quiz.correct ? '✓ 你答對了' : '✕ 你答錯了'} · 點開看答案</div>
+          )}
+          {contextExpanded && quiz.answered && (
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {quiz.yourAnswer && (
+                <ContextLine theme={theme} label="你的答案" text={quiz.yourAnswer}
+                  color={quiz.correct ? theme.positive : theme.negative} />
+              )}
+              {!quiz.correct && quiz.correctAnswer && (
+                <ContextLine theme={theme} label="正確答案" text={quiz.correctAnswer} color={theme.positive} />
+              )}
+            </div>
+          )}
+          {contextExpanded && !quiz.answered && quiz.material && (
+            <div style={{
+              marginTop: 10, fontFamily: theme.sans, fontSize: 13, lineHeight: 1.55,
+              color: theme.inkMuted, whiteSpace: 'pre-wrap',
+            }}>{quiz.material}</div>
+          )}
+        </button>
+      )}
 
       <div
         ref={messageListRef}
@@ -483,15 +675,22 @@ export function AskSheet({
               overflowWrap: 'anywhere',
             }}>
               {m.role === 'assistant'
-                ? <AssistantMarkdown text={m.text} theme={theme} />
+                ? <AssistantMarkdown text={m === INTRO_MESSAGE ? introText : m.text} theme={theme} />
                 : m.text}
             </div>
           )
         })}
 
-        {!hasConversation && (
+        {!historyLoading && (suggestions === null || suggestions.length > 0) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 4 }}>
-            {SUGGESTIONS.map((s, i) => (
+            {suggestions === null && [0, 1, 2].map(i => (
+              // Placeholder while this article's suggestions are generated (~1s).
+              <div key={i} style={{
+                height: 42, borderRadius: 14, background: theme.raised,
+                animation: `askShimmer 1.2s ease-in-out ${i * 0.12}s infinite`,
+              }} />
+            ))}
+            {suggestions?.map((s, i) => (
               <button key={i} onClick={() => sendMessage(s)} style={{
                 textAlign: 'left',
                 background: theme.raised,
@@ -512,7 +711,9 @@ export function AskSheet({
       <div style={{
         borderTop: `1px solid ${theme.ruleSoft}`,
         padding: '10px 14px',
-        paddingBottom: 'calc(10px + env(safe-area-inset-bottom))',
+        // The keyboard covers the home-indicator band, so drop the safe-area
+        // padding while it's up.
+        paddingBottom: keyboardFrame ? 10 : 'calc(10px + env(safe-area-inset-bottom))',
         display: 'flex', gap: 8,
       }}>
         <input
@@ -542,6 +743,20 @@ export function AskSheet({
           }}
         >SEND</button>
       </div>
+    </div>
+  )
+}
+
+function ContextLine({ theme, label, text, color }: {
+  theme: Theme; label: string; text: string; color: string
+}) {
+  return (
+    <div>
+      <div style={{ fontFamily: theme.mono, fontSize: 11, color, marginBottom: 2 }}>{label}</div>
+      <div style={{
+        fontFamily: theme.sans, fontSize: 13, lineHeight: 1.55, color: theme.inkMuted,
+        whiteSpace: 'pre-wrap',
+      }}>{text}</div>
     </div>
   )
 }
