@@ -69,6 +69,8 @@ cd app && npx expo start --ios   # iOS Simulator
 
 手動觸發：Actions → 對應 workflow → Run workflow
 
+**試跑（dry run）**：AI Morning Brief 的 Run workflow 有 `dry_run` 勾選框。勾了就只抓文章 + 分類，在 log 印出每篇的分數、bucket、工程影響和「會選哪幾篇」，不寫 DB、不推播（仍會花一次 classifier 的 LLM 費用）。新增 RSS 來源後用它確認網址抓得到（抓不到會在 log 看到 `[rss] Failed to fetch <name>`）。
+
 **為什麼是 07:07 / 05:47 而不是整點（2026-09-30）**：GitHub Actions 的 schedule 是 best-effort，整點和半點是最多人排的時段，塞車時會延後甚至跳過。原本 `30 23 * * *`（07:30）在 2026-08-22~26 大多只晚 10–15 分，但 08-27~29 晚了 5–7 小時（12:34 / 14:58 / 12:12 才跑）。改到非整點能降低延遲，但不保證準時；如果還是常晚，下一步是用外部排程（例如 cron-job.org）打 GitHub API 的 `workflow_dispatch`，代價是要把一組有 `actions:write` 權限的 token 放到第三方。
 
 另外 2026-08-29 ~ 09-29 兩個 workflow 都被手動停用（使用者覺得選文篩選不夠好，想之後再處理），所以這段期間沒有簡報、也沒有推播——不是排程壞掉。Actions 頁面看到的空窗就是這個。

@@ -29,12 +29,14 @@ Both write to the same Turso DB. Neither reads the other's tables. Either can fa
 1. Filter: `pubDate` within the last 24h.
 2. Keyword scoring: positive keywords (llm/gpu/inference/distributed/...) add, negative keywords (event/conference/survey/funding/...) subtract. Weights: `KEYWORD_WEIGHTS` in `config.ts`.
 3. `PREFILTER_MIN_SCORE = -2` — below this, discard before it ever reaches the LLM.
+3a. Cross-source dedupe (`dedupeStories`, 2026-09-30). Two items are the same story when they have the same canonical URL (host+path, query/hash dropped), or when their titles share ≥3 tokens (Latin words minus stopwords, CJK bigrams) covering ≥70% of the shorter title. The survivor is the higher source tier (`primary` > `technical` > `broad`), then the higher keyword score, so a vendor's own post beats the rewrite.
 4. If nothing survives: send an empty-day Web Push ("今日無重大 AI 新聞") and exit 0 — this is a normal outcome, not a failure.
 
 ### Stage 2 — Classifier (`ai/classifier.ts`)
 
 - One LLM call per article, `CLASSIFIER_CONCURRENCY = 3` in flight (free-tier Anthropic/OpenAI TPM headroom).
-- Top `CLASSIFIER_CAP` articles by prefilter score are sent (cost lever — see README Cost section).
+- Selection for the classifier (`pickForClassifier`, 2026-09-30): each source first gets its top `PER_SOURCE_CLASSIFIER_MIN = 2` by keyword score, then the best-scoring leftovers fill up to `CLASSIFIER_CAP = 24` (cost lever, see README Cost section). The old rule was top-N by keyword score only. It let generic words decide, and cut low-text sources (HN titles, short blog titles) before the LLM saw them.
+- The classifier sees the title, source, URL and the first 800 characters of the snippet (was 500).
 - One article failing does not abort the run — it falls back to bucket `DROP` (not a silent promotion; see [../CLAUDE.md](../CLAUDE.md) Key Design Decisions).
 - Preference context (`buildPreferenceContext()`, near-30-day feedback) is appended at the **end** of the system prompt, never the start/middle — preserves the Anthropic cache prefix across days. Cold-start threshold: 10 rows. Per-category negative signal needs ≥2 👎 to count.
 
@@ -91,12 +93,14 @@ interface ArticleClassification {
 nonDrop  = articles where bucket != DROP AND renderLevel != OMIT
 hardTech = nonDrop HARD_TECH_AI, sorted by score desc, take ≤ HARD_TECH_MAX (2)
 signals  = nonDrop IMPORTANT_AI_SIGNALS, sorted by score desc, take ≤ max(SIGNALS_MAX, BRIEF_MAX - len(hardTech))
-fillers  = if hardTech + signals < BRIEF_MAX: top-scoring DROP articles,
-           overridden → bucket=IMPORTANT_AI_SIGNALS, renderLevel=LIGHT, recommendation=SKIM
-selected = (hardTech + signals + fillers)[:BRIEF_MAX]   // always fills to BRIEF_MAX = 3
+selected = (hardTech + signals)[:BRIEF_MAX]   // may be < 3 on a quiet day; 0 → empty-day push, no DB write
 ```
 
-Constants (`config.ts`): `HARD_TECH_MAX=2`, `SIGNALS_MAX=1`, `BRIEF_MAX=3`, `CLASSIFIER_CONCURRENCY=3`, `CLASSIFIER_CAP=12`.
+Constants (`config.ts`): `HARD_TECH_MAX=2`, `SIGNALS_MAX=1`, `BRIEF_MAX=3`, `CLASSIFIER_CONCURRENCY=3`, `CLASSIFIER_CAP=24`, `PER_SOURCE_CLASSIFIER_MIN=2`.
+
+DROP fillers were removed on 2026-09-30. They used to top the brief up to 3 with articles the classifier had rejected, relabelled as Signals, and were the main source of irrelevant articles in the brief.
+
+`DRY_RUN=1` (the workflow_dispatch `dry_run` input on `daily_sync.yml`) stops after selection. It prints every classification plus the would-be brief, and skips brief generation, the DB write and Web Push. Use it to judge selection changes on real data.
 
 ### Stage 4 — Brief Generator (`ai/brief.ts`)
 

@@ -202,7 +202,7 @@ URL:
 ${sanitize(article.link)}
 
 CONTENT:
-${sanitize(article.contentSnippet).slice(0, 500)}`;
+${sanitize(article.contentSnippet).slice(0, 800)}`;
 }
 
 const VALID_CATEGORIES = new Set<string>([

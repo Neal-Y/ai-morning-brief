@@ -302,7 +302,9 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 **Pipeline / DB：**
 - Classifier concurrency 上限 3（Anthropic free-tier TPM）
 - Selection caps：`HARD_TECH_MAX=2`, `SIGNALS_MAX=1`, `BRIEF_MAX=3`
-- Filler logic：若 HARD_TECH + SIGNALS < 3，top-scoring DROP 補位（renderLevel → LIGHT）
+- **沒有 filler（2026-09-30 拿掉）**：HARD_TECH + SIGNALS 不足 3 篇就少於 3 篇，0 篇就發「今日無重大 AI 新聞」且不寫 DB。以前會拿 DROP 的文章改標 Signals 補滿，是「怎麼會出現這篇」的主因，不要加回來
+- 送進 classifier 前：跨來源去重（同 URL 或標題高度重疊，留 tier 高的）→ 每個來源保底 2 篇 → 其餘依關鍵字分數補到 `CLASSIFIER_CAP=24`。來源分三層 `primary`（OpenAI / DeepMind / Cloudflare / AWS ML 一手部落格）> `technical` > `broad`；The Verge 已移除
+- 調整選文邏輯後先用試跑驗證：Actions → AI Morning Brief → Run workflow → 勾 `dry_run`（只分類＋印出會選哪幾篇，不寫 DB、不推播）
 - Pipeline 順序固定是 brief → DB persist → Web Push。Web Push 是 PWA 入口，不可在 DB 寫入成功前送出。
 - Infra 錯誤不送 Web Push：RSS 全掛、config/provider 錯誤、DB 寫入失敗、Web Push 全部發送失敗都要 `exit(1)`，讓 GitHub Actions failed；Actions log 是錯誤診斷 source of truth。
 - DB upsert 一律用 `onConflictDoUpdate`（用 `onConflictDoNothing` 會讓 count log 誤報）

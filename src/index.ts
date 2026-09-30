@@ -1,7 +1,7 @@
 import 'dotenv/config'
 import { isNotNull } from 'drizzle-orm';
-import { loadConfig, CLASSIFIER_CAP, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
-import { getTodaysArticles } from './rss/feed.js';
+import { loadConfig, CLASSIFIER_CAP, PER_SOURCE_CLASSIFIER_MIN, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
+import { getTodaysArticles, pickForClassifier } from './rss/feed.js';
 import type { AIProvider, ClassifiedArticle } from './ai/provider.js';
 import { selectProvider } from './ai/select-provider.js';
 import { classifyArticles, buildPreferenceContext } from './ai/classifier.js';
@@ -61,26 +61,11 @@ function selectForUser(
     .sort(byScore)
     .slice(0, signalsMax)
 
-  const primaryCount = hardTech.length + signals.length
-  const fillerCount = BRIEF_MAX - primaryCount
-  const fillers: ClassifiedArticle[] =
-    fillerCount > 0
-      ? reranked
-          .filter((a) => a.classification.bucket === 'DROP')
-          .sort(byScore)
-          .slice(0, fillerCount)
-          .map((a) => ({
-            ...a,
-            classification: {
-              ...a.classification,
-              bucket: 'IMPORTANT_AI_SIGNALS' as const,
-              renderLevel: 'LIGHT' as const,
-              recommendation: 'SKIM' as const,
-            },
-          }))
-      : []
-
-  return [...hardTech, ...signals, ...fillers].slice(0, BRIEF_MAX)
+  // No DROP fillers (removed 2026-09-30). They used to top the brief up to
+  // BRIEF_MAX with articles the classifier itself rejected, relabelled as
+  // Signals — the main source of "why is this here?" days. A quiet news day
+  // now yields a shorter brief.
+  return [...hardTech, ...signals].slice(0, BRIEF_MAX)
 }
 
 async function main(): Promise<void> {
@@ -135,10 +120,8 @@ async function main(): Promise<void> {
   console.log(`[main] Provider: ${provider.name}`);
 
   // ── Stage 2: Per-article LLM classifier (parallel) ───────────────────────
-  // Sort by keyword score desc and cap before sending to LLM — saves ~50% classifier tokens.
-  const toClassify = [...prefiltered]
-    .sort((a, b) => b.score - a.score)
-    .slice(0, CLASSIFIER_CAP);
+  // Per-source quota, then best keyword scores, capped (bounds classifier cost).
+  const toClassify = pickForClassifier(prefiltered, CLASSIFIER_CAP, PER_SOURCE_CLASSIFIER_MIN);
   console.log(`[main] Sending top ${toClassify.length}/${prefiltered.length} articles to classifier`);
 
   // Load recent feedback for preference context. Empty string if below threshold
@@ -235,6 +218,34 @@ async function main(): Promise<void> {
   const globalHardTech = selected.filter((a) => a.classification.bucket === 'HARD_TECH_AI').length
   const globalSignals = selected.filter((a) => a.classification.bucket === 'IMPORTANT_AI_SIGNALS').length
   console.log(`[main] Selected ${globalHardTech} HARD_TECH + ${globalSignals} SIGNALS for brief (total ${selected.length})`);
+
+  if (process.env['DRY_RUN'] === '1') {
+    // Inspect selection quality on real data without touching the DB or
+    // anyone's phone. Triggered from the workflow_dispatch `dry_run` input.
+    console.log('\n[dry-run] Classified (score · bucket · category · source · title):')
+    for (const a of [...allClassified].sort((x, y) => y.classification.score - x.classification.score)) {
+      const c = a.classification
+      console.log(`  ${String(c.score).padStart(3)} · ${c.bucket.padEnd(20)} · ${c.category.padEnd(19)} · ${a.source} · ${a.title}`)
+      console.log(`        ↳ ${c.engineeringImpact}`)
+    }
+    console.log('\n[dry-run] Would publish:')
+    selected.forEach((a, i) => console.log(`  ${i + 1}. [${a.classification.bucket}] ${a.title} (${a.source})`))
+    console.log('[dry-run] Skipping brief generation, DB write and Web Push.')
+    process.exit(0)
+  }
+
+  if (selected.length === 0) {
+    // Quiet day: nothing cleared the classifier. Same notice as the no-articles
+    // path; nothing is written, so the PWA keeps showing its empty state.
+    console.log('[main] No article cleared the classifier — sending empty-day notice')
+    try {
+      await sendWebPush(`AI Morning Brief ${date}`, '今日無重大 AI 新聞')
+    } catch (err) {
+      console.error('[web-push] Empty-day notice failed:', err instanceof Error ? err.message : err)
+      process.exit(1)
+    }
+    process.exit(0)
+  }
 
   // ── Stage 4: Brief generator LLM ─────────────────────────────────────────
   const brief = await generateBrief(provider, selected, date).catch((err) => {
