@@ -801,6 +801,25 @@ Picked from three mocked-up directions (design canvas, option A):
 - Playwright at 390×844 @2x with mocked API: Feed (idle + saved), Ask sheet, Quiz resolved-wrong state, Library expanded row, Activity. No page errors.
 - 2026-09-29: the user checked the installed iPhone PWA (the acceptance target for anything touching bottom chrome, Issue 6) after the prod deploy and found no problems.
 
+
+## Issue 19: Ordering quiz — tap-to-swap → drag; quiz progress reset on tab switch (2026-09-30)
+
+**Symptoms**
+1. Users complained the ordering question "can't be dragged" — tap-one-then-tap-another swap wasn't discoverable, and a full reorder took many swaps.
+2. Leave the Quiz tab on question 3, come back: the progress read "1/5". `main.tsx` unmounts `Quiz` on every tab switch; remounting refetched `/api/quiz`, which serves **unattempted** questions first, so question 3 became item 0 and two new questions were appended (the day's set silently grew to 7, and XP reset).
+
+**Fix**
+- `OrderingCard.tsx` → `DragList`: whole-row press-and-drag on Pointer Events, no dependency. A ≡ grip hints it. Tap-to-swap removed (having both needs tap-vs-drag disambiguation).
+  - Rows are `touch-action: none` (a finger on a row always drags, never scrolls QuizFrame). This is safe because `quiz/generate.ts` now caps ordering at 5 items, so the list fits on screen.
+  - The lifted row follows the finger through a direct `style.transform`. React re-renders only when the target slot changes, and the other rows then slide out of the way.
+  - Row midpoints are measured once at drag start. Rows wrap to different heights, so no fixed row height is assumed.
+  - `setPointerCapture`; single pointer only; 6px slop before a press counts as a drag.
+  - `pointercancel` / `lostpointercapture` drop the row back without committing. iOS sends cancel, not up, when a system gesture interrupts.
+  - On drop, transitions are disabled for one frame. Otherwise the shift-transform reset animates on top of the DOM reorder and rows slide a second slot.
+- `Quiz.tsx`: today's quizzes + index + results persist in localStorage `mb_quiz_session`, keyed by Taipei date. On mount it restores instead of refetching; the next day it is ignored. This also survives iOS killing the standalone PWA. A half-finished answer on the current question is not saved; that question restarts.
+
+**Verification**: Playwright (390×844, touch). One drag used real CDP touch events (pointerType touch), and the rest used the mouse. The list sorted correctly and resolved ✓ with +20 XP. After answering Q1, a Quiz → Feed → Quiz round-trip and a full reload both still read 「第 2 題」, with no extra `/api/quiz` fetch. **Needs a real iPhone check** for drag feel.
+
 ---
 
 ## What Was Intentionally Not Changed
