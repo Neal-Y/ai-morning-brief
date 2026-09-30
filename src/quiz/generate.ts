@@ -98,7 +98,9 @@ function isValidPayload(type: QuizType, payload: Record<string, unknown>): boole
     }
     case 'ordering': {
       const items = payload['items']
-      return Array.isArray(items) && items.length >= 3 && items.every((i) => typeof i === 'string' && i.length > 0)
+      // Capped at 5: the web ordering card drags within one screen (touch-action: none
+      // on rows), so a longer list would push rows off-screen with no way to scroll.
+      return Array.isArray(items) && items.length >= 3 && items.length <= 5 && items.every((i) => typeof i === 'string' && i.length > 0)
     }
     case 'matching': {
       const left = payload['left']

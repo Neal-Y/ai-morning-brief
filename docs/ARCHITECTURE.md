@@ -132,11 +132,12 @@ One LLM call, `QUIZ_COUNT = 5` questions per run, free mix of 4 types:
 | Type | Payload shape | Answer key |
 |---|---|---|
 | `single_choice` | `{ options: string[4], correctIndex: 0-3 }` | `correctIndex` |
-| `ordering` | `{ items: string[3-5] }` | array order **is** the answer — client shuffles for display |
+| `ordering` | `{ items: string[3-5] }` | array order **is** the answer — client shuffles for display. The validator enforces the 5-item cap (the web card drags within one screen) |
 | `matching` | `{ left: string[], right: string[] }` | `right[i]` matches `left[i]` by index — client shuffles `right` |
 | `fill_blank` | `{ template: string, blanks: string[], wordBank: string[] }` | template has `{{0}}`, `{{1}}`... placeholders; `wordBank` = blanks + distractors, shuffled client-side |
 
 - Dedup: `getRecentQuizPrompts()` pulls recent question prompts (window/row-count capped by `QUIZ_DEDUP_WINDOW_DAYS`/`QUIZ_DEDUP_MAX_ROWS` in `config.ts`), appended at the **end** of `QUIZ_SYSTEM` as an "AVOID REPEATING" block — same cache-prefix-preserving technique as the classifier's preference context. Do not move it to the start/middle.
+- Web client keeps today's set + progress in localStorage `mb_quiz_session` (keyed by Taipei date), so leaving the Quiz tab doesn't refetch — a refetch would reshuffle the set, since `/api/quiz` serves unattempted questions first.
 - Every generated item is validated (`isValidPayload`) before being accepted — malformed items are dropped with a `console.warn`, not silently coerced. If the whole batch validates to 0 items, the pipeline throws (retried once via `withRetry`, then fails the GitHub Actions run).
 - Output language: Traditional Chinese for question text, options, explanations. English retained only for established technical terms.
 

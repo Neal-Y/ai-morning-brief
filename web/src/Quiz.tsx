@@ -6,6 +6,7 @@ import { loadQuizzes, type Quiz as QuizItem } from './quiz/types.ts'
 import { QuizCard } from './components/quiz/QuizCard.tsx'
 import { CompletionCard } from './components/quiz/CompletionCard.tsx'
 import { XP } from './components/quiz/tokens.ts'
+import { getTaipeiDateString } from './date.ts'
 
 const T = THEME_DARK
 
@@ -14,11 +15,43 @@ type LoadState =
   | { status: 'error' }
   | { status: 'ready'; quizzes: QuizItem[] }
 
+// Today's set + progress survive leaving the tab (Quiz unmounts on every tab
+// switch) and iOS killing the standalone PWA. Without this, coming back
+// refetched /api/quiz, which serves unattempted questions first — so question
+// 3 came back as "1/5" with two new questions appended and XP reset to zero.
+const SESSION_KEY = 'mb_quiz_session'
+
+interface QuizSession {
+  date: string
+  quizzes: QuizItem[]
+  index: number
+  results: boolean[]
+}
+
+function readSession(): QuizSession | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY)
+    if (!raw) return null
+    const s = JSON.parse(raw) as QuizSession
+    if (s.date !== getTaipeiDateString() || !Array.isArray(s.quizzes) || s.quizzes.length === 0) return null
+    if (!Number.isInteger(s.index) || s.index < 0 || !Array.isArray(s.results)) return null
+    return s
+  } catch {
+    return null
+  }
+}
+
+function writeSession(s: QuizSession) {
+  try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)) } catch { /* private mode / quota */ }
+}
+
 export default function Quiz() {
   const navInset = useNavInset()
-  const [state, setState] = useState<LoadState>({ status: 'loading' })
-  const [index, setIndex] = useState(0)
-  const [results, setResults] = useState<boolean[]>([])
+  const [restored] = useState(readSession)
+  const [state, setState] = useState<LoadState>(() =>
+    restored ? { status: 'ready', quizzes: restored.quizzes } : { status: 'loading' })
+  const [index, setIndex] = useState(() => restored?.index ?? 0)
+  const [results, setResults] = useState<boolean[]>(() => restored?.results ?? [])
   const [streak, setStreak] = useState(0)
 
   const load = () => {
@@ -33,11 +66,17 @@ export default function Quiz() {
   }
 
   useEffect(() => {
-    load()
+    if (!restored) load()
     // Real streak from /api/activity — never a hardcoded constant. If the call
     // fails it reads 0 rather than showing a number that isn't true.
     fetchActivity().then(a => setStreak(a.streak)).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (state.status === 'ready') {
+      writeSession({ date: getTaipeiDateString(), quizzes: state.quizzes, index, results })
+    }
+  }, [state, index, results])
 
   const quizzes = state.status === 'ready' ? state.quizzes : []
   const total = quizzes.length
