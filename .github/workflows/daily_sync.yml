@@ -6,6 +6,11 @@ on:
     # 2026-08-27~29 曾晚 5–7 小時才跑（見 docs/DEPLOY.md）
     - cron: '7 23 * * *'
   workflow_dispatch: # 手動觸發用於測試
+    inputs:
+      dry_run:
+        description: '試跑：只抓文章 + 分類，印出會選哪幾篇；不寫 DB、不推播'
+        type: boolean
+        default: false
 
 jobs:
   brief:
@@ -36,3 +41,4 @@ jobs:
           VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}

@@ -24,7 +24,7 @@ export interface ArticleSummary {
   pubDate: string;
   contentSnippet: string;
   source: string;
-  sourceTier: 'broad' | 'technical';
+  sourceTier: 'broad' | 'technical' | 'primary';
   score: number;
 }
 

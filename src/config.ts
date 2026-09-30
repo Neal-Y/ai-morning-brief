@@ -1,5 +1,8 @@
 export type ProviderName = 'openai' | 'anthropic' | 'alternate';
-type SourceTier = 'broad' | 'technical';
+// primary   = first-party vendor/engineering blogs (the announcement itself)
+// technical = engineering-grade secondary coverage
+// broad     = general AI media (business/consumer heavy, lowest prior)
+export type SourceTier = 'broad' | 'technical' | 'primary';
 
 export interface RssSource {
   name: string;
@@ -18,11 +21,6 @@ const BROAD_SOURCES: ReadonlyArray<RssSource> = [
   {
     name: 'TechCrunch AI',
     url: 'https://techcrunch.com/category/artificial-intelligence/feed/',
-    tier: 'broad',
-  },
-  {
-    name: 'The Verge AI',
-    url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml',
     tier: 'broad',
   },
   {
@@ -61,16 +59,41 @@ const TECHNICAL_SOURCES: ReadonlyArray<RssSource> = [
   },
 ];
 
+// First-party sources (added 2026-09-30) — the announcement itself instead of
+// a reposted summary. They post rarely (0–2/day), so they rely on the
+// per-source classifier quota below to always reach the LLM.
+// NOT verified from the dev container (egress blocked) — verify with a
+// DRY_RUN workflow run (see docs/DEPLOY.md). A dead feed only logs a warning.
+// Anthropic has no official RSS feed, so it is not listed.
+const PRIMARY_SOURCES: ReadonlyArray<RssSource> = [
+  { name: 'OpenAI News', url: 'https://openai.com/news/rss.xml', tier: 'primary' },
+  { name: 'Google DeepMind', url: 'https://deepmind.google/blog/rss.xml', tier: 'primary' },
+  { name: 'Cloudflare Blog', url: 'https://blog.cloudflare.com/rss/', tier: 'primary' },
+  { name: 'AWS Machine Learning', url: 'https://aws.amazon.com/blogs/machine-learning/feed/', tier: 'primary' },
+];
+
+// The Verge AI was removed 2026-09-30: consumer/product coverage that the
+// classifier DROPped almost every day while taking classifier slots.
 export const RSS_SOURCES: ReadonlyArray<RssSource> = Object.freeze([
   ...BROAD_SOURCES,
   ...TECHNICAL_SOURCES,
+  ...PRIMARY_SOURCES,
 ]);
 
 export const WINDOW_HOURS = 24;
 // Both OpenAI and Anthropic free-tier TPM limit is ~30k tokens/min.
 // Concurrency 5 hits the limit consistently — 3 stays safely under.
 export const CLASSIFIER_CONCURRENCY = 3;
-export const CLASSIFIER_CAP = 18;      // top-N by keyword score sent to LLM classifier
+export const CLASSIFIER_CAP = 24;      // max articles sent to the LLM classifier (cost bound)
+// Every source gets its top-N (by keyword score) into the classifier before the
+// rest compete globally, so low-keyword sources (HN titles, Simon Willison,
+// vendor blogs) aren't cut before the LLM ever sees them.
+export const PER_SOURCE_CLASSIFIER_MIN = 2;
+// Two titles are the same story when they share ≥3 tokens and the shared
+// tokens cover ≥70% of the shorter title (overlap coefficient). Jaccard was
+// too strict: rewrites add words ("OpenAI launches X" vs "Introducing X").
+export const DUPLICATE_TITLE_OVERLAP = 0.7;
+export const DUPLICATE_TITLE_MIN_SHARED = 3;
 export const HARD_TECH_MAX = 2;        // max articles from HARD_TECH_AI bucket
 export const SIGNALS_MAX = 1;          // max articles from IMPORTANT_AI_SIGNALS bucket
 export const BRIEF_MAX = 3;            // hard cap: number of articles per brief
@@ -91,7 +114,7 @@ export const KEYWORD_WEIGHTS: Readonly<Record<string, number>> = Object.freeze({
   benchmark: 3,
   latency: 3,
   throughput: 3,
-  ai: 2,
+  ai: 1,                 // appears in nearly every item — near-zero signal
   'machine learning': 2,
   'deep learning': 2,
   transformer: 2,

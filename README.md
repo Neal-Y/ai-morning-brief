@@ -26,7 +26,7 @@ Classifier 每次選文前會讀取近 30 天的 👍👎 回饋作為偏好 con
 
 ### 3. 成本被當成設計約束
 
-啟用 prompt caching、classifier 每日上限 12 篇（`CLASSIFIER_CAP` 可線性調整成本）、GPT-4o 與 Claude Sonnet 4.6 按台北日期奇偶輪替（分散單一供應商 rate limit 與依賴風險），全系統年成本控制在 **~$40–45**。`CLASSIFIER_CONCURRENCY=3` 是 free-tier Anthropic TPM 的安全邊際。完整拆解見 [Cost](#cost)。
+啟用 prompt caching、classifier 每日上限 24 篇（`CLASSIFIER_CAP` 可線性調整成本；每個來源保底 2 篇）、GPT-4o 與 Claude Sonnet 4.6 按台北日期奇偶輪替（分散單一供應商 rate limit 與依賴風險），全系統年成本控制在 **~$40–45**。`CLASSIFIER_CONCURRENCY=3` 是 free-tier Anthropic TPM 的安全邊際。完整拆解見 [Cost](#cost)。
 
 ### 4. 錯誤邊界與執行順序硬編碼
 
@@ -101,7 +101,7 @@ React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、
 |-------|------|-------------|
 | 1 Feed | `rss/feed.ts` | RSS feeds → `ArticleSummary[]`（過濾 + 打分）|
 | 2 Classify | `ai/classifier.ts` | top 12 篇 → `ClassifiedArticle[]`（bucket / renderLevel / score）|
-| 3 Select | `src/index.ts` | 全部分類 → 3 篇（HARD_TECH ≤2, SIGNALS ≤1，不足補 filler）|
+| 3 Select | `src/index.ts` | 全部分類 → 最多 3 篇（HARD_TECH ≤2, SIGNALS ≤1；不足就少給，不用被判 DROP 的文章補）|
 | 4 Brief | `ai/brief.ts` | 3 篇 → `BriefResult`（summary / context / engineeringImpact）|
 | 5 Persist | `notify/db-writer.ts` | `BriefResult` → Turso upsert |
 | 6 Push | `notify/web-push.ts` | lead title + engineeringImpact + 「今日 N 篇 · 還有 K 題判斷題等你」→ 訂閱者 |
@@ -142,7 +142,7 @@ React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、
 | claude-sonnet-4-6 | $3.00 | $15.00 | $0.30（cache_control opt-in）|
 | claude-haiku-4-5 | $0.80 | $4.00 | $0.08（cache_control opt-in）|
 
-調整 `src/config.ts` 的 `CLASSIFIER_CAP`（預設 12）可線性控制 classifier 成本。
+調整 `src/config.ts` 的 `CLASSIFIER_CAP`（目前 24；2026-09-30 從 18 調高，classifier 成本約 +33%）可線性控制 classifier 成本。
 
 ---
 
