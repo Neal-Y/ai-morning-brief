@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { THEME_DARK } from './theme.ts'
 import { useNavInset } from './nav.ts'
-import { fetchActivity, type ActivityData } from './api.ts'
+import { fetchActivity, fetchWeekly, readCache, writeCache, type ActivityData, type WeeklyData } from './api.ts'
 import { StatCard } from './components/activity/StatCard.tsx'
 import { Heatmap } from './components/activity/Heatmap.tsx'
-import { WeekPie } from './components/activity/WeekPie.tsx'
+import { WeeklyReview } from './components/activity/WeeklyReview.tsx'
 import { Q } from './components/quiz/tokens.ts'
 import { IconFlame, StatChip } from './components/icons.tsx'
 
@@ -14,22 +14,26 @@ const EMPTY_HEATMAP: number[][] = Array.from({ length: 52 }, () => Array(7).fill
 
 export default function Activity() {
   const navInset = useNavInset()
-  const [data, setData] = useState<ActivityData | null>(null)
+  // Stale-while-revalidate: the last copy renders on the first frame, both
+  // requests refresh it in parallel. The weekly review is an Edge function
+  // (api/weekly.ts) so it isn't held up by the Node cold start.
+  const [data, setData] = useState<ActivityData | null>(() => readCache<ActivityData>('activity'))
+  const [weekly, setWeekly] = useState<WeeklyData | null>(() => readCache<WeeklyData>('weekly'))
   const [error, setError] = useState(false)
 
   useEffect(() => {
     let cancelled = false
     fetchActivity()
-      .then(d => { if (!cancelled) setData(d) })
+      .then(d => { if (!cancelled) setData(d); writeCache('activity', d) })
       .catch(() => { if (!cancelled) setError(true) })
+    fetchWeekly()
+      .then(w => { if (!cancelled) setWeekly(w); writeCache('weekly', w) })
+      .catch(() => {})
     return () => { cancelled = true }
   }, [])
 
   const streak = data?.streak ?? 0
   const weekTotal = data?.weekStats.total ?? 0
-  const accuracy = weekTotal > 0
-    ? Math.round((data!.weekStats.correct / weekTotal) * 100)
-    : 0
   const recent = data?.recent ?? []
 
   return (
@@ -66,30 +70,12 @@ export default function Activity() {
               <StatCard value={data.totalCorrect} label="累計答對" delay={160} />
             </div>
 
-            <Section label="本週組成">
-              <WeekPie
-                segments={[
-                  { label: '答對', value: data.weekStats.correct, color: Q.correct },
-                  { label: '答錯', value: data.weekStats.wrong, color: Q.wrong },
-                ]}
-                total={weekTotal}
-              />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12 }}>
-                <div style={{
-                  flex: 1, height: 5, borderRadius: 3, background: Q.track, overflow: 'hidden',
-                }}>
-                  <div style={{
-                    height: '100%', borderRadius: 3, background: T.accent,
-                    width: `${accuracy}%`,
-                    transition: 'width 0.8s cubic-bezier(0.22,1,0.36,1)',
-                  }} />
-                </div>
-                <span style={{
-                  fontFamily: T.mono, fontSize: 11, color: T.inkMuted,
-                  width: 76, textAlign: 'right',
-                }}>正確率 {accuracy}%</span>
+            {weekly && (
+              // Replaces the old 本週組成 pie: same week, plus what to do about it.
+              <div style={{ padding: '14px 20px 0' }}>
+                <WeeklyReview data={weekly} />
               </div>
-            </Section>
+            )}
 
             <Section label="Activity · 過去一年">
               <Heatmap data={data.heatmap ?? EMPTY_HEATMAP} />

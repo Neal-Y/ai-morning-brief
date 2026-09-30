@@ -43,10 +43,11 @@ GitHub Actions cron — 兩條獨立 pipeline，錯開時間互不影響
   │    ├─ ai/brief.ts                 # brief generator（一次 LLM call）
   │    ├─ notify/db-writer.ts         # upsert 文章到 Turso（成功後才推播）
   │    └─ notify/web-push.ts          # 對 push_subscriptions 全表發 Web Push
-  └─ quiz_sync.yml（05:47 台北）→ src/quiz-pipeline.ts       # quiz pipeline（不依賴文章）
+  ├─ quiz_sync.yml（05:47 台北）→ src/quiz-pipeline.ts       # quiz pipeline（不依賴文章）
        ├─ db/client.getRecentQuizPrompts # 讀近期已出過的題目 prompt，防重複
        ├─ quiz/generate.ts             # LLM 出題（single_choice / ordering / matching / fill_blank 混出）
        └─ db/quiz-writer.ts            # 寫入 quizzes table
+  └─ reminder_sync.yml（15:53 台北）→ src/reminder.ts          # 下午提醒：只推給今天還沒讀/答題的裝置，帶 streak，點了開 /quiz
 
 Hono API (src/api/app.ts → api/index.ts on Vercel) — read-only GET
   ├─ GET  /api/library      # 全歷史 + feedback / saved / notionSynced + ask message_count 多表 JS-join（不撈 messages JSON），read-only no-store
@@ -61,7 +62,9 @@ Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
   ├─ POST     /api/save          # api/save.ts — 查 article + Notion dedupe（Article ID lookup + DB sync lock）+ upsert saves
   ├─ POST     /api/feedback      # api/feedback.ts — up/down（delete-then-insert，同 articleId 只留最新）
   ├─ POST     /api/unsave        # api/unsave.ts — 硬刪除 saves row（DELETE；不動 articles、不動 Notion page）
-  └─ POST     /api/quiz-attempt  # api/quiz-attempt.ts — 寫入 quiz_attempts（quizId / deviceId / correct）
+  ├─ POST     /api/quiz-attempt  # api/quiz-attempt.ts — 寫入 quiz_attempts（quizId / deviceId / correct）
+  ├─ POST     /api/quiz-report   # api/quiz-report.ts — 回報爛題（quiz_reports，表由此處 CREATE TABLE IF NOT EXISTS 自建）
+  └─ GET      /api/weekly        # api/weekly.ts — 本週回顧（一次 Turso pipeline，紀錄頁用）
 
 React PWA (web/) — 主力 client（2026-09-07 起，四分頁），仍是 Web Push 入口
   ├─ Shell.tsx + BottomNav.tsx  # 常駐 bottom nav：extended root 內的 absolute layer，nav.ts 量測高度供 useNavInset()
@@ -109,9 +112,10 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | 學習紀錄 / Activity | ✅ | `GET /api/activity`：年度 heatmap、週 pie、streak、正確率，皆以 device_id 為範圍。2026-09-29 起 streak / heatmap 同時計入閱讀（feedback）與答題；週統計與 recent 仍只算答題。web `Activity.tsx` 與 app `ActivityScreen.tsx` 吃同一支 API |
 | 多使用者支援 | ✅ | `device_id` 貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts；web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，**兩邊不共用、沒有遷移**，每次 fetch 帶 `X-Device-Id` |
 | Quiz 追問 | ✅ 問答 + 歷史（存本機） | `/api/ask` streaming 正常（不吃 articleId）；「用合成 `articleId=quiz-${id}` 掛進 conversations」從沒真的動起來——`ask-history.ts` 的 hex regex + FK 會擋掉。所以 quiz 對話歷史改存 client 本機、不進 DB：web/ 2026-09-07 用 localStorage，app/ 2026-09-29 用 AsyncStorage（之前 app/ 端把 400 吞掉，封測期間歷史都沒存到）。見 Key Design Decision #8 |
-| 晨間 Recall Quiz（排程推播提醒去答題）| ⏳ 未做 | Quiz 生成本身已上線，但「排程通知去答題」這層還沒做 |
+| 下午提醒推播 | ✅ | 2026-09-30：`reminder_sync.yml` 15:53 台北跑 `src/reminder.ts`，只推給「今天沒有 feedback 也沒有 quiz_attempts」的訂閱裝置；streak ≥ 2 時文案帶連續天數；payload 帶 `url: '/quiz'`，`sw.js` 點擊後開題目頁（已開著就 postMessage 讓 app 內 navigate）。全部推失敗 → exit(1) |
+| 回報爛題 | ✅ | 2026-09-30：題目頁「回報」→ `POST /api/quiz-report`（答案有誤 / 題意不清 / 太簡單 / 其他）；被回報的題 `/api/quiz` 對所有人排除，出題 prompt 尾端加「AVOID THESE MISTAKES」。回報後可「跳過這題」（不記 attempt，results 存 null） |
 | Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
-| 週報 | ⏳ 未做 | |
+| 每週回顧 | ✅ | 2026-09-30：紀錄頁「本週回顧」卡（活躍天數 / 讀幾篇 / 答幾題 / 正確率對上週 / 最常卡住分類 / 這週答錯的題 / 這週收藏），資料來自 Edge `GET /api/weekly`；紀錄頁、題目頁 streak 走 localStorage 快取先顯示再背景更新（`mb_cache_*`）；讀完簡報會背景預抓今日題組（`web/src/quiz/session.ts`） |
 
 ---
 
@@ -123,7 +127,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
    - RSS 源擴充：Anthropic news / OpenAI blog / Cloudflare blog / AWS ML blog。上線前要 `curl` 驗證 URL 仍有效
    - Skill-tag 產出（`skillTags` classifier 還沒產）：Library filter chip 第三維度
    - 不要做：AWS What's New（firehose）、Google AI Blog（行銷腔）、各家 changelog feeds（太細粒度）
-2. **晨間 Recall Quiz**（排程通知提醒去答題）：Quiz 生成本身已上線，這層還沒做
+2. ~~晨間 Recall Quiz~~：2026-09-30 做成下午 4 點提醒推播（見功能狀態）
 3. **Notion 整合**：維持現狀，不主動投資、不拆——已串好且 sunk cost，使用者不會回頭看，優先度最低
 4. **Classifier 偏好 v2**（feedback 累積夠久再評估，不要提早優化）
 5. **Sift → EAS Build / TestFlight**：延後，不是取消。等 web PWA 用量提高、或有明確理由需要原生 app（push 可靠度、離線）再撿回來
@@ -182,6 +186,10 @@ api/save.ts              # Edge Runtime POST → Notion dedupe (DB notion_page_i
 api/feedback.ts          # Edge Runtime POST → Turso HTTP API（delete-then-insert feedback）
 api/unsave.ts            # Edge Runtime POST → Turso HTTP API（硬刪除 saves row；不動 articles、不動 Notion page）
 api/quiz-attempt.ts      # Edge Runtime POST → Turso HTTP API（寫 quiz_attempts，device_id 必填）
+api/quiz-report.ts       # Edge Runtime POST → 回報爛題（lazy CREATE TABLE quiz_reports + upsert）
+api/weekly.ts            # Edge Runtime GET → 本週回顧（一次 Turso pipeline 三條 SQL）
+src/reminder.ts          # 下午提醒推播入口（reminder_sync.yml）
+src/streak.ts            # computeStreak()，/api/activity 與 reminder 共用
 vercel.json
 web/
   index.html
@@ -332,7 +340,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/quiz-attempt` → `api/quiz-attempt.ts`（寫 `quiz_attempts`；`X-Device-Id` header 必填，缺就 400）
 - **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。
 - **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/library`、`/api/quiz`、`/api/activity` 皆 GET；`/api/feed` 2026-09-29 搬到 Edge 以避開 Node 冷啟動，不要在 Hono 補回一份）。
-- `vercel.json` 的 rewrite 順序：`/api/feed`、`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback`、`/api/quiz-attempt` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
+- `vercel.json` 的 rewrite 順序：`/api/feed`、`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback`、`/api/quiz-attempt`、`/api/quiz-report`、`/api/weekly` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 
@@ -359,7 +367,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - iOS Web Push **只在 standalone 模式下支援**（首頁捷徑開啟，不是 Safari 直接開網址）。所以 `App.tsx` 的 splash gate `permissionResolved` 初始判定要先過 `isStandalone()`。
 - `Notification.requestPermission()` 必須由 user gesture 觸發（按鈕 onClick），不能在 `useEffect` 內自動呼叫。
 - `Notification.permission` 已是 `granted` 時，App startup useEffect 會自動 call `completeSubscription()` 補寫 `push_subscriptions`（fire-and-forget，使用者無感）。
-- 當天有文章：通知標題 = `displayedItems[0].title`（lead story），body 兩行：第 1 行 = lead 文章的 `engineeringImpact`（讓 LLM 生的判斷上鎖屏，不只是頭條），第 2 行 = `今日 N 篇 · 還有 K 題判斷題等你`（K = min(5, 題庫數)，查題庫失敗就只留篇數，不影響推播；2026-09-29 從 section labels「Hard Tech AI · Signals · +2 篇」改掉，那行對要不要點開沒資訊）。當天無文章：標題 = `AI Morning Brief {date}`、body = `今日無重大 AI 新聞`。
+- 當天有文章：通知標題 = `displayedItems[0].title`（lead story），body 兩行：第 1 行 = lead 文章的 `engineeringImpact`（讓 LLM 生的判斷上鎖屏，不只是頭條），第 2 行 = `今日 N 篇 · 還有 K 題判斷題等你`（K = min(5, 題庫數)，查題庫失敗就只留篇數，不影響推播；2026-09-29 從 section labels「Hard Tech AI · Signals · +2 篇」改掉，那行對要不要點開沒資訊）。當天無文章：標題 = `Sift · {date}`（2026-09-30 品牌統一前是 `AI Morning Brief {date}`）、body = `今日無重大 AI 新聞`。
 - 通知格式 2026-04-26 重做過一次：拿掉「from Sift」（icon 已表示來源）、`／` 改 `·`、釋出空間放 lead 的 `engineeringImpact`。看 `src/index.ts` Stage 6 的 comment，不要回退。
 
 ---

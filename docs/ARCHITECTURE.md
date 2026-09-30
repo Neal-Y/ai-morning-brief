@@ -119,6 +119,14 @@ Single LLM call for all selected articles.
 
 Only fires after Stage 5 succeeds (strict serial order — see [../CLAUDE.md](../CLAUDE.md) Conventions). Title = lead story headline. Body line 1 = lead article's `engineeringImpact`. Body line 2 = `今日 N 篇 · 還有 K 題判斷題等你`, where K = min(5, quiz pool size). If the pool lookup fails the quiz half is dropped and the push still goes out. Before 2026-09-29 this line was the section labels (`Hard Tech AI · Signals · +2 篇`).
 
+### Afternoon reminder (`src/reminder.ts`, `reminder_sync.yml`, 15:53 Taipei)
+
+A separate job, not part of the article pipeline. It targets subscribed devices with **no** `feedback` row and **no** `quiz_attempts` row since Taipei midnight, so anyone who already read or answered today is never reminded.
+- **Copy:** leads with the streak through yesterday (`src/streak.ts`, the same function as `/api/activity`) when it is ≥ 2.
+- **Tap target:** the payload carries `url: '/quiz'`. `sw.js` opens that path, or posts `{type:'navigate'}` to an already-open window, which `main.tsx` routes in-app.
+- **Failure:** if every push fails, the job exits 1.
+- **Dry run:** the `dry_run` input logs recipients and copy without sending.
+
 ---
 
 ## Quiz pipeline
@@ -169,6 +177,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 | `quizzes` | `type`, `category`, `prompt`, `payload` (JSON, shape per `type`), `explanation` | No `deviceId` — quizzes are global, like articles |
 | `quiz_attempts` | `quizId` fk, `deviceId`, `correct` | One row per attempt (no unique constraint — a user can retry and log multiple attempts on the same quiz) |
 | `push_subscriptions` | `endpoint` unique, `p256dh`, `auth`, `deviceId` | Web Push subscription |
+| `quiz_reports` | `quizId`, `deviceId`, `reason` ('wrong_answer'\|'unclear'\|'too_easy'\|'other') | unique on `(quizId, deviceId)`. **Created lazily** by `api/quiz-report.ts` (`CREATE TABLE IF NOT EXISTS`), not by a migration. Readers (`/api/quiz`, `getReportedQuizzes`) treat "no such table" as none reported. Reported questions are excluded from `/api/quiz` for every device and listed in the generator's AVOID block |
 
 ---
 
@@ -178,6 +187,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 
 | Route | Query params | Returns |
 |---|---|---|
+| `GET /api/weekly` (`api/weekly.ts`, 2026-09-30) | — (`X-Device-Id`) | This week's review (Mon 00:00 Taipei → now): `{ weekLabel, daysElapsed, activeDays, read, answered, correct, lastWeek: {answered, correct}, weakCategories[≤3], missed[≤5], saved[≤5] }`. One Turso pipeline (three statements), `no-store` |
 | `GET /api/feed` (`api/feed.ts`) | `date` (YYYY-MM-DD, default today in Taipei; anything else → 400) | `{ date, articles: RawArticle[] }`, the same shape the Hono/drizzle route returned. `Cache-Control` is `s-maxage=300, swr=300` when the day has articles and `s-maxage=30` when it is empty |
 
 ### Hono, read-only GET (`src/api/app.ts` → `api/index.ts` on Vercel)
@@ -198,6 +208,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 | `POST /api/save` | `{ articleId, userNote? }` | Notion dedupe (DB `notion_page_id` cache, else direct Article ID lookup via `findSavePageByArticleId`) + upsert `saves` |
 | `POST /api/unsave` | `{ articleId }` | Hard delete the `saves` row (`DELETE`) — never touches `articles` or the Notion page |
 | `POST /api/feedback` | `{ articleId, signal: 'up' \| 'down' \| 'clear' }` | `up` / `down`: delete-then-insert `feedback`. `clear` (2026-09-29, swipe undo): only delete this device's row |
-| `POST /api/quiz-attempt` | `{ quizId, correct }` | Insert `quiz_attempts` |
+| `POST /api/quiz-attempt` | `{ quizId, correct }` | Insert `quiz_attempts`. Since 2026-09-30 the web sends this when the question is answered, not on 「下一題」 |
+| `POST /api/quiz-report` | `{ quizId, reason }` | Create `quiz_reports` if missing, then upsert on `(quiz_id, device_id)` |
 
-All 7 Edge routes require `X-Device-Id` — every one returns `400 { ok: false, error: 'missing_device_id' }` without it (verified against `api/*.ts`, 2026-08-04). `deviceId` is nullable at the schema level only for rows written before multi-user support landed, not for anything writable today.
+All Edge routes except `/api/feed` require `X-Device-Id` — every one returns `400 { ok: false, error: 'missing_device_id' }` without it (verified against `api/*.ts`, 2026-08-04). `deviceId` is nullable at the schema level only for rows written before multi-user support landed, not for anything writable today.

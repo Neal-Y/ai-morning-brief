@@ -63,9 +63,10 @@ cd app && npx expo start --ios   # iOS Simulator
    - `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`
    - `AI_PROVIDER`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
    - `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`
-3. 兩個 workflow 各自排程，互不影響：
+3. 三個 workflow 各自排程，互不影響（都用上面同一組 secrets）：
    - `daily_sync.yml`：每天台灣時間 07:07，文章 pipeline
    - `quiz_sync.yml`：每天台灣時間 05:47，quiz pipeline
+   - `reminder_sync.yml`：每天台灣時間 15:53（目標 16:00 前後），下午提醒推播。只需要 `TURSO_*` + `VAPID_*`，也有 `dry_run` 勾選框（只印會推給誰）
 
 手動觸發：Actions → 對應 workflow → Run workflow
 

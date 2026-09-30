@@ -1,0 +1,41 @@
+name: Afternoon Reminder
+
+on:
+  schedule:
+    # 台灣時間 15:53 = UTC 07:53。目標是 16:00 前後：避開整點塞車，GitHub cron 通常再晚幾分鐘。
+    # 只推給「今天還沒讀簡報、也沒答題」的裝置（src/reminder.ts）。
+    - cron: '53 7 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '試跑：只印出會推給誰、推什麼；不真的推播'
+        type: boolean
+        default: false
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Send reminders
+        run: npm run start:reminder
+        env:
+          TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+          TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '' }}

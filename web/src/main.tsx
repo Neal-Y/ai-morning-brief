@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import Library from './Library.tsx'
 import Quiz from './Quiz.tsx'
+import { navigate } from './router.ts'
 import Activity from './Activity.tsx'
 import { Shell } from './Shell.tsx'
 import './index.css'
@@ -38,7 +39,17 @@ function Root() {
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname)
     window.addEventListener('popstate', onPop)
-    return () => window.removeEventListener('popstate', onPop)
+    // A notification tap while the app is already open: sw.js focuses this
+    // window and posts the target path (e.g. the afternoon reminder → /quiz).
+    const onSwMessage = (e: MessageEvent) => {
+      const data = e.data as { type?: string; url?: string } | null
+      if (data?.type === 'navigate' && typeof data.url === 'string' && data.url.startsWith('/')) navigate(data.url)
+    }
+    navigator.serviceWorker?.addEventListener('message', onSwMessage)
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      navigator.serviceWorker?.removeEventListener('message', onSwMessage)
+    }
   }, [])
 
   return <Shell path={path}>{pageFor(path)}</Shell>

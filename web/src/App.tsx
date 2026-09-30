@@ -7,7 +7,8 @@ import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
 import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
 import type { Article, FeedResponse } from './types.ts'
-import { apiFetch, fetchActivity } from './api.ts'
+import { apiFetch, fetchActivity, readCache, writeCache, type ActivityData } from './api.ts'
+import { prefetchTodaysQuiz } from './quiz/session.ts'
 import { navigate } from './router.ts'
 import { useNavInset } from './nav.ts'
 import { SiftMark } from './components/icons.tsx'
@@ -88,7 +89,11 @@ export default function App() {
   // One streak for the whole app, computed server-side from reading (feedback)
   // and quiz days. Replaces the old localStorage `mb_streak`, which +1'd on
   // every finish regardless of date and never reset.
-  const [activity, setActivity] = useState<{ streak: number; activeToday: boolean }>({ streak: 0, activeToday: false })
+  const [activity, setActivity] = useState<{ streak: number; activeToday: boolean }>(() => {
+    // Last known value renders instantly; /api/activity refreshes it below.
+    const cached = readCache<ActivityData>('activity')
+    return { streak: cached?.streak ?? 0, activeToday: false }
+  })
   const [feedbackBarHeight, setFeedbackBarHeight] = useState(0)
   const [permissionResolved, setPermissionResolved] = useState(() => {
     if (!isPushSupported() || !isStandalone()) return true
@@ -125,7 +130,10 @@ export default function App() {
 
   useEffect(() => {
     fetchActivity()
-      .then(a => setActivity({ streak: a.streak, activeToday: a.activeToday ?? false }))
+      .then(a => {
+        setActivity({ streak: a.streak, activeToday: a.activeToday ?? false })
+        writeCache('activity', a)
+      })
       .catch(() => {}) // streak chip just reads 0; never block the feed on it
   }, [])
 
@@ -149,6 +157,9 @@ export default function App() {
         setBriefDate(date)
         setArticles(parsed)
         setLoading(false)
+        // The brief is on screen; fetch today's quiz set in the background so
+        // 「去答今天的判斷題」/ the Quiz tab opens with no spinner.
+        setTimeout(prefetchTodaysQuiz, 1500)
       })
       .catch(() => {
         setError('無法載入今日 brief')

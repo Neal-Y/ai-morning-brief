@@ -71,6 +71,21 @@ export const quizAttempts = sqliteTable('quiz_attempts', {
   answeredAt: integer('answered_at', { mode: 'timestamp' }).notNull(),
 })
 
+// Questions a user flagged as flawed (2026-09-30). Created lazily by
+// api/quiz-report.ts (`CREATE TABLE IF NOT EXISTS`, same DDL as below) so it
+// never depends on a manual migration — readers treat a missing table as
+// "nothing reported". Reported questions are excluded from /api/quiz for
+// everyone and steer the generator away from similar ones.
+export const quizReports = sqliteTable('quiz_reports', {
+  id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
+  quizId: integer('quiz_id').notNull(),
+  deviceId: text('device_id'),
+  reason: text('reason').notNull(), // 'wrong_answer' | 'unclear' | 'too_easy' | 'other'
+  createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
+}, (table) => ({
+  quizDeviceUnique: unique().on(table.quizId, table.deviceId),
+}))
+
 export const pushSubscriptions = sqliteTable('push_subscriptions', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
   endpoint: text('endpoint').notNull().unique(),

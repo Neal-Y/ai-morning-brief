@@ -2,7 +2,7 @@ import 'dotenv/config'
 import { loadConfig } from './config.js'
 import { selectProvider } from './ai/select-provider.js'
 import { generateQuizzes } from './quiz/generate.js'
-import { getRecentQuizPrompts } from './db/client.js'
+import { getRecentQuizPrompts, getReportedQuizzes } from './db/client.js'
 import { writeQuizzesToDB } from './db/quiz-writer.js'
 
 const QUIZ_COUNT = 5
@@ -29,9 +29,17 @@ async function main(): Promise<void> {
     console.warn('[quiz-pipeline] Failed to load recent prompts, continuing without dedup context:', err instanceof Error ? err.message : err)
   }
 
+  let reported: Awaited<ReturnType<typeof getReportedQuizzes>> = []
+  try {
+    reported = await getReportedQuizzes()
+    console.log(`[quiz-pipeline] Loaded ${reported.length} reported question(s) to steer away from`)
+  } catch (err) {
+    console.warn('[quiz-pipeline] Failed to load reported questions, continuing without them:', err instanceof Error ? err.message : err)
+  }
+
   let generated: Awaited<ReturnType<typeof generateQuizzes>>
   try {
-    generated = await generateQuizzes(provider, recentPrompts, QUIZ_COUNT)
+    generated = await generateQuizzes(provider, recentPrompts, QUIZ_COUNT, reported)
   } catch (err) {
     console.error('[quiz-pipeline] Generation failed:', err instanceof Error ? err.message : err)
     process.exit(1)

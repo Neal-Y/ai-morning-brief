@@ -60,14 +60,35 @@ const MAX_RECENT_PROMPTS = 60
  * the END of the system prompt so the stable QUIZ_SYSTEM prefix stays cacheable
  * across days (same technique as classifier.ts's buildPreferenceContext).
  */
-export function buildRecentQuizContext(recentPrompts: string[]): string {
-  if (recentPrompts.length === 0) return ''
-  const list = recentPrompts.slice(0, MAX_RECENT_PROMPTS)
-  return `
+const REPORT_REASON_EN: Record<string, string> = {
+  wrong_answer: 'the marked answer was wrong or debatable',
+  unclear: 'the question was ambiguous',
+  too_easy: 'it was too easy / trivia rather than judgment',
+  other: 'flagged as low quality',
+}
+
+export function buildRecentQuizContext(
+  recentPrompts: string[],
+  reported: { prompt: string; reason: string }[] = [],
+): string {
+  let out = ''
+  if (recentPrompts.length > 0) {
+    const list = recentPrompts.slice(0, MAX_RECENT_PROMPTS)
+    out += `
 
 ## AVOID REPEATING — recently asked questions
 
 ${list.map((p) => `- ${p}`).join('\n')}`
+  }
+  if (reported.length > 0) {
+    out += `
+
+## AVOID THESE MISTAKES — questions users reported as flawed
+Do not produce questions like these, and avoid the flaw noted for each.
+
+${reported.map((r) => `- ${r.prompt} (${REPORT_REASON_EN[r.reason] ?? REPORT_REASON_EN['other']})`).join('\n')}`
+  }
+  return out
 }
 
 function buildUserPrompt(count: number): string {
@@ -172,9 +193,10 @@ function parseQuizBatch(raw: string): GeneratedQuiz[] {
 export async function generateQuizzes(
   provider: AIProvider,
   recentPrompts: string[],
-  count: number
+  count: number,
+  reported: { prompt: string; reason: string }[] = [],
 ): Promise<GeneratedQuiz[]> {
-  const recentContext = buildRecentQuizContext(recentPrompts)
+  const recentContext = buildRecentQuizContext(recentPrompts, reported)
   const systemParts = recentContext ? [QUIZ_SYSTEM, recentContext] : [QUIZ_SYSTEM]
 
   return withRetry(

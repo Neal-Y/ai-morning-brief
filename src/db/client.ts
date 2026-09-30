@@ -2,7 +2,7 @@ import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
 import { and, count, desc, eq, gte } from 'drizzle-orm'
 import * as schema from './schema.js'
-import { articles, feedback, quizzes } from './schema.js'
+import { articles, feedback, quizReports, quizzes } from './schema.js'
 
 // Use https:// transport (HTTP requests, not WebSocket) — required for Vercel
 // serverless / edge environments where short-lived WebSocket connections hang.
@@ -79,3 +79,38 @@ export async function getRecentQuizPrompts(): Promise<string[]> {
 
   return rows.map((r) => r.prompt)
 }
+
+/** True for "no such table" (possibly wrapped by drizzle as a query error's cause). */
+export function isMissingTable(err: unknown): boolean {
+  for (let e: unknown = err, depth = 0; e && depth < 3; e = (e as { cause?: unknown }).cause, depth++) {
+    if (e instanceof Error && /no such table/i.test(e.message)) return true
+  }
+  return false
+}
+
+export interface ReportedQuiz {
+  prompt: string
+  reason: string
+}
+
+const REPORTED_MAX_ROWS = 30
+
+/**
+ * Questions users reported as flawed, newest first, for the generator's AVOID
+ * block. The table is created lazily on the first report, so "no such table"
+ * just means nothing has been reported yet.
+ */
+export async function getReportedQuizzes(): Promise<ReportedQuiz[]> {
+  try {
+    return await db
+      .select({ prompt: quizzes.prompt, reason: quizReports.reason })
+      .from(quizReports)
+      .innerJoin(quizzes, eq(quizReports.quizId, quizzes.id))
+      .orderBy(desc(quizReports.createdAt))
+      .limit(REPORTED_MAX_ROWS)
+  } catch (err) {
+    if (isMissingTable(err)) return []
+    throw err
+  }
+}
+

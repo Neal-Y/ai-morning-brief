@@ -17,7 +17,13 @@ function isConfigured(): boolean {
  * Without deviceId, all subscriptions are targeted (global / fallback mode).
  * Throws if no subscriptions exist or all sends fail.
  */
-export async function sendWebPush(title: string, body: string, deviceId?: string): Promise<void> {
+export async function sendWebPush(
+  title: string,
+  body: string,
+  deviceId?: string,
+  /** Path the notification opens (sw.js notificationclick). Defaults to '/'. */
+  url?: string,
+): Promise<void> {
   if (!isConfigured()) {
     throw new Error('VAPID keys not configured')
   }
@@ -40,7 +46,7 @@ export async function sendWebPush(title: string, body: string, deviceId?: string
     throw new Error('No push subscriptions found')
   }
 
-  const payload = JSON.stringify({ title, body })
+  const payload = JSON.stringify(url ? { title, body, url } : { title, body })
   const results = await Promise.allSettled(
     subs.map((sub) =>
       webpush.sendNotification(

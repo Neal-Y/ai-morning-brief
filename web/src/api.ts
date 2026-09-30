@@ -92,3 +92,56 @@ export async function saveAskHistory(articleId: string, messages: AskMessage[]):
     // silent — history persistence must never block the user
   }
 }
+
+// ── quiz report ──────────────────────────────────────────────────────────────
+
+export type QuizReportReason = 'wrong_answer' | 'unclear' | 'too_easy' | 'other'
+
+export async function reportQuiz(quizId: number, reason: QuizReportReason): Promise<boolean> {
+  try {
+    const res = await apiFetch('/api/quiz-report', jsonInit({ quizId, reason }))
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+// ── weekly review ────────────────────────────────────────────────────────────
+
+export interface WeeklyData {
+  weekLabel: string
+  daysElapsed: number
+  activeDays: number
+  read: number
+  answered: number
+  correct: number
+  lastWeek: { answered: number; correct: number }
+  weakCategories: { category: string; wrong: number; total: number }[]
+  missed: { quizId: number; category: string; prompt: string }[]
+  saved: { id: string; title: string }[]
+}
+
+export async function fetchWeekly(): Promise<WeeklyData> {
+  const res = await apiFetch('/api/weekly')
+  if (!res.ok) throw new Error(`fetchWeekly failed: ${res.status}`)
+  return res.json() as Promise<WeeklyData>
+}
+
+// ── stale-while-revalidate cache ─────────────────────────────────────────────
+// Pages that show per-device stats render the last known copy instantly and
+// refresh in the background, so opening a tab never shows a blank spinner.
+
+const CACHE_PREFIX = 'mb_cache_'
+
+export function readCache<T>(key: string): T | null {
+  try {
+    const raw = localStorage.getItem(CACHE_PREFIX + key)
+    return raw ? JSON.parse(raw) as T : null
+  } catch {
+    return null
+  }
+}
+
+export function writeCache(key: string, value: unknown): void {
+  try { localStorage.setItem(CACHE_PREFIX + key, JSON.stringify(value)) } catch { /* quota */ }
+}
