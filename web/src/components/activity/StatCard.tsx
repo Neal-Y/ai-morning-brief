@@ -24,8 +24,8 @@ export function useCountUp(target: number, duration = 900, delay = 0): number {
   return value
 }
 
-export function StatCard({ value, label, delay = 0 }: {
-  value: number; label: string; delay?: number
+export function StatCard({ value, label, delay = 0, suffix = '' }: {
+  value: number; label: string; delay?: number; suffix?: string
 }) {
   const display = useCountUp(value, 900, delay)
   return (
@@ -38,7 +38,7 @@ export function StatCard({ value, label, delay = 0 }: {
       <div style={{
         fontFamily: T.mono, fontSize: 24, fontWeight: 700, color: T.ink,
         fontVariantNumeric: 'tabular-nums',
-      }}>{display}</div>
+      }}>{display}{suffix}</div>
       <div style={{
         fontFamily: T.mono, fontSize: 11, color: T.inkMuted,
         marginTop: 4, letterSpacing: 0.3,

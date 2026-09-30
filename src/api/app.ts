@@ -221,7 +221,7 @@ app.get('/api/activity', async (c) => {
   const deviceId = c.req.header('X-Device-Id') ?? null
   if (!deviceId) {
     const emptyHeatmap = Array.from({ length: 52 }, () => Array(7).fill(0))
-    return c.json({ streak: 0, activeToday: false, totalCorrect: 0, weekStats: { correct: 0, wrong: 0, total: 0 }, heatmap: emptyHeatmap, recent: [] })
+    return c.json({ streak: 0, activeToday: false, totalCorrect: 0, totalAnswered: 0, weekStats: { correct: 0, wrong: 0, total: 0 }, heatmap: emptyHeatmap, recent: [] })
   }
 
   const cutoff = Math.floor((Date.now() - 400 * 86400_000) / 1000) // 400 days for streak safety
@@ -254,11 +254,15 @@ app.get('/api/activity', async (c) => {
       .where(and(eq(feedback.deviceId, deviceId), gte(feedback.createdAt, new Date(cutoff * 1000))))
       .groupBy(sql`date(${feedback.createdAt}, 'unixepoch', '+8 hours')`),
     db
-      .select({ count: sql<number>`cast(count(*) as int)` })
+      .select({
+        count: sql<number>`cast(sum(case when ${quizAttempts.correct} then 1 else 0 end) as int)`,
+        total: sql<number>`cast(count(*) as int)`,
+      })
       .from(quizAttempts)
-      .where(and(eq(quizAttempts.deviceId, deviceId), eq(quizAttempts.correct, true))),
+      .where(eq(quizAttempts.deviceId, deviceId)),
   ])
   const totalCorrect = totalCorrectRows[0]?.count ?? 0
+  const totalAnswered = totalCorrectRows[0]?.total ?? 0
 
   // ── streak ─────────────────────────────────────────────────────────────────
   const daySet = [...new Set([...rows.map(r => r.day), ...readRows.map(r => r.day)])].sort().reverse()
@@ -297,11 +301,14 @@ app.get('/api/activity', async (c) => {
     .map(day => {
       const d = byDay.get(day)!
       const topCat = [...d.cats.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? ''
-      return { date: formatDayLabel(day), category: topCat, correct: d.correct, total: d.total }
+      // "TOP +N": a day's answers usually span several categories; the bare top
+      // one read as if every question that day was in it.
+      const others = d.cats.size - 1
+      return { date: formatDayLabel(day), category: others > 0 ? `${topCat} +${others}` : topCat, correct: d.correct, total: d.total }
     })
 
   c.header('Cache-Control', 'private, no-store')
-  return c.json({ streak, activeToday, totalCorrect, weekStats: { correct: weekCorrect, wrong: weekWrong, total: weekCorrect + weekWrong }, heatmap, recent })
+  return c.json({ streak, activeToday, totalCorrect, totalAnswered, weekStats: { correct: weekCorrect, wrong: weekWrong, total: weekCorrect + weekWrong }, heatmap, recent })
 })
 
 // NOTE: /api/save, /api/push-subscribe, /api/feedback, and /api/quiz-attempt

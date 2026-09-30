@@ -900,6 +900,14 @@ Verification: Playwright (390×844, mocked API).
 - The weekly card rendered from cache while `/api/weekly` was held for 3s.
 - Against local SQLite: the reminder dry run skipped the device active today and gave streak-4 and new-device copy to the others; `/api/quiz` served normally with no `quiz_reports` table and excluded the reported id once it existed.
 
+## Issue 25: Activity page read wrong (2026-09-30, from a real-device screenshot)
+
+- **Heatmap month labels were hardcoded** (`Jan` at week 0 … `Nov` at week 43), as if the grid were a calendar year. It is actually the last 52 weeks ending this week, so late-September activity was labelled "Nov". `monthLabels()` now derives the labels from today: the first column whose Monday falls in a new month gets the label, and a label within 3 columns of the previous one is dropped.
+- **Duplicate numbers.** The header 🔥 chip repeated 連續天數, and the 本週答題 card repeated 本週回顧's 答了幾題. The top row is now all-time: 連續天數 / 累計答題 / 總正確率, using the new `totalAnswered` from `/api/activity`. The week lives only in the review card.
+- **Missed-question list.** Fill-blank and matching prompts are generic instructions (「請填入正確術語完成以下句子：」). `api/weekly.ts` now shows the blanked sentence for fill-blank, and the prompt plus the left-hand items for matching.
+- **Line clamp bleeding.** `-webkit-line-clamp` on an element that also has padding let a third line show through in the padding. The padding moved to a wrapper element.
+- **Misleading 「最近 5 天」 label.** The row showed only the day's top category, which read as if every question that day was in it. It now shows `TOP +N`.
+
 ---
 
 ## What Was Intentionally Not Changed

@@ -14,10 +14,33 @@ const TOTAL_W = 52 * STRIDE - GAP
 // card colour bleed through, making empty days look inconsistent.
 const HEAT = ['#1E2A37', '#4A3A17', '#8A6418', T.accent] as const
 
-const MONTH_LABELS = [
-  { week: 0, label: 'Jan' }, { week: 8, label: 'Mar' }, { week: 17, label: 'May' },
-  { week: 26, label: 'Jul' }, { week: 34, label: 'Sep' }, { week: 43, label: 'Nov' },
-]
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * Month labels for the 52 columns, derived from today. The grid is "the last
+ * 52 weeks ending this week" (column 51 = this week, Monday-based, Taipei) —
+ * NOT a calendar year, so hardcoded Jan…Nov positions labelled this week as
+ * "Nov". A label goes on the first column whose Monday falls in a new month,
+ * skipping one that would crowd the previous label.
+ */
+function monthLabels(): { week: number; label: string }[] {
+  const DAY = 86400_000
+  const taipei = new Date(Date.now() + 8 * 3600_000)
+  const dow = taipei.getUTCDay()
+  const thisMonday = Date.UTC(taipei.getUTCFullYear(), taipei.getUTCMonth(), taipei.getUTCDate()) - (dow === 0 ? 6 : dow - 1) * DAY
+  const out: { week: number; label: string }[] = []
+  let prevMonth = -1
+  for (let week = 0; week < 52; week++) {
+    const month = new Date(thisMonday - (51 - week) * 7 * DAY).getUTCMonth()
+    if (month !== prevMonth) {
+      if (week > 0 && (out.length === 0 || week - out[out.length - 1]!.week >= 3)) {
+        out.push({ week, label: MONTH_NAMES[month]! })
+      }
+      prevMonth = month
+    }
+  }
+  return out
+}
 
 export function Heatmap({ data }: { data: number[][] }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -49,8 +72,8 @@ export function Heatmap({ data }: { data: number[][] }) {
       <div ref={scrollRef} style={{ overflowX: 'auto', flex: 1 }}>
         <div style={{ width: TOTAL_W }}>
           <div style={{ position: 'relative', height: 12, marginBottom: 6 }}>
-            {MONTH_LABELS.map(m => (
-              <span key={m.label} style={{
+            {monthLabels().map(m => (
+              <span key={m.week} style={{
                 position: 'absolute', left: m.week * STRIDE,
                 fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
               }}>{m.label}</span>

@@ -56,11 +56,14 @@ export function WeeklyReview({ data }: { data: WeeklyData }) {
       {data.missed.length > 0 && (
         <Block title="這週答錯的題" note="會在複習時再出現">
           {data.missed.map(m => (
-            <div key={m.quizId} style={{
-              padding: '8px 0', borderTop: `1px solid ${T.ruleSoft}`,
-              fontFamily: T.sans, fontSize: 13, lineHeight: 1.5, color: T.inkMuted,
-              display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-            }}>{m.prompt}</div>
+            // Padding on the row, clamp on an inner block: line-clamp on an
+            // element with padding lets the third line bleed into the padding.
+            <div key={m.quizId} style={{ padding: '8px 0', borderTop: `1px solid ${T.ruleSoft}` }}>
+              <div style={{
+                fontFamily: T.sans, fontSize: 13, lineHeight: 1.5, color: T.inkMuted,
+                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+              }}>{m.prompt}</div>
+            </div>
           ))}
         </Block>
       )}

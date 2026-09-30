@@ -196,7 +196,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 |---|---|---|
 | `GET /api/library` | — | All-history articles JOINed with feedback/saves/notionSynced/ask-message-count (JS-join, no `messages` JSON) |
 | `GET /api/quiz` | `count`, `type` (comma list) | `RawQuizItem[]` (+ `review: boolean`) |
-| `GET /api/activity` | — | `{ streak, activeToday, heatmap, weekStats, recent, totalCorrect }`, scoped by `X-Device-Id`. Since 2026-09-29 a day counts for `streak` / `heatmap` if the device read (any `feedback` row) **or** answered (`quiz_attempts`). `weekStats` / `recent` / `totalCorrect` stay quiz-only. `activeToday` says whether today already counts |
+| `GET /api/activity` | — | `{ streak, activeToday, heatmap, weekStats, recent, totalCorrect, totalAnswered }` (`totalAnswered` added 2026-09-30; `recent[].category` is the day's top category plus `+N` for the rest), scoped by `X-Device-Id`. Since 2026-09-29 a day counts for `streak` / `heatmap` if the device read (any `feedback` row) **or** answered (`quiz_attempts`). `weekStats` / `recent` / `totalCorrect` stay quiz-only. `activeToday` says whether today already counts |
 
 ### Edge Runtime, body-reading POST (root `api/*.ts` — see [../CLAUDE.md](../CLAUDE.md) Conventions for *why* these can't be Hono routes)
 
