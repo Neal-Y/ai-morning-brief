@@ -830,6 +830,31 @@ Ordering, matching and fill-blank marked each mistake ✗ but never showed the c
 Single-choice already highlighted the correct option.
 
 
+## Issue 21: Ask sheet — keyboard hid the question, one-size suggestions; nav tabs vs. home swipe (2026-09-30)
+
+**Symptoms**
+1. Opening the keyboard in the Ask sheet pushed its top (and the question being asked about) off-screen.
+2. Suggestion chips were three hardcoded article questions (「跟競品比有什麼 trade-off？」…), shown for quiz questions too.
+3. Quiz Ask sent the explanation even before the user had answered, so the model could spoil the answer. It also never saw the options.
+4. A swipe up to go home often started on 簡報 / Library, the centre tabs sitting right above the home indicator, and pressed them instead.
+
+**Fix**
+- **Keyboard** (`useKeyboardFrame` in `AskSheet.tsx`): while the keyboard is up (`innerHeight − visualViewport.height > 120`), the sheet is pinned to the visual viewport. It uses `top = vv.offsetTop − host top` and `height = vv.height`, updating on `vv` resize and scroll. The thread shrinks while the header and question stay put, and the input drops its safe-area padding.
+  - This is scoped to the modal sheet only. The app shell still uses CSS layout: sizing the shell from `visualViewport` is what Issue 6 rejected.
+- **Pinned question card** (quiz only): it sits outside the scrolling thread and is clamped to 3 lines. Tap it to expand the full question, plus 你的答案 / 正確答案 once answered, or the answer-free material before answering.
+- **Suggestions**:
+  - Quiz suggestions follow the question's state: before answering (hint / what concept is being tested), after a wrong answer (「我選「X」為什麼不對？」 + a concrete example), after a right answer (edge cases / where it bites in practice). They stay available mid-thread and hide once asked.
+  - Article suggestions are generated per article by `api/ask.ts` (`mode: 'suggest'`) and cached in localStorage. Skeleton chips show during the ~1s generation, and generic fallbacks show on error.
+- **Quiz Ask context**: each card's `resolve(correct, yourAnswer)` now reports a plain-text answer, and `describeForAsk()` builds answer-free material plus the answer key. See ARCHITECTURE `/api/ask`.
+- **Nav**: `NAV_GESTURE_GAP = 10` is a non-tappable strip added to the nav's base under the tab row. It raises the tabs away from the home gesture without growing them toward it. Tabs also lose `btn-press`, whose touch-down shrink and brighten was what lit up during a home swipe. Pages pick up the taller nav automatically through the measured `useNavInset()`.
+
+**Verification**: Playwright (390×844) with a stubbed `visualViewport`:
+- With a simulated 336px keyboard, the input's bottom sat at 498 against a visible limit of 508, and the question card stayed on screen.
+- The pre-answer request carried `{ prompt, material, answered: false }` with no explanation. After a wrong answer it carried `yourAnswer` 「C. 競態條件」 and `correctAnswer` 「B. N+1 查詢問題」.
+- Article suggestions made one call and then rendered.
+
+The keyboard and home-swipe fixes still **need a real iPhone PWA check**. Chromium has neither an iOS keyboard nor the home gesture.
+
 ---
 
 ## What Was Intentionally Not Changed

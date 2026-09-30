@@ -38,7 +38,10 @@ export function OrderingCard({ quiz, ...chrome }: Props) {
             <div style={{ marginTop: 16 }}>
               <PrimaryButton
                 label="確認順序"
-                onClick={() => resolve(arrangement.every((it, pos) => it.originalIndex === pos))}
+                onClick={() => resolve(
+                  arrangement.every((it, pos) => it.originalIndex === pos),
+                  arrangement.map((it, pos) => `${pos + 1}. ${it.value}`).join('\n'),
+                )}
                 arrow={false}
               />
             </div>

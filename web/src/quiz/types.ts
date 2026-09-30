@@ -117,3 +117,40 @@ export function shuffleWithOrigin<T>(items: T[]): { value: T; originalIndex: num
   }
   return withIndex
 }
+
+/** Fills `{{n}}` placeholders; missing words render as ＿＿. */
+export function fillTemplate(template: string, words: (string | undefined)[]): string {
+  return template.replace(/\{\{(\d+)\}\}/g, (_, n: string) => `「${words[Number(n)] ?? '＿＿'}」`)
+}
+
+/**
+ * Plain-text view of a question for the Ask follow-up model. `material` must
+ * not leak the answer (it is sent before the user answers): ordering items and
+ * matching right-hand values are listed sorted, not in answer order.
+ * `correctAnswer` is only sent once the question is resolved.
+ */
+export function describeForAsk(q: Quiz): { material: string; correctAnswer: string } {
+  const sorted = (xs: string[]) => [...xs].sort((a, b) => a.localeCompare(b))
+  switch (q.type) {
+    case 'single_choice':
+      return {
+        material: q.options.map((o, i) => `${'ABCD'[i] ?? i + 1}. ${o}`).join('\n'),
+        correctAnswer: `${'ABCD'[q.correctIndex] ?? q.correctIndex + 1}. ${q.options[q.correctIndex]}`,
+      }
+    case 'ordering':
+      return {
+        material: `要排序的項目（順序已打亂）：\n${sorted(q.items).map(i => `- ${i}`).join('\n')}`,
+        correctAnswer: q.items.map((it, i) => `${i + 1}. ${it}`).join('\n'),
+      }
+    case 'matching':
+      return {
+        material: `左欄：\n${q.left.map(l => `- ${l}`).join('\n')}\n右欄：\n${sorted(q.right).map(r => `- ${r}`).join('\n')}`,
+        correctAnswer: q.left.map((l, i) => `${l} → ${q.right[i]}`).join('\n'),
+      }
+    case 'fill_blank':
+      return {
+        material: `句子：${fillTemplate(q.template, [])}\n可選詞：${q.wordBank.join('、')}`,
+        correctAnswer: fillTemplate(q.template, q.blanks),
+      }
+  }
+}

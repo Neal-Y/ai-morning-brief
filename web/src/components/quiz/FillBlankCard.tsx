@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { THEME_DARK } from '../../theme.ts'
-import type { FillBlankQuiz } from '../../quiz/types.ts'
+import { fillTemplate, type FillBlankQuiz } from '../../quiz/types.ts'
 import { QuizFrame, PrimaryButton, type AnswerAreaApi, type QuizChromeProps } from './QuizFrame.tsx'
 import { Q, RADIUS } from './tokens.ts'
 
@@ -64,7 +64,10 @@ export function FillBlankCard({ quiz, ...chrome }: Props) {
 
         const confirm = () => {
           if (resolved || !allFilled) return
-          resolve(quiz.blanks.every((ans, b) => quiz.wordBank[filled[b]!] === ans))
+          resolve(
+            quiz.blanks.every((ans, b) => quiz.wordBank[filled[b]!] === ans),
+            fillTemplate(quiz.template, filled.map(w => quiz.wordBank[w!]!)),
+          )
         }
 
         const blankOk = (b: number) => quiz.wordBank[filled[b]!] === quiz.blanks[b]

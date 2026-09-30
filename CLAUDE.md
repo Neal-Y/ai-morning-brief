@@ -96,7 +96,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | Vercel 部署 | ✅ | `api/index.ts` (Hono read-only) + Edge：`ask` / `ask-history` / `push-subscribe` / `save` / `unsave` / `feedback` |
 | PWA 卡片 UI | ✅ | iPhone standalone 已穩定，細節見 `docs/FRONTEND_FIX_LOG.md` |
 | 👍👎 → DB | ✅ | delete-then-insert 防誤按；Edge Runtime（2026-04-26 從 Hono 搬出，原本 504 timeout） |
-| 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch |
+| 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch。2026-09-30：quiz 送 `quiz` context（作答前不給解說、prompt 禁止爆雷；作答後帶你的答案 + 正確答案）；建議問題 quiz 依作答狀態、文章由 `mode: 'suggest'` 針對該篇生成並存 localStorage；鍵盤開啟時 AskSheet 貼齊 visualViewport（只限 sheet，不動 shell）。見 FRONTEND_FIX_LOG Issue 21 |
 | 💬 追問歷史 | ✅ | `api/ask-history.ts` Edge：GET hydrate / POST upsert；`conversations` 一篇一 row；AskSheet 開啟還原、turn 完成保存；Library 顯示 ask message count |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
 | 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful；dedupe 靠 DB `notion_page_id` 快取 + Notion `Article ID` 直查兩層。`/api/unsave` 是硬刪除（2026-08-05 修正，原本設計的 soft-hide 因欄位從未 migrate 進 DB 而一直是壞的，詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)） |
@@ -190,7 +190,7 @@ web/
   src/main.tsx          # 四分頁 pathname routing：/quiz、/（Feed）、/library、/activity，包在 Shell 裡；仍非 react-router
   src/router.ts         # navigate(path) helper（pushState + popstate dispatch）
   src/Shell.tsx          # app shell：extended root 上的 absolute layer + 常駐 bottom nav；path 由 main.tsx 傳入，Shell 自己不讀 window.location
-  src/nav.ts             # NAV_ROW_H=54 / TABS / tabForPath() / NavInsetContext・useNavInset()；nav 高度用量測值發布，因為 env(safe-area-inset-bottom) 在 JS 讀不到 px 數字
+  src/nav.ts             # NAV_ROW_H=54 / NAV_GESTURE_GAP=10（tab 列與 home bar 之間的不可點底座，防滑回主畫面誤觸）/ TABS / tabForPath() / NavInsetContext・useNavInset()；nav 高度用量測值發布，因為 env(safe-area-inset-bottom) 在 JS 讀不到 px 數字
   src/App.tsx           # Feed 主畫面（仍是 `/`，PWA start_url + push 落地頁不可換）：swipe 物理 + streak + push permission gate；feedback dock 抬高到 nav 之上，TopChrome 拿掉重複的 Library 按鈕
   src/Library.tsx       # /library 頁面：filter / 日期分組 / 展開 LLM / saves tab；root height 改 100%（填滿 Shell layer），AskSheet z-index 提到 60
   src/Quiz.tsx           # /quiz 頁面：讀 /api/activity 真實 streak，失敗給明確錯誤 + retry，**無**硬編碼 fallback 題庫

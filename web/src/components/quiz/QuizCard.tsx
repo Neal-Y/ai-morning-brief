@@ -1,4 +1,4 @@
-import type { Quiz } from '../../quiz/types.ts'
+import { describeForAsk, type Quiz } from '../../quiz/types.ts'
 import type { QuizChromeProps } from './QuizFrame.tsx'
 import { SingleChoiceCard } from './SingleChoiceCard.tsx'
 import { OrderingCard } from './OrderingCard.tsx'
@@ -11,7 +11,7 @@ type Props = Omit<QuizChromeProps, 'id' | 'category' | 'prompt' | 'explanation' 
 
 /** Dispatches to the right answer card by quiz type. */
 export function QuizCard({ quiz, ...rest }: Props) {
-  const chrome = { ...rest, review: quiz.review }
+  const chrome = { ...rest, review: quiz.review, ask: describeForAsk(quiz) }
   switch (quiz.type) {
     case 'single_choice': return <SingleChoiceCard quiz={quiz} {...chrome} />
     case 'ordering': return <OrderingCard quiz={quiz} {...chrome} />

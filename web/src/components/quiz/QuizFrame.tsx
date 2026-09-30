@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { THEME_DARK } from '../../theme.ts'
 import type { Article } from '../../types.ts'
-import { AskSheet } from '../AskSheet.tsx'
+import { AskSheet, type QuizAskContext } from '../AskSheet.tsx'
 import { Q, RADIUS, XP } from './tokens.ts'
 import { IconBolt, IconFlame, StatChip } from '../icons.tsx'
 
@@ -9,7 +9,8 @@ const T = THEME_DARK
 
 export interface AnswerAreaApi {
   resolved: boolean
-  resolve: (correct: boolean) => void
+  /** `yourAnswer` is a plain-text rendering of what the user submitted, for Ask. */
+  resolve: (correct: boolean, yourAnswer?: string) => void
 }
 
 export interface QuizChromeProps {
@@ -20,6 +21,8 @@ export interface QuizChromeProps {
   source: { name: string; url: string } | null
   /** Missed before and due again — shown as a 複習 tag next to the category. */
   review?: boolean
+  /** Answer-free question material + the answer key, for the Ask follow-up. */
+  ask?: { material: string; correctAnswer: string }
   index: number
   total: number
   streak: number
@@ -40,18 +43,20 @@ interface Props extends QuizChromeProps {
  * Type cards supply only the answer area and signal completion via `resolve`.
  */
 export function QuizFrame({
-  id, category, prompt, explanation, source, review = false,
+  id, category, prompt, explanation, source, review = false, ask,
   index, total, streak, xpToday, isLast, bottomInset, onNext, children,
 }: Props) {
   const [resolved, setResolved] = useState(false)
   const [correct, setCorrect] = useState(false)
+  const [yourAnswer, setYourAnswer] = useState<string | undefined>(undefined)
   const [askOpen, setAskOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  const resolve = (isCorrect: boolean) => {
+  const resolve = (isCorrect: boolean, answer?: string) => {
     if (resolved) return
     setResolved(true)
     setCorrect(isCorrect)
+    setYourAnswer(answer)
     // Let the verdict card mount before scrolling it into view.
     setTimeout(() => {
       const el = scrollRef.current
@@ -67,6 +72,20 @@ export function QuizFrame({
     summary: explanation,
     context: category,
   } as Article
+
+  // What Ask knows depends on where you are: before answering it gets the
+  // question and material only (no explanation, no key) so it can't spoil it.
+  const quizAsk: QuizAskContext = {
+    prompt,
+    material: ask?.material ?? '',
+    answered: resolved,
+    ...(resolved ? {
+      correct,
+      yourAnswer,
+      correctAnswer: ask?.correctAnswer,
+      explanation,
+    } : {}),
+  }
 
   return (
     <div style={{
@@ -222,6 +241,7 @@ export function QuizFrame({
       <AskSheet
         theme={T}
         article={asArticle}
+        quiz={quizAsk}
         visible={askOpen}
         onClose={() => setAskOpen(false)}
         fullScreen

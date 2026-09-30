@@ -1,7 +1,7 @@
 import { forwardRef } from 'react'
 import { GLASS_BLUR, THEME_DARK } from '../theme.ts'
 import { navigate } from '../router.ts'
-import { NAV_ROW_H, TABS, type TabId } from '../nav.ts'
+import { NAV_GESTURE_GAP, NAV_ROW_H, TABS, type TabId } from '../nav.ts'
 
 const T = THEME_DARK
 
@@ -31,7 +31,7 @@ export const BottomNav = forwardRef<HTMLElement, Props>(function BottomNav({ act
         backdropFilter: GLASS_BLUR,
         WebkitBackdropFilter: GLASS_BLUR,
         borderTop: '1px solid rgba(255,255,255,0.06)',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+        paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${NAV_GESTURE_GAP}px)`,
       }}
     >
       <div style={{
@@ -42,9 +42,11 @@ export const BottomNav = forwardRef<HTMLElement, Props>(function BottomNav({ act
         {TABS.map(tab => {
           const on = tab.id === active
           return (
+            // No btn-press here: its touch-down shrink/brighten is what lit up
+            // the centre tabs when a home swipe started on them. Native tab bars
+            // don't react to touch-down either; the active colour is the feedback.
             <button
               key={tab.id}
-              className="btn-press"
               onClick={() => navigate(tab.path)}
               aria-current={on ? 'page' : undefined}
               style={{
