@@ -63,7 +63,7 @@ GitHub Actions cron — 兩條獨立 pipeline
   │    ├─ ai/brief.ts          brief 生成（1 次 LLM call）
   │    ├─ notify/db-writer.ts  upsert 文章到 Turso
   │    └─ notify/web-push.ts   對 push_subscriptions 全表發 Web Push
-  └─ quiz_sync.yml (05:47 台北) → src/quiz-pipeline.ts   （不依賴文章資料；cron 目前手動暫停，見 docs/ARCHITECTURE.md）
+  └─ quiz_sync.yml (05:47 台北) → src/quiz-pipeline.ts   （不依賴文章資料）
        ├─ db/client.ts         讀近期已出題 prompt 防重複
        ├─ quiz/generate.ts     LLM 出題（4 題型混出）
        └─ db/quiz-writer.ts    寫入 quizzes table
@@ -130,7 +130,7 @@ React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、
 | ---- | ---- | ---- | -------- |
 | Classifier | GPT-4o / Sonnet 4.6（輪替） | 每天 top 12 篇各送一次 LLM | ~$32 |
 | Brief | GPT-4o / Sonnet 4.6（輪替） | 每天 1 次 LLM call | ~$4 |
-| Quiz 生成 | GPT-4o / Sonnet 4.6（輪替） | 每天 1 次 LLM call，出 5 題 | ~$4（量級同 Brief，未精算；**cron 目前手動暫停，實際花費是 $0**，見下方 Architecture） |
+| Quiz 生成 | GPT-4o / Sonnet 4.6（輪替） | 每天 1 次 LLM call，出 5 題 | ~$4（量級同 Brief，未精算） |
 | Ask | Claude Haiku 4.5 | 使用者追問（文章 + quiz），streaming | ~$1 |
 | **總計** | | | **~$40–45/年** |
 
