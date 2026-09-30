@@ -1,6 +1,6 @@
 {
-  "name": "Morning Brief",
-  "short_name": "Brief",
+  "name": "Sift",
+  "short_name": "Sift",
   "description": "每日 AI 技術情報",
   "start_url": "/",
   "display": "standalone",

@@ -42,3 +42,44 @@ export function StatChip({ icon, value, color, background }: {
     </span>
   )
 }
+
+/**
+ * The Sift mark — the app icon's funnel of shrinking bars (many signals in,
+ * one out), drawn in the accent so the in-app wordmark matches the home-screen
+ * icon. Proportions follow web/public/icon-512.svg.
+ */
+export function SiftMark({ size = 18, color = '#F5A524', glow = false }: {
+  size?: number; color?: string; glow?: boolean
+}) {
+  return (
+    <svg
+      width={size} height={size} viewBox="86 146 340 250" aria-hidden="true"
+      style={glow ? { filter: `drop-shadow(0 0 ${Math.max(2, size / 10)}px ${color}88)` } : undefined}
+    >
+      <g fill={color}>
+        <rect x="96" y="158" width="122" height="26" rx="13" />
+        <rect x="244" y="158" width="172" height="26" rx="13" />
+        <rect x="148" y="213" width="216" height="26" rx="13" />
+        <rect x="192" y="264" width="128" height="26" rx="13" />
+        <rect x="222" y="318" width="68" height="24" rx="12" />
+        <circle cx="256" cy="378" r="13" />
+      </g>
+    </svg>
+  )
+}
+
+/** Mark + "Sift" wordmark, used in the Feed header and the launch screen. */
+export function SiftWordmark({ size = 18, color, markColor }: {
+  size?: number; color: string; markColor: string
+}) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: size * 0.42 }}>
+      <SiftMark size={size * 1.05} color={markColor} />
+      <span style={{
+        fontFamily: '"Inter", system-ui, -apple-system, sans-serif',
+        fontSize: size, fontWeight: 800, letterSpacing: -0.02 * size,
+        color, lineHeight: 1,
+      }}>Sift</span>
+    </span>
+  )
+}
