@@ -56,6 +56,8 @@ export interface ActivityData {
   /** Whether today (Taipei) already counts toward the streak. */
   activeToday?: boolean
   totalCorrect: number
+  /** All-time attempts (added 2026-09-30; absent from older cached copies). */
+  totalAnswered?: number
   weekStats: { correct: number; wrong: number; total: number }
   heatmap: number[][]
   recent: { date: string; category: string; correct: number; total: number }[]

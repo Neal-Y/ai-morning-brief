@@ -6,7 +6,6 @@ import { StatCard } from './components/activity/StatCard.tsx'
 import { Heatmap } from './components/activity/Heatmap.tsx'
 import { WeeklyReview } from './components/activity/WeeklyReview.tsx'
 import { Q } from './components/quiz/tokens.ts'
-import { IconFlame, StatChip } from './components/icons.tsx'
 
 const T = THEME_DARK
 
@@ -33,7 +32,6 @@ export default function Activity() {
   }, [])
 
   const streak = data?.streak ?? 0
-  const weekTotal = data?.weekStats.total ?? 0
   const recent = data?.recent ?? []
 
   return (
@@ -52,9 +50,6 @@ export default function Activity() {
             fontFamily: T.serif, fontSize: 21, fontWeight: 900,
             color: T.ink, letterSpacing: -0.3,
           }}>學習紀錄</span>
-          {streak > 0 && (
-            <StatChip icon={<IconFlame />} value={`${streak} 天`} color={T.accent} background={T.accentSoft} />
-          )}
         </div>
 
         {!data ? (
@@ -65,9 +60,15 @@ export default function Activity() {
         ) : (
           <>
             <div style={{ display: 'flex', gap: 10, padding: '14px 20px 0' }}>
+              {/* All-time numbers here; this week's live in 本週回顧 below
+                  (the old 本週答題 card duplicated it, and a streak chip in
+                  the header duplicated 連續天數). */}
               <StatCard value={streak} label="連續天數" delay={0} />
-              <StatCard value={weekTotal} label="本週答題" delay={80} />
-              <StatCard value={data.totalCorrect} label="累計答對" delay={160} />
+              <StatCard value={data.totalAnswered ?? 0} label="累計答題" delay={80} />
+              <StatCard
+                value={data.totalAnswered ? Math.round((data.totalCorrect / data.totalAnswered) * 100) : 0}
+                suffix="%" label="總正確率" delay={160}
+              />
             </div>
 
             {weekly && (

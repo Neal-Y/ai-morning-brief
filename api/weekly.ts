@@ -48,6 +48,23 @@ async function query(statements: { sql: string; args: unknown[] }[]): Promise<Re
 }
 
 const text = (v: string) => ({ type: 'text', value: v })
+
+// Fill-blank and matching prompts are generic instructions (「請填入正確術語完成
+// 以下句子：」), useless as a reminder of *which* question was missed. Show the
+// sentence / the pairs' left side instead.
+function describe(a: Record<string, string | null>): string {
+  const prompt = a['prompt'] ?? ''
+  try {
+    const p = JSON.parse(a['payload'] ?? '{}') as Record<string, unknown>
+    if (a['type'] === 'fill_blank' && typeof p['template'] === 'string') {
+      return p['template'].replace(/\{\{\d+\}\}/g, '＿＿')
+    }
+    if (a['type'] === 'matching' && Array.isArray(p['left'])) {
+      return `${prompt.replace(/[：:]\s*$/, '')}：${(p['left'] as unknown[]).filter(x => typeof x === 'string').join('、')}`
+    }
+  } catch { /* fall back to the prompt */ }
+  return prompt
+}
 const int = (n: number) => ({ type: 'integer', value: String(n) })
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -77,7 +94,7 @@ export default async function handler(req: Request): Promise<Response> {
     const [attempts = [], reads = [], saved = []] = await query([
       {
         // Two weeks of attempts is small (≤ ~70 rows at 5/day); the cap is a guard.
-        sql: `SELECT qa.quiz_id, qa.correct, qa.answered_at, q.category, q.prompt
+        sql: `SELECT qa.quiz_id, qa.correct, qa.answered_at, q.category, q.prompt, q.type, q.payload
               FROM quiz_attempts qa JOIN quizzes q ON q.id = qa.quiz_id
               WHERE qa.device_id = ? AND qa.answered_at >= ?
               ORDER BY qa.answered_at DESC LIMIT 500`,
@@ -123,7 +140,7 @@ export default async function handler(req: Request): Promise<Response> {
       const id = a['quiz_id'] ?? ''
       if (isCorrect(a) || seen.has(id)) continue
       seen.add(id)
-      missed.push({ quizId: Number(id), category: a['category'] ?? '', prompt: a['prompt'] ?? '' })
+      missed.push({ quizId: Number(id), category: a['category'] ?? '', prompt: describe(a) })
       if (missed.length === 5) break
     }
 
