@@ -2,8 +2,8 @@ name: Quiz Generator
 
 on:
   schedule:
-    # 台灣時間 06:00 = UTC 22:00 (前一天) — 跟文章 pipeline (07:30) 錯開，互不影響
-    - cron: '0 22 * * *'
+    # 台灣時間 05:47 = UTC 21:47 (前一天) — 跟文章 pipeline (07:07) 錯開，互不影響；避開整點塞車
+    - cron: '47 21 * * *'
   workflow_dispatch: # 手動觸發用於測試
 
 jobs:

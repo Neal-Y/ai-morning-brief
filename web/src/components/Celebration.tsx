@@ -137,7 +137,7 @@ export function Celebration({ theme, savedCount, streak, readCount, briefDate, o
         fontFamily: theme.mono, fontSize: 11, color: theme.inkFaint,
         letterSpacing: 1, textTransform: 'uppercase', textAlign: 'center',
         flexShrink: 0,
-      }}>— next edition · tomorrow 07:30 —</div>
+      }}>— next edition · tomorrow 07:07 —</div>
     </div>
   )
 }

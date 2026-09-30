@@ -18,7 +18,7 @@ GitHub Actions cron 驅動，Vercel Edge Runtime 提供 API 服務層。
 
 ### 1. 兩條內容管線解耦，不是硬塞進同一條 pipeline
 
-文章和 quiz 是完全獨立的兩套產出：不同 cron 排程（07:30 / 06:00 台北，刻意錯開）、不同 entry point、不同 dedup 邏輯，只共用 provider 選擇邏輯和同一顆 DB。好處是任一條掛掉不拖累另一條，各自可以獨立重跑、獨立調整節奏。使用者端的 Ask 追問則反過來刻意共用：quiz 題目用合成 `articleId = quiz-${id}` 共用同一套 AskSheet + `/api/ask` SSE，沒有為 quiz 另建一套幾乎一樣的串流邏輯（歷史例外：`conversations` 的 FK 擋掉合成 id，quiz 對話改存各 client 本機，見 docs/KNOWN_ISSUES.md）——同一決策原則（重不重複用）在兩個方向上給出不同答案，取決於失敗域是否該隔離。
+文章和 quiz 是完全獨立的兩套產出：不同 cron 排程（07:07 / 05:47 台北，刻意錯開）、不同 entry point、不同 dedup 邏輯，只共用 provider 選擇邏輯和同一顆 DB。好處是任一條掛掉不拖累另一條，各自可以獨立重跑、獨立調整節奏。使用者端的 Ask 追問則反過來刻意共用：quiz 題目用合成 `articleId = quiz-${id}` 共用同一套 AskSheet + `/api/ask` SSE，沒有為 quiz 另建一套幾乎一樣的串流邏輯（歷史例外：`conversations` 的 FK 擋掉合成 id，quiz 對話改存各 client 本機，見 docs/KNOWN_ISSUES.md）——同一決策原則（重不重複用）在兩個方向上給出不同答案，取決於失敗域是否該隔離。
 
 ### 2. 有回饋迴路的 Feedback Loop，不是一次性腳本
 
@@ -56,14 +56,14 @@ Full mechanics (classifier decision tables, rank+select algorithm, quiz validati
 
 ```
 GitHub Actions cron — 兩條獨立 pipeline
-  ├─ daily_sync.yml (07:30 台北) → src/index.ts
+  ├─ daily_sync.yml (07:07 台北) → src/index.ts
   │    ├─ rss/feed.ts          RSS 抓取 + 24h 過濾 + 關鍵字打分
   │    ├─ db/client.ts         讀近 30 天 feedback 作偏好 context
   │    ├─ ai/classifier.ts     per-article LLM 分類（concurrency=3）
   │    ├─ ai/brief.ts          brief 生成（1 次 LLM call）
   │    ├─ notify/db-writer.ts  upsert 文章到 Turso
   │    └─ notify/web-push.ts   對 push_subscriptions 全表發 Web Push
-  └─ quiz_sync.yml (06:00 台北) → src/quiz-pipeline.ts   （不依賴文章資料；cron 目前手動暫停，見 docs/ARCHITECTURE.md）
+  └─ quiz_sync.yml (05:47 台北) → src/quiz-pipeline.ts   （不依賴文章資料；cron 目前手動暫停，見 docs/ARCHITECTURE.md）
        ├─ db/client.ts         讀近期已出題 prompt 防重複
        ├─ quiz/generate.ts     LLM 出題（4 題型混出）
        └─ db/quiz-writer.ts    寫入 quizzes table
@@ -157,7 +157,7 @@ React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、
 <details>
 <summary>展開</summary>
 
-- **雙每日 pipeline**：GitHub Actions 文章（07:30 台北）+ quiz（06:00 台北）各自獨立排程，寫同一顆 Turso DB
+- **雙每日 pipeline**：GitHub Actions 文章（07:07 台北）+ quiz（05:47 台北）各自獨立排程，寫同一顆 Turso DB
 - **Web PWA 四分頁（主力 client）**：題目 (`/quiz`) / 簡報 (`/`) / Library (`/library`) / 紀錄 (`/activity`)；device_id 做多使用者隔離。原 Sift RN app 四分頁邏輯已原樣搬過來，app/ 本身暫時擱置（見上方 Architecture）
 - **Quiz**：4 種互動題型（single_choice / ordering / matching / fill_blank），答對 +20 XP / 答錯 +5 XP，AskSheet 追問重用文章 Ask 基礎設施
 - **Activity 學習紀錄**：年度 heatmap、週 pie、streak、正確率

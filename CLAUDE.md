@@ -9,7 +9,7 @@
 
 ## TL;DR（新 session 先看這段）
 
-- 整條 pipeline 已上線：GitHub Actions 每天 07:30 台北時間跑 → 寫 Turso DB → **Web Push** 推播。
+- 整條 pipeline 已上線：GitHub Actions 每天 07:07 台北時間跑 → 寫 Turso DB → **Web Push** 推播。
 - Vercel 部署完成：`ai-morning-brief-chi.vercel.app`（Hono API + React PWA + Edge Runtime functions）。
 - **ntfy 已淘汰**（2026-04-25），現在唯一推播管道是 Web Push（VAPID + iOS standalone PWA）。
 - 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`；現在 SW (`web/public/sw.js`) 是真正的 push handler（`push` + `notificationclick` events，無 fetch cache）。
@@ -36,14 +36,14 @@
 
 ```
 GitHub Actions cron — 兩條獨立 pipeline，錯開時間互不影響
-  ├─ daily_sync.yml（07:30 台北）→ src/index.ts             # 文章 pipeline
+  ├─ daily_sync.yml（07:07 台北）→ src/index.ts             # 文章 pipeline
   │    ├─ rss/feed.ts                 # RSS ingestion + 24h filter + 關鍵字打分
   │    ├─ db/client.getRecentFeedback # 讀近 30 天 feedback 作為偏好 context
   │    ├─ ai/classifier.ts            # per-article LLM 分類（concurrency=3）
   │    ├─ ai/brief.ts                 # brief generator（一次 LLM call）
   │    ├─ notify/db-writer.ts         # upsert 文章到 Turso（成功後才推播）
   │    └─ notify/web-push.ts          # 對 push_subscriptions 全表發 Web Push
-  └─ quiz_sync.yml（06:00 台北）→ src/quiz-pipeline.ts       # quiz pipeline（不依賴文章）
+  └─ quiz_sync.yml（05:47 台北）→ src/quiz-pipeline.ts       # quiz pipeline（不依賴文章）
        ├─ db/client.getRecentQuizPrompts # 讀近期已出過的題目 prompt，防重複
        ├─ quiz/generate.ts             # LLM 出題（single_choice / ordering / matching / fill_blank 混出）
        └─ db/quiz-writer.ts            # 寫入 quizzes table
@@ -103,7 +103,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。2026-04-27 Vercel preview 真機驗證完成 |
 | Web PWA 四分頁（Quiz/Feed/Library/Activity）| ✅ | 2026-09-07（commit `ebf73c6`）把 app/ 的 Quiz + Activity 分頁整套搬進 web/，PWA 現在是主力 client。`/` 仍是 Feed（start_url + push 落地頁），SW / manifest / theme_color 全部沒動 |
 | React Native App「Sift」| ⏸️ 暫時擱置 | Expo SDK 54，Expo Go 開發，程式碼保留可運作；EAS Build → TestFlight 因用量不到值得投資的門檻而延後，非凍結、非廢棄 |
-| Quiz 生成 | ✅ 程式碼完成，⏸️ cron 手動暫停 | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（06:00 台北）目前手動關閉，等使用頻率提高再開。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
+| Quiz 生成 | ✅ 程式碼完成，⏸️ cron 手動暫停 | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（05:47 台北）目前手動關閉，等使用頻率提高再開。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
 | Quiz 作答紀錄 | ✅ | `POST /api/quiz-attempt` → `quiz_attempts`；XP：答對 +20 / 答錯 +5（web `web/src/components/quiz/tokens.ts` 與 app `app/src/theme.ts` 各自的 XP 常數，web 版衍生自 `theme.ts`） |
 | 學習紀錄 / Activity | ✅ | `GET /api/activity`：年度 heatmap、週 pie、streak、正確率，皆以 device_id 為範圍。2026-09-29 起 streak / heatmap 同時計入閱讀（feedback）與答題；週統計與 recent 仍只算答題。web `Activity.tsx` 與 app `ActivityScreen.tsx` 吃同一支 API |
 | 多使用者支援 | ✅ | `device_id` 貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts；web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，**兩邊不共用、沒有遷移**，每次 fetch 帶 `X-Device-Id` |
@@ -334,7 +334,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 
 **Quiz pipeline / 多使用者：**
-- Quiz 出題完全獨立於文章 pipeline：不同 cron 檔（`quiz_sync.yml` 06:00 台北 vs `daily_sync.yml` 07:30 台北）、不同 entry（`quiz-pipeline.ts` vs `index.ts`）、不共用 selection 邏輯；共用的只有 `ai/select-provider.ts`（GPT/Claude 輪替）和同一顆 Turso DB
+- Quiz 出題完全獨立於文章 pipeline：不同 cron 檔（`quiz_sync.yml` 05:47 台北 vs `daily_sync.yml` 07:07 台北）、不同 entry（`quiz-pipeline.ts` vs `index.ts`）、不共用 selection 邏輯；共用的只有 `ai/select-provider.ts`（GPT/Claude 輪替）和同一顆 Turso DB
 - Quiz dedup 用同一招：`getRecentQuizPrompts()` 撈近期已出過的題目 prompt，附加在 `QUIZ_SYSTEM` **尾端**（"AVOID REPEATING" 區塊），保 cache prefix 穩定 — 跟 classifier 的 `buildPreferenceContext()` 手法一致，不要重新發明
 - `device_id` 是目前唯一的多使用者隔離機制（沒有帳號系統）：`feedback` / `saves` / `conversations` / `push_subscriptions` / `quiz_attempts` 都有 `device_id` 欄位，app 端由 `src/device.ts` 生成 UUID 存 AsyncStorage，每次 fetch 帶 `X-Device-Id` header。新增任何寫入型 endpoint 若涉及個人化資料，記得比照加 `device_id` 欄位 + header 檢查
 - web 跟 app 的 device_id **不共用**：web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`。2026-09-07 web port 沒有做身分遷移，是刻意決定——Activity 等個人化歷史在 web 上從零開始算，不要當成 bug 去「修」

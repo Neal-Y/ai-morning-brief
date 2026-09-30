@@ -15,7 +15,7 @@ Both write to the same Turso DB. Neither reads the other's tables. Either can fa
 | | Article pipeline | Quiz pipeline |
 |---|---|---|
 | Entry | `src/index.ts` | `src/quiz-pipeline.ts` |
-| Cron | `daily_sync.yml`, 07:30 Taipei | `quiz_sync.yml`, 06:00 Taipei |
+| Cron | `daily_sync.yml`, 07:07 Taipei | `quiz_sync.yml`, 05:47 Taipei |
 | Depends on | RSS feeds | Nothing external — pure LLM generation |
 | Output table | `articles` | `quizzes` |
 | Shared with the other pipeline | `ai/select-provider.ts` (GPT/Claude alternation), same Turso instance | same |

@@ -132,7 +132,7 @@ export function FeedScreen() {
         <SafeAreaView style={styles.center}>
           <Text style={styles.doneIcon}>◎</Text>
           <Text style={styles.doneTitle}>今日尚無文章</Text>
-          <Text style={styles.doneSub}>Pipeline 每天 07:30 台北時間更新</Text>
+          <Text style={styles.doneSub}>Pipeline 每天 07:07 台北時間更新</Text>
           <Pressable
             style={styles.retryBtn}
             onPress={() => {
