@@ -141,11 +141,14 @@ export function canonicalUrl(url: string): string {
 
 const STOPWORDS = new Set(['the', 'a', 'an', 'and', 'or', 'of', 'to', 'in', 'on', 'for', 'with', 'its', 'is', 'are', 'new', 'how', 'why', 'what', 'from', 'by', 'at', 'as']);
 
-/** Latin words (minus stopwords) + CJK character bigrams. */
+/**
+ * Latin words and numbers (minus stopwords) + CJK character bigrams.
+ * Letters and numbers split apart so "GPT-6.1" and "GPT 6.1" match.
+ */
 export function titleTokens(title: string): Set<string> {
   const lower = title.toLowerCase();
   const tokens = new Set<string>();
-  for (const w of lower.match(/[a-z0-9][a-z0-9.+-]*/g) ?? []) {
+  for (const w of lower.match(/[a-z]+|\d+(?:\.\d+)*/g) ?? []) {
     if (!STOPWORDS.has(w)) tokens.add(w);
   }
   const cjk = lower.match(/[\u4e00-\u9fff]/g) ?? [];
