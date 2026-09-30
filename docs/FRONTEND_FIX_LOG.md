@@ -857,6 +857,20 @@ Single-choice already highlighted the correct option.
 
 The keyboard and home-swipe fixes still **need a real iPhone PWA check**. Chromium has neither an iOS keyboard nor the home gesture.
 
+## Issue 22: Bug sweep — state lost on tab switch, attempts lost on leave (2026-09-30)
+
+Found in a deliberate sweep after the Ask keyboard fixes:
+- **Feed restarted at card 1 on every tab switch.** `App` unmounts on each tab switch (same cause as the quiz "1/5" bug in Issue 19). Every 👍/👎/🔖 on screen also reset. Now `mb_feed_session` (`{date, idx, feedback, saved}`, keyed by brief date) restores the position and reactions.
+- **Quiz attempts were only recorded on 「下一題」.** Leaving mid-explanation dropped the attempt and handed back the same question, with the answer already seen. `QuizFrame` now fires `onResolve` when the question is answered, which is where `Quiz.tsx` submits the attempt and appends the result. A restore resumes at `max(index, results.length)`.
+- **Library ask-count mark always read 0.** The multi-user change (`b23f1d5`) dropped the `conversations` join from `/api/library`. It is restored, still count-only and never the messages JSON.
+- **html/body stayed card-coloured after the celebration.** Leaving via 「去答今天的判斷題」 kept the card colour on the other tabs' overscroll and safe-area bands. `App` now resets it on unmount.
+- **Desktop ←/→ keys set feedback locally but never POSTed it.** They now go through `registerFeedback`.
+
+Verification: Playwright (390×844, mocked API).
+- Feed: MORE then SAVE, then Library → 簡報. The same card is shown and 🔖 still shows as saved.
+- Quiz: answer Q1, leave without 下一題, come back. The page shows 「第 2 題」, with exactly one `POST /api/quiz-attempt`.
+- After leaving the celebration, `body` background is back to `#0B121A`.
+
 ---
 
 ## What Was Intentionally Not Changed

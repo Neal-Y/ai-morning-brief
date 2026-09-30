@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { db } from '../db/client.js'
-import { articles, feedback, saves, quizzes, quizAttempts } from '../db/schema.js'
+import { articles, conversations, feedback, saves, quizzes, quizAttempts } from '../db/schema.js'
 import { eq, desc, and, inArray, notInArray, gte, sql } from 'drizzle-orm'
 import { dueReviewIds, REVIEW_MAX_PER_SET } from '../quiz/review.js'
 
@@ -25,7 +25,7 @@ app.get('/api/library', async (c) => {
   // practice feedback is delete-then-insert so at most one per article, but
   // we don't want this endpoint to depend on that invariant.
   const deviceId = c.req.header('X-Device-Id') ?? null
-  const [articleRows, feedbackRows, savesRows] = await Promise.all([
+  const [articleRows, feedbackRows, savesRows, askRows] = await Promise.all([
     db.select().from(articles).orderBy(desc(articles.briefDate), desc(articles.score)),
     deviceId
       ? db.select().from(feedback).where(eq(feedback.deviceId, deviceId))
@@ -35,6 +35,14 @@ app.get('/api/library', async (c) => {
       // migrated into the live `saves` table (see docs/KNOWN_ISSUES.md). Filtering
       // on it 500s every request. Revisit once the migration actually lands.
       ? db.select().from(saves).where(eq(saves.deviceId, deviceId))
+      : Promise.resolve([]),
+    // Only the count — never the messages JSON, so the payload stays small.
+    // This join was dropped in the multi-user change (b23f1d5) and the
+    // Library's ask-count mark silently read 0 ever since.
+    deviceId
+      ? db.select({ articleId: conversations.articleId, messageCount: conversations.messageCount })
+          .from(conversations)
+          .where(eq(conversations.deviceId, deviceId))
       : Promise.resolve([]),
   ])
 
@@ -47,6 +55,8 @@ app.get('/api/library', async (c) => {
     savesMap.set(s.articleId, { notionPageId: s.notionPageId })
   }
 
+  const askCountMap = new Map(askRows.map((r) => [r.articleId, r.messageCount]))
+
   const enriched = articleRows
     .filter((a) => a.renderLevel !== 'OMIT')
     .map((a) => ({
@@ -54,6 +64,7 @@ app.get('/api/library', async (c) => {
       feedback: feedbackMap.get(a.id) ?? null,
       saved: savesMap.has(a.id),
       notionSynced: !!savesMap.get(a.id)?.notionPageId,
+      askMessageCount: askCountMap.get(a.id) ?? 0,
     }))
 
   // Library reflects user state (feedback/saves), so don't cache at the edge.

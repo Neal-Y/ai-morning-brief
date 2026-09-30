@@ -29,7 +29,9 @@ export interface QuizChromeProps {
   xpToday: number
   isLast: boolean
   bottomInset: number
-  onNext: (correct: boolean) => void
+  /** Fired once when the question is answered — the attempt is recorded here. */
+  onResolve: (correct: boolean) => void
+  onNext: () => void
 }
 
 interface Props extends QuizChromeProps {
@@ -44,7 +46,7 @@ interface Props extends QuizChromeProps {
  */
 export function QuizFrame({
   id, category, prompt, explanation, source, review = false, ask,
-  index, total, streak, xpToday, isLast, bottomInset, onNext, children,
+  index, total, streak, xpToday, isLast, bottomInset, onResolve, onNext, children,
 }: Props) {
   const [resolved, setResolved] = useState(false)
   const [correct, setCorrect] = useState(false)
@@ -57,6 +59,7 @@ export function QuizFrame({
     setResolved(true)
     setCorrect(isCorrect)
     setYourAnswer(answer)
+    onResolve(isCorrect)
     // Let the verdict card mount before scrolling it into view.
     setTimeout(() => {
       const el = scrollRef.current
@@ -234,7 +237,7 @@ export function QuizFrame({
           background: `linear-gradient(to top, ${T.bg} 62%, transparent)`,
           animation: 'quizFadeUp 0.3s ease-out both',
         }}>
-          <PrimaryButton label={isLast ? '完成今日' : '下一題'} onClick={() => onNext(correct)} />
+          <PrimaryButton label={isLast ? '完成今日' : '下一題'} onClick={onNext} />
         </div>
       )}
 
