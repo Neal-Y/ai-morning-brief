@@ -391,7 +391,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 
 ## Key Design Decisions
 
-1. **Provider alternation**：GPT / Claude 按台北 day-of-year 奇偶輪替
+1. **Provider alternation**：GPT / Claude 按台北 day-of-year 奇偶輪替。**2026-10-01 起有 fallback**：當天的 provider 整批失敗（例：OpenAI 額度用完，24 篇分類全 429）時，文章分類與 quiz 出題會自動改用另一家（`fallbackProvider()`），兩家都掛才 `exit(1)`。在這之前全部分類失敗會被當成「全是 DROP」，送出假的「今日無重大 AI 新聞」推播
 2. **Rendering levels**：FULL / LIGHT / OMIT by brief generator
 3. **Category tags**：#model-release #api-platform #infra-inference #tooling-open-source #benchmark-eval #agent-systems #policy-regulation #company-market #social-opinion #event-promo #research-adjacent
 4. **Web design**：2026-09-29 起是「Signal」——icon 的深墨藍＋琥珀、圓角卡片、tonal 按鈕、毛玻璃 nav/dock，偏 iOS 原生感；字體沿用 Source Serif 4（標題）＋ Inter ＋ JetBrains Mono（標籤）。之前是報紙 / FT editorial 暖棕風格

@@ -3,7 +3,7 @@ import { count, eq, isNotNull } from 'drizzle-orm';
 import { loadConfig, CLASSIFIER_CAP, PER_SOURCE_CLASSIFIER_MIN, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
 import { getTodaysArticles, pickForClassifier } from './rss/feed.js';
 import type { AIProvider, ClassifiedArticle } from './ai/provider.js';
-import { selectProvider } from './ai/select-provider.js';
+import { fallbackProvider, selectProvider } from './ai/select-provider.js';
 import { classifyArticles, buildPreferenceContext } from './ai/classifier.js';
 import { generateBrief, buildDegradedBrief } from './ai/brief.js';
 import { sendWebPush } from './notify/web-push.js';
@@ -153,7 +153,28 @@ async function main(): Promise<void> {
     console.warn('[main] Failed to load feedback, continuing without preference:', err instanceof Error ? err.message : err);
   }
 
-  const classifications = await classifyArticles(provider, toClassify, preferenceContext);
+  let classifications: Awaited<ReturnType<typeof classifyArticles>>;
+  try {
+    classifications = await classifyArticles(provider, toClassify, preferenceContext);
+  } catch (err) {
+    console.error(`[classifier] ${provider.name} outage:`, err instanceof Error ? err.message : err);
+    const fallback = fallbackProvider(config, provider);
+    if (!fallback) {
+      console.error('[main] No fallback provider configured — failing the run (no push).');
+      process.exit(1);
+    }
+    console.warn(`[main] Falling back to ${fallback.name}`);
+    provider.logUsageSummary();
+    provider = fallback;
+    try {
+      classifications = await classifyArticles(provider, toClassify, preferenceContext);
+    } catch (err2) {
+      // Both providers down is an infra error: fail the Action, never send a
+      // fake empty-day push.
+      console.error(`[classifier] ${provider.name} outage too:`, err2 instanceof Error ? err2.message : err2);
+      process.exit(1);
+    }
+  }
 
   const allClassified: ClassifiedArticle[] = toClassify.map((article, i) => ({
     ...article,

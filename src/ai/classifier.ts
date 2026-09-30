@@ -318,6 +318,15 @@ export async function classifyArticles(
     (a) => classifyOne(provider, a, systemParts)
   );
 
+  // Every call failing is a provider outage (no credits, bad key, API down),
+  // not "nothing worth reading". Throw so the caller can switch provider or
+  // fail the run — silently mapping all of them to DROP sent a false
+  // "今日無重大 AI 新聞" push on 2026-10-01.
+  if (results.every((r) => r.status === 'rejected')) {
+    const first = results[0];
+    throw new Error(`All ${results.length} classifications failed: ${first && first.status === 'rejected' ? String(first.reason) : 'unknown'}`);
+  }
+
   return results.map((r, i) => {
     if (r.status === 'fulfilled') return r.value;
     console.warn(`[classifier] Failed for "${articles[i]?.title.slice(0, 40)}": ${r.reason}`);

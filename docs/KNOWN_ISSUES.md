@@ -76,3 +76,14 @@ Discovered when `GET /api/library` started 500ing for every request carrying `X-
 **Blast radius before the fix**: `GET /api/library` 500ed for every device-scoped request. `POST /api/unsave` had almost certainly been 500ing since deployed (the app's optimistic local UI update just made unsaving *look* like it worked, while the DB write silently failed). `POST /api/save`'s re-save-after-unsave path would also have 500ed.
 
 **Resolution — simplified instead of migrated**: rather than adding the missing columns, `/api/unsave` was changed to a real `DELETE FROM saves` (hard delete). This is safe and simpler because Notion-duplicate prevention was never actually dependent on the DB row surviving — `save.ts`'s real dedupe is (a) reuse `saves.notion_page_id` if present, else (b) query Notion directly via `findSavePageByArticleId(articleId)`, which finds the same page regardless of whether a local `saves` row exists. No migration needed; `deleted_at`/`notion_syncing_at` references removed from `unsave.ts`/`save.ts` entirely. `GET /api/library`'s filter was reverted to match (no `deleted_at` clause — a hard-deleted row just isn't in the table anymore, nothing to filter).
+
+## Fixed 2026-10-01: a provider outage sent a fake "no news today" push
+
+On 2026-10-01 (a GPT day under alternation), the OpenAI account had run out of credits, so all 24 classifications returned 429. `classifyArticles` mapped every failure to the fallback classification (DROP). The pipeline then saw zero kept articles and sent 「今日無重大 AI 新聞」. That violated the rule that infra errors fail the run and never push.
+
+Fix:
+- `classifyArticles` now throws when every call fails.
+- `src/index.ts` and `src/quiz-pipeline.ts` retry once on the other provider (`fallbackProvider()` in `ai/select-provider.ts`), and `exit(1)` if that one fails too.
+
+**Still open:** the OpenAI account has no credits. Until it is topped up, every GPT day runs on Claude through this fallback, and the log shows the failed GPT attempt first.
+
