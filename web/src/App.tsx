@@ -49,6 +49,29 @@ function parseArticles(raw: FeedResponse['articles']): Article[] {
     }))
 }
 
+// Today's reading position + reactions survive leaving the tab (App unmounts on
+// every tab switch) and iOS killing the PWA. Without this, coming back from
+// Library or Quiz restarted the brief at card 1 with every 👍/🔖 cleared.
+const FEED_SESSION_KEY = 'mb_feed_session'
+
+interface FeedSession {
+  date: string
+  idx: number
+  feedback: Record<string, 'up' | 'down'>
+  saved: Record<string, boolean>
+}
+
+function readFeedSession(date: string): FeedSession | null {
+  try {
+    const raw = localStorage.getItem(FEED_SESSION_KEY)
+    const s = raw ? JSON.parse(raw) as FeedSession : null
+    if (!s || s.date !== date || !Number.isInteger(s.idx) || s.idx < 0) return null
+    return { date, idx: s.idx, feedback: s.feedback ?? {}, saved: s.saved ?? {} }
+  } catch {
+    return null
+  }
+}
+
 export default function App() {
   const [articles, setArticles] = useState<Article[]>([])
   const [idx, setIdx] = useState(0)
@@ -114,8 +137,16 @@ export default function App() {
         return r.json() as Promise<FeedResponse>
       })
       .then(data => {
-        setBriefDate(data.date ?? today)
-        setArticles(parseArticles(data.articles))
+        const date = data.date ?? today
+        const parsed = parseArticles(data.articles)
+        const session = readFeedSession(date)
+        if (session) {
+          setIdx(Math.min(session.idx, parsed.length))
+          setFeedback(session.feedback)
+          setSaved(session.saved)
+        }
+        setBriefDate(date)
+        setArticles(parsed)
         setLoading(false)
       })
       .catch(() => {
@@ -123,6 +154,13 @@ export default function App() {
         setLoading(false)
       })
   }, [])
+
+  useEffect(() => {
+    if (articles.length === 0) return
+    try {
+      localStorage.setItem(FEED_SESSION_KEY, JSON.stringify({ date: briefDate, idx, feedback, saved }))
+    } catch { /* private mode / quota */ }
+  }, [articles.length, briefDate, idx, feedback, saved])
 
   const atCelebration = idx >= articles.length && articles.length > 0
   const curArticle = !atCelebration && articles[idx] ? articles[idx] : null
@@ -262,6 +300,14 @@ export default function App() {
     document.body.style.background = color
   }, [atCelebration, T.bg, T.card])
 
+  // The celebration paints html/body in the card colour; put the page colour
+  // back when leaving the Feed tab (e.g. 「去答今天的判斷題」), or every other
+  // tab inherits the wrong background in overscroll / safe-area bands.
+  useEffect(() => () => {
+    document.documentElement.style.background = T.bg
+    document.body.style.background = T.bg
+  }, [T.bg])
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (showAsk) {
@@ -269,16 +315,10 @@ export default function App() {
         return
       }
       if (!curArticle) return
-      if (e.key === 'ArrowRight') {
-        setFeedback(f => ({ ...f, [curArticle.id]: 'up' }))
-        setSwipeX(120)
-        setTimeout(advance, 180)
-      }
-      if (e.key === 'ArrowLeft') {
-        setFeedback(f => ({ ...f, [curArticle.id]: 'down' }))
-        setSwipeX(-120)
-        setTimeout(advance, 180)
-      }
+      // Through registerFeedback so the signal is actually POSTed — the arrow
+      // keys used to set local state only, and the row never reached the DB.
+      if (e.key === 'ArrowRight') registerFeedback('up')
+      if (e.key === 'ArrowLeft') registerFeedback('down')
       if (e.key === 'ArrowUp') setShowAsk(true)
     }
     window.addEventListener('keydown', onKey)

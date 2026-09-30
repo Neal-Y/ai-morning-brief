@@ -50,7 +50,9 @@ export default function Quiz() {
   const [restored] = useState(readSession)
   const [state, setState] = useState<LoadState>(() =>
     restored ? { status: 'ready', quizzes: restored.quizzes } : { status: 'loading' })
-  const [index, setIndex] = useState(() => restored?.index ?? 0)
+  // results.length can be index + 1: the current question was answered but
+  // 「下一題」 wasn't tapped before leaving. Resume after it — it's recorded.
+  const [index, setIndex] = useState(() => restored ? Math.max(restored.index, restored.results.length) : 0)
   const [results, setResults] = useState<boolean[]>(() => restored?.results ?? [])
   const [streak, setStreak] = useState(0)
 
@@ -84,15 +86,21 @@ export default function Quiz() {
   const xpToday = results.reduce((sum, ok) => sum + (ok ? XP.correct : XP.wrong), 0)
   const finished = total > 0 && index >= total
 
-  const handleNext = (correct: boolean) => {
+  // The attempt is recorded the moment the question is answered, not on
+  // 「下一題」: leaving mid-explanation (to check an article, or iOS killing the
+  // PWA) used to drop the attempt and hand back the same question — with the
+  // answer already seen.
+  const handleResolve = (correct: boolean) => {
+    if (results.length > index) return // already recorded for this question
     const current = quizzes[index]
     if (current) {
       const quizId = Number(current.id)
       if (Number.isFinite(quizId)) void submitQuizAttempt(quizId, correct)
     }
     setResults(prev => [...prev, correct])
-    setIndex(i => i + 1)
   }
+
+  const handleNext = () => setIndex(i => i + 1)
 
   return (
     <div style={{
@@ -139,6 +147,7 @@ export default function Quiz() {
               xpToday={xpToday}
               isLast={index === total - 1}
               bottomInset={navInset}
+              onResolve={handleResolve}
               onNext={handleNext}
             />
           )
