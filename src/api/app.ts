@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import { db } from '../db/client.js'
-import { articles, conversations, feedback, saves, quizzes, quizAttempts } from '../db/schema.js'
+import { db, isMissingTable } from '../db/client.js'
+import { articles, conversations, feedback, saves, quizzes, quizAttempts, quizReports } from '../db/schema.js'
 import { eq, desc, and, inArray, notInArray, gte, sql } from 'drizzle-orm'
 import { dueReviewIds, REVIEW_MAX_PER_SET } from '../quiz/review.js'
+import { computeStreak } from '../streak.js'
 
 // NOTE: /api/ask is NOT defined here. In production, Vercel rewrites /api/ask
 // directly to api/ask.ts (Edge Runtime, raw fetch streaming). Keeping a Hono
@@ -84,6 +85,17 @@ app.get('/api/quiz', async (c) => {
   const deviceId = c.req.header('X-Device-Id') ?? null
   const typeFilter = types.length > 0 ? inArray(quizzes.type, types) : null
 
+  // Reported questions (api/quiz-report.ts) are out for everyone. The table is
+  // created lazily on the first report, so a missing table means none yet.
+  let reportedIds: number[] = []
+  try {
+    reportedIds = (await db.selectDistinct({ quizId: quizReports.quizId }).from(quizReports)).map((r) => r.quizId)
+  } catch (err) {
+    if (!(isMissingTable(err))) throw err
+  }
+  const notReported = reportedIds.length > 0 ? notInArray(quizzes.id, reportedIds) : null
+  const baseFilter = typeFilter && notReported ? and(typeFilter, notReported) : (typeFilter ?? notReported)
+
   let attemptedIds: number[] = []
   let reviewIds: number[] = []
   if (deviceId) {
@@ -104,7 +116,7 @@ app.get('/api/quiz', async (c) => {
     const rows = await db
       .select()
       .from(quizzes)
-      .where(typeFilter ? and(typeFilter, inArray(quizzes.id, candidates)) : inArray(quizzes.id, candidates))
+      .where(baseFilter ? and(baseFilter, inArray(quizzes.id, candidates)) : inArray(quizzes.id, candidates))
     const byId = new Map(rows.map((r) => [r.id, r]))
     reviews = candidates.flatMap((id) => byId.get(id) ?? []).slice(0, reviewCap)
   }
@@ -114,10 +126,10 @@ app.get('/api/quiz', async (c) => {
   const freshCount = count - reviews.length
   const freshCondition =
     attemptedIds.length > 0
-      ? typeFilter
-        ? and(typeFilter, notInArray(quizzes.id, attemptedIds))
+      ? baseFilter
+        ? and(baseFilter, notInArray(quizzes.id, attemptedIds))
         : notInArray(quizzes.id, attemptedIds)
-      : typeFilter
+      : baseFilter
 
   const freshQuery = db.select().from(quizzes).orderBy(desc(quizzes.createdAt)).limit(freshCount)
   const fresh = freshCount === 0 ? [] : freshCondition ? await freshQuery.where(freshCondition) : await freshQuery
@@ -129,8 +141,8 @@ app.get('/api/quiz', async (c) => {
     const need = count - result.length
     const recyclable = attemptedIds.filter((id) => !reviewSet.has(id))
     if (recyclable.length > 0) {
-      const recycleCondition = typeFilter
-        ? and(typeFilter, inArray(quizzes.id, recyclable))
+      const recycleCondition = baseFilter
+        ? and(baseFilter, inArray(quizzes.id, recyclable))
         : inArray(quizzes.id, recyclable)
       const recycled = await db
         .select()
@@ -183,23 +195,6 @@ function formatDayLabel(dateStr: string): string {
   const [year, month, day] = dateStr.split('-').map(Number)
   const d = new Date(Date.UTC(year!, month! - 1, day!, 4)) // noon Taipei = 04:00 UTC
   return `${month}/${day} (${WEEKDAY_ZH[d.getUTCDay()]})`
-}
-
-// Count consecutive days ending today or yesterday (Taipei time)
-function computeStreak(sortedDaysDesc: string[]): number {
-  if (sortedDaysDesc.length === 0) return 0
-  const tMs = taipeiNowMs()
-  const todayStr = new Date(tMs).toISOString().slice(0, 10)
-  const yestStr = new Date(tMs - 86400_000).toISOString().slice(0, 10)
-  if (sortedDaysDesc[0] !== todayStr && sortedDaysDesc[0] !== yestStr) return 0
-  let streak = 0
-  let expected = sortedDaysDesc[0]!
-  for (const day of sortedDaysDesc) {
-    if (day !== expected) break
-    streak++
-    expected = new Date(new Date(expected + 'T00:00:00Z').getTime() - 86400_000).toISOString().slice(0, 10)
-  }
-  return streak
 }
 
 // Build 52 cols × 7 rows heatmap grid (col 0 = oldest, col 51 = this week)

@@ -4,6 +4,7 @@ import type { Article } from '../../types.ts'
 import { AskSheet, type QuizAskContext } from '../AskSheet.tsx'
 import { Q, RADIUS, XP } from './tokens.ts'
 import { IconBolt, IconFlame, StatChip } from '../icons.tsx'
+import { reportQuiz, type QuizReportReason } from '../../api.ts'
 
 const T = THEME_DARK
 
@@ -32,6 +33,8 @@ export interface QuizChromeProps {
   /** Fired once when the question is answered — the attempt is recorded here. */
   onResolve: (correct: boolean) => void
   onNext: () => void
+  /** Leave an unanswered question without recording an attempt (after reporting it). */
+  onSkip: () => void
 }
 
 interface Props extends QuizChromeProps {
@@ -46,12 +49,20 @@ interface Props extends QuizChromeProps {
  */
 export function QuizFrame({
   id, category, prompt, explanation, source, review = false, ask,
-  index, total, streak, xpToday, isLast, bottomInset, onResolve, onNext, children,
+  index, total, streak, xpToday, isLast, bottomInset, onResolve, onNext, onSkip, children,
 }: Props) {
   const [resolved, setResolved] = useState(false)
   const [correct, setCorrect] = useState(false)
   const [yourAnswer, setYourAnswer] = useState<string | undefined>(undefined)
   const [askOpen, setAskOpen] = useState(false)
+  const [reportState, setReportState] = useState<'idle' | 'choosing' | 'sending' | 'done' | 'failed'>('idle')
+
+  const sendReport = async (reason: QuizReportReason) => {
+    const quizId = Number(id)
+    if (!Number.isFinite(quizId)) return
+    setReportState('sending')
+    setReportState(await reportQuiz(quizId, reason) ? 'done' : 'failed')
+  }
   const scrollRef = useRef<HTMLDivElement>(null)
 
   const resolve = (isCorrect: boolean, answer?: string) => {
@@ -177,6 +188,25 @@ export function QuizFrame({
                 {source.name}
               </a>
             ) : <span />}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {reportState === 'idle' && (
+              // Low-key on purpose: most questions are fine, this is the escape
+              // hatch for the ones that aren't (api/quiz-report.ts).
+              <button
+                onClick={() => setReportState('choosing')}
+                aria-label="回報這題有問題"
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: 'none', border: 'none', padding: '7px 4px',
+                  fontFamily: T.sans, fontSize: 12, color: T.inkFaint,
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M5 21V4h11l-1.5 4L16 12H5" />
+                </svg>
+                回報
+              </button>
+            )}
             <button
               className="btn-press"
               onClick={() => setAskOpen(true)}
@@ -192,7 +222,72 @@ export function QuizFrame({
               </svg>
               追問
             </button>
+            </div>
           </div>
+
+          {reportState !== 'idle' && (
+            <div style={{
+              marginTop: 10, padding: '10px 12px', borderRadius: RADIUS.option,
+              background: T.raised, animation: 'quizFadeUp 0.25s ease-out both',
+            }}>
+              {reportState === 'choosing' || reportState === 'sending' ? (
+                <>
+                  <div style={{ fontFamily: T.sans, fontSize: 12, color: T.inkMuted, marginBottom: 8 }}>
+                    這題哪裡有問題？回報後它不會再出現，出題時也會避開類似的題目。
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                    {([
+                      ['wrong_answer', '答案有誤'],
+                      ['unclear', '題意不清'],
+                      ['too_easy', '太簡單'],
+                      ['other', '其他'],
+                    ] as [QuizReportReason, string][]).map(([reason, label]) => (
+                      <button
+                        key={reason}
+                        disabled={reportState === 'sending'}
+                        onClick={() => void sendReport(reason)}
+                        style={{
+                          border: 'none', borderRadius: RADIUS.pill, padding: '7px 12px',
+                          background: T.card, color: T.ink, boxShadow: T.highlight,
+                          fontFamily: T.sans, fontSize: 12, fontWeight: 600,
+                          opacity: reportState === 'sending' ? 0.5 : 1,
+                        }}
+                      >{label}</button>
+                    ))}
+                    <button
+                      onClick={() => setReportState('idle')}
+                      style={{
+                        border: 'none', background: 'none', padding: '7px 8px',
+                        fontFamily: T.sans, fontSize: 12, color: T.inkFaint,
+                      }}
+                    >取消</button>
+                  </div>
+                </>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    flex: 1, fontFamily: T.sans, fontSize: 12,
+                    color: reportState === 'done' ? T.inkMuted : Q.wrong,
+                  }}>
+                    {reportState === 'done'
+                      ? '已回報，這題之後不會再出現。'
+                      : '回報沒送出，請稍後再試。'}
+                  </div>
+                  {reportState === 'done' && !resolved && (
+                    <button
+                      className="btn-press"
+                      onClick={onSkip}
+                      style={{
+                        flexShrink: 0, border: 'none', borderRadius: RADIUS.pill,
+                        padding: '7px 14px', background: T.accentSoft, color: T.accent,
+                        fontFamily: T.sans, fontSize: 12, fontWeight: 700,
+                      }}
+                    >{isLast ? '跳過，完成今日' : '跳過這題'}</button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ marginTop: 20 }}>{children({ resolved, resolve })}</div>
 

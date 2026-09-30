@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { THEME_DARK } from './theme.ts'
 import { useNavInset } from './nav.ts'
-import { fetchActivity, submitQuizAttempt } from './api.ts'
+import { fetchActivity, readCache, submitQuizAttempt, writeCache, type ActivityData } from './api.ts'
 import { loadQuizzes, type Quiz as QuizItem } from './quiz/types.ts'
+import { loadTodaysQuizzes, readQuizSession, writeQuizSession } from './quiz/session.ts'
 import { QuizCard } from './components/quiz/QuizCard.tsx'
 import { CompletionCard } from './components/quiz/CompletionCard.tsx'
 import { XP } from './components/quiz/tokens.ts'
@@ -15,52 +16,25 @@ type LoadState =
   | { status: 'error' }
   | { status: 'ready'; quizzes: QuizItem[] }
 
-// Today's set + progress survive leaving the tab (Quiz unmounts on every tab
-// switch) and iOS killing the standalone PWA. Without this, coming back
-// refetched /api/quiz, which serves unattempted questions first — so question
-// 3 came back as "1/5" with two new questions appended and XP reset to zero.
-const SESSION_KEY = 'mb_quiz_session'
-
-interface QuizSession {
-  date: string
-  quizzes: QuizItem[]
-  index: number
-  results: boolean[]
-}
-
-function readSession(): QuizSession | null {
-  try {
-    const raw = localStorage.getItem(SESSION_KEY)
-    if (!raw) return null
-    const s = JSON.parse(raw) as QuizSession
-    if (s.date !== getTaipeiDateString() || !Array.isArray(s.quizzes) || s.quizzes.length === 0) return null
-    if (!Number.isInteger(s.index) || s.index < 0 || !Array.isArray(s.results)) return null
-    return s
-  } catch {
-    return null
-  }
-}
-
-function writeSession(s: QuizSession) {
-  try { localStorage.setItem(SESSION_KEY, JSON.stringify(s)) } catch { /* private mode / quota */ }
-}
-
 export default function Quiz() {
   const navInset = useNavInset()
-  const [restored] = useState(readSession)
+  const [restored] = useState(readQuizSession)
   const [state, setState] = useState<LoadState>(() =>
     restored ? { status: 'ready', quizzes: restored.quizzes } : { status: 'loading' })
   // results.length can be index + 1: the current question was answered but
   // 「下一題」 wasn't tapped before leaving. Resume after it — it's recorded.
   const [index, setIndex] = useState(() => restored ? Math.max(restored.index, restored.results.length) : 0)
-  const [results, setResults] = useState<boolean[]>(() => restored?.results ?? [])
-  const [streak, setStreak] = useState(0)
+  const [results, setResults] = useState<(boolean | null)[]>(() => restored?.results ?? [])
+  // Last known streak renders instantly; /api/activity refreshes it.
+  const [streak, setStreak] = useState(() => readCache<ActivityData>('activity')?.streak ?? 0)
 
-  const load = () => {
+  // `fresh`: CompletionCard's "another set" wants a new set, not today's
+  // (possibly prefetched) one.
+  const load = (fresh = false) => {
     setState({ status: 'loading' })
     setResults([])
     setIndex(0)
-    loadQuizzes()
+    ;(fresh ? loadQuizzes() : loadTodaysQuizzes())
       .then(quizzes => setState(quizzes.length > 0
         ? { status: 'ready', quizzes }
         : { status: 'error' }))
@@ -71,19 +45,20 @@ export default function Quiz() {
     if (!restored) load()
     // Real streak from /api/activity — never a hardcoded constant. If the call
     // fails it reads 0 rather than showing a number that isn't true.
-    fetchActivity().then(a => setStreak(a.streak)).catch(() => {})
+    fetchActivity().then(a => { setStreak(a.streak); writeCache('activity', a) }).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (state.status === 'ready') {
-      writeSession({ date: getTaipeiDateString(), quizzes: state.quizzes, index, results })
+      writeQuizSession({ date: getTaipeiDateString(), quizzes: state.quizzes, index, results })
     }
   }, [state, index, results])
 
   const quizzes = state.status === 'ready' ? state.quizzes : []
   const total = quizzes.length
-  const correctCount = results.filter(Boolean).length
-  const xpToday = results.reduce((sum, ok) => sum + (ok ? XP.correct : XP.wrong), 0)
+  const correctCount = results.filter(r => r === true).length
+  const answeredCount = results.filter(r => r !== null).length
+  const xpToday = results.reduce((sum, ok) => sum + (ok === null ? 0 : ok ? XP.correct : XP.wrong), 0)
   const finished = total > 0 && index >= total
 
   // The attempt is recorded the moment the question is answered, not on
@@ -102,6 +77,15 @@ export default function Quiz() {
 
   const handleNext = () => setIndex(i => i + 1)
 
+  // A reported question can be left without answering: no attempt is recorded
+  // (it would count as a miss and feed the review schedule), and the slot is
+  // kept as null so results stays aligned with index.
+  const handleSkip = () => {
+    if (results.length > index) { handleNext(); return }
+    setResults(prev => [...prev, null])
+    handleNext()
+  }
+
   return (
     <div style={{
       position: 'absolute', top: 0, left: 0, right: 0, height: '100%',
@@ -118,7 +102,7 @@ export default function Quiz() {
           <Centered inset={navInset}>
             <div style={{ marginBottom: 14 }}>目前沒有可作答的題目</div>
             <button
-              onClick={load}
+              onClick={() => load()}
               style={{
                 fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 0.3,
                 color: T.bg, background: T.accent, border: 'none',
@@ -132,10 +116,10 @@ export default function Quiz() {
           finished ? (
             <CompletionCard
               correctCount={correctCount}
-              total={total}
+              total={answeredCount}
               xpToday={xpToday}
               bottomInset={navInset}
-              onRestart={load}
+              onRestart={() => load(true)}
             />
           ) : (
             <QuizCard
@@ -149,6 +133,7 @@ export default function Quiz() {
               bottomInset={navInset}
               onResolve={handleResolve}
               onNext={handleNext}
+              onSkip={handleSkip}
             />
           )
         )}

@@ -886,6 +886,20 @@ Everything is now "Sift":
 - The icon PNGs. A recoloured set was drawn, but iOS snapshots a home-screen PWA's icon and label at install. Seeing a new icon means deleting and re-adding the PWA, and deleting it wipes its storage, including `mb_device_id` and with it all history. The user chose not to.
 - The installed home-screen label, which also keeps showing "Brief" until a re-add, for the same reason.
 
+## Issue 24: Report a question, weekly review, instant tabs (2026-09-30)
+
+- **Report a question.** `QuizFrame` has a low-key 「回報」 action that opens reason chips (答案有誤 / 題意不清 / 太簡單 / 其他) and sends `POST /api/quiz-report`. Once reported, an unanswered question can be skipped with 「跳過這題」, which records no attempt: `Quiz.tsx` stores `null` in `results`, so the result slots still line up with question positions and the count and XP ignore it. CompletionCard's total is the number of answered questions.
+- **Weekly review.** `WeeklyReview` on the Activity page replaces the 本週組成 pie (`WeekPie.tsx` deleted). It shows active days, articles read, questions answered, accuracy against last week, the most-missed categories, this week's missed questions and this week's saves, all from Edge `GET /api/weekly`.
+- **Instant tabs.**
+  - Activity and the Quiz/Feed streak render the last `localStorage` copy (`mb_cache_activity`, `mb_cache_weekly`) on the first frame, then refresh in the background.
+  - Once the brief is on screen, the Feed prefetches today's quiz set into `mb_quiz_session` (`web/src/quiz/session.ts`). The prefetch never overwrites an existing session, and it shares one in-flight request with the Quiz tab.
+
+Verification: Playwright (390×844, mocked API).
+- Prefetch wrote the session, and opening Quiz made no second `/api/quiz` call.
+- Report → 題意不清 → 跳過 moved on to 「第 2 題」 with one `POST /api/quiz-report` and no quiz-attempt.
+- The weekly card rendered from cache while `/api/weekly` was held for 3s.
+- Against local SQLite: the reminder dry run skipped the device active today and gave streak-4 and new-device copy to the others; `/api/quiz` served normally with no `quiz_reports` table and excluded the reported id once it existed.
+
 ---
 
 ## What Was Intentionally Not Changed
