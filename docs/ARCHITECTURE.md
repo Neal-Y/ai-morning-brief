@@ -147,7 +147,10 @@ Plain insert into `quizzes` — no upsert/dedup at the DB layer; dedup happens e
 
 ### Consumption (client-side — web PWA `web/` is primary; RN app `app/` shelved, see [README.md](./README.md))
 
-- `GET /api/quiz` (Hono, read-only) — today's question set.
+- `GET /api/quiz` (Hono, read-only) — today's question set, filled in this order:
+  1. **Spaced review** (`src/quiz/review.ts`, 2026-09-30): questions this device missed come back on a 1 → 3 → 7 Taipei-day ladder. Each correct answer since the last miss moves a question one rung, and three in a row graduate it. A new miss restarts at 1 day. At most `REVIEW_MAX_PER_SET = 2` per set, most overdue first. State is derived from `quiz_attempts` alone, with no extra table. Items carry `review: true`, and the web shows a 「複習 · 之前答錯」 tag.
+  2. **Fresh**: questions never attempted, newest first.
+  3. **Recycle**: already-attempted questions, newest first, used only when the pool runs short.
 - `POST /api/quiz-attempt` (`api/quiz-attempt.ts`, Edge) — records `{ quizId, deviceId, correct }` into `quiz_attempts`. `X-Device-Id` required, 400 without it.
 - Ask *streaming* on a quiz question reuses `/api/ask` via a synthetic `articleId = quiz-${id}` — that part works on both clients (the quiz prompt is repurposed as Ask `context.title`, the explanation as `context.summary`, the category as `context.context`). Ask *history persistence* via `conversations` does **not** work for this synthetic id — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) "Quiz follow-up history cannot persist to the DB". `web/src/askHistory.ts` routes quiz threads to `localStorage` instead, and `app/src/api.ts` routes them to AsyncStorage (`sift_quiz_ask_quiz-<id>`, since 2026-09-29).
 
@@ -182,7 +185,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 | Route | Query params | Returns |
 |---|---|---|
 | `GET /api/library` | — | All-history articles JOINed with feedback/saves/notionSynced/ask-message-count (JS-join, no `messages` JSON) |
-| `GET /api/quiz` | `count`, `type` (comma list) | `RawQuizItem[]` |
+| `GET /api/quiz` | `count`, `type` (comma list) | `RawQuizItem[]` (+ `review: boolean`) |
 | `GET /api/activity` | — | `{ streak, activeToday, heatmap, weekStats, recent, totalCorrect }`, scoped by `X-Device-Id`. Since 2026-09-29 a day counts for `streak` / `heatmap` if the device read (any `feedback` row) **or** answered (`quiz_attempts`). `weekStats` / `recent` / `totalCorrect` stay quiz-only. `activeToday` says whether today already counts |
 
 ### Edge Runtime, body-reading POST (root `api/*.ts` — see [../CLAUDE.md](../CLAUDE.md) Conventions for *why* these can't be Hono routes)

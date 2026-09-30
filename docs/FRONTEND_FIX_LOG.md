@@ -818,7 +818,17 @@ Picked from three mocked-up directions (design canvas, option A):
   - On drop, transitions are disabled for one frame. Otherwise the shift-transform reset animates on top of the DOM reorder and rows slide a second slot.
 - `Quiz.tsx`: today's quizzes + index + results persist in localStorage `mb_quiz_session`, keyed by Taipei date. On mount it restores instead of refetching; the next day it is ignored. This also survives iOS killing the standalone PWA. A half-finished answer on the current question is not saved; that question restarts.
 
-**Verification**: Playwright (390×844, touch). One drag used real CDP touch events (pointerType touch), and the rest used the mouse. The list sorted correctly and resolved ✓ with +20 XP. After answering Q1, a Quiz → Feed → Quiz round-trip and a full reload both still read 「第 2 題」, with no extra `/api/quiz` fetch. **Needs a real iPhone check** for drag feel.
+**Verification**: Playwright (390×844, touch). One drag used real CDP touch events (pointerType touch), and the rest used the mouse. The list sorted correctly and resolved ✓ with +20 XP. After answering Q1, a Quiz → Feed → Quiz round-trip and a full reload both still read 「第 2 題」, with no extra `/api/quiz` fetch. The user confirmed the drag on a real iPhone PWA on 2026-09-30.
+
+## Issue 20: A wrong answer said "wrong" but not what right looks like (2026-09-30)
+
+Ordering, matching and fill-blank marked each mistake ✗ but never showed the correct answer. The only place it appeared was the explanation text, which often doesn't restate it. Now each card shows the answer in place:
+- **Ordering**: a misplaced row reads 「✗ 應為 N」.
+- **Matching**: a wrongly linked left cell shows its real partner (「→ …」, in green) under its text.
+- **Fill-blank**: the wrong pick is struck through, with the right word in a green pill beside it.
+
+Single-choice already highlighted the correct option.
+
 
 ---
 

@@ -18,6 +18,8 @@ export interface QuizChromeProps {
   prompt: string
   explanation: string
   source: { name: string; url: string } | null
+  /** Missed before and due again — shown as a 複習 tag next to the category. */
+  review?: boolean
   index: number
   total: number
   streak: number
@@ -38,7 +40,7 @@ interface Props extends QuizChromeProps {
  * Type cards supply only the answer area and signal completion via `resolve`.
  */
 export function QuizFrame({
-  id, category, prompt, explanation, source,
+  id, category, prompt, explanation, source, review = false,
   index, total, streak, xpToday, isLast, bottomInset, onNext, children,
 }: Props) {
   const [resolved, setResolved] = useState(false)
@@ -117,11 +119,20 @@ export function QuizFrame({
         }}
       >
         <div key={id} style={{ animation: 'quizFadeUp 0.45s ease-out both' }}>
-          <div style={{
-            display: 'inline-block', background: T.accentSoft, color: T.accent,
-            borderRadius: RADIUS.pill, padding: '5px 12px', marginBottom: 14,
-            fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 1,
-          }}>{category}</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+            <div style={{
+              background: T.accentSoft, color: T.accent,
+              borderRadius: RADIUS.pill, padding: '5px 12px',
+              fontFamily: T.mono, fontSize: 11, fontWeight: 700, letterSpacing: 1,
+            }}>{category}</div>
+            {review && (
+              <div style={{
+                background: Q.wrongTint, color: Q.wrong,
+                borderRadius: RADIUS.pill, padding: '5px 12px',
+                fontFamily: T.sans, fontSize: 11, fontWeight: 700,
+              }}>複習 · 之前答錯</div>
+            )}
+          </div>
 
           <h1 style={{
             fontFamily: T.serif, fontSize: 24, lineHeight: 1.32, fontWeight: 700,

@@ -104,6 +104,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | Web PWA 四分頁（Quiz/Feed/Library/Activity）| ✅ | 2026-09-07（commit `ebf73c6`）把 app/ 的 Quiz + Activity 分頁整套搬進 web/，PWA 現在是主力 client。`/` 仍是 Feed（start_url + push 落地頁），SW / manifest / theme_color 全部沒動 |
 | React Native App「Sift」| ⏸️ 暫時擱置 | Expo SDK 54，Expo Go 開發，程式碼保留可運作；EAS Build → TestFlight 因用量不到值得投資的門檻而延後，非凍結、非廢棄 |
 | Quiz 生成 | ✅ | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（05:47 台北）2026-09-29 重新啟用，每天出題。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
+| Quiz 答錯重出 | ✅ | 2026-09-30：`src/quiz/review.ts` 從 `quiz_attempts` 推算，答錯的題 1 → 3 → 7 天後重出（連對 3 次畢業、再錯歸零），每組最多 2 題，web 顯示「複習 · 之前答錯」。答錯時四種題型都會就地標出正確答案 |
 | Quiz 作答紀錄 | ✅ | `POST /api/quiz-attempt` → `quiz_attempts`；XP：答對 +20 / 答錯 +5（web `web/src/components/quiz/tokens.ts` 與 app `app/src/theme.ts` 各自的 XP 常數，web 版衍生自 `theme.ts`） |
 | 學習紀錄 / Activity | ✅ | `GET /api/activity`：年度 heatmap、週 pie、streak、正確率，皆以 device_id 為範圍。2026-09-29 起 streak / heatmap 同時計入閱讀（feedback）與答題；週統計與 recent 仍只算答題。web `Activity.tsx` 與 app `ActivityScreen.tsx` 吃同一支 API |
 | 多使用者支援 | ✅ | `device_id` 貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts；web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，**兩邊不共用、沒有遷移**，每次 fetch 帶 `X-Device-Id` |

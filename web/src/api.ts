@@ -25,6 +25,8 @@ export interface RawQuizItem {
   explanation: string
   sourceName: string | null
   sourceUrl: string | null
+  /** A previously missed question served again by the spaced-review schedule. */
+  review?: boolean
 }
 
 /** Only the types this client can render. Widen as new interaction cards ship. */
