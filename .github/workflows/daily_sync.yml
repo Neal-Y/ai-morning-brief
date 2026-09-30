@@ -11,6 +11,10 @@ on:
         description: '試跑：只抓文章 + 分類，印出會選哪幾篇；不寫 DB、不推播'
         type: boolean
         default: false
+      force:
+        description: '強制重跑：今天已發過簡報也照樣跑（會再推播一次）'
+        type: boolean
+        default: false
 
 jobs:
   brief:
@@ -42,3 +46,4 @@ jobs:
           VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
           VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '' }}
+          FORCE: ${{ inputs.force && '1' || '' }}

@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import { isNotNull } from 'drizzle-orm';
+import { count, eq, isNotNull } from 'drizzle-orm';
 import { loadConfig, CLASSIFIER_CAP, PER_SOURCE_CLASSIFIER_MIN, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
 import { getTodaysArticles, pickForClassifier } from './rss/feed.js';
 import type { AIProvider, ClassifiedArticle } from './ai/provider.js';
@@ -10,7 +10,7 @@ import { sendWebPush } from './notify/web-push.js';
 import { writeArticlesToDB } from './notify/db-writer.js';
 import { db, getRecentFeedback, getQuizPoolSize } from './db/client.js';
 import type { FeedbackRow } from './db/client.js';
-import { pushSubscriptions } from './db/schema.js';
+import { articles, pushSubscriptions } from './db/schema.js';
 import { getTaipeiDateString } from './date.js';
 
 // Size of one quiz set on the client (web/src/api.ts fetchQuizzes default).
@@ -79,6 +79,18 @@ async function main(): Promise<void> {
 
   const date = getTaipeiDateString();
   console.log(`[main] AI Morning Brief — ${date}`);
+
+  // Idempotency: GitHub's schedule is best-effort and has run hours late
+  // (2026-10-01: the 07:07 run hadn't started by 07:31). Once today's brief is
+  // in the DB — from a manual run or an external trigger — a late scheduled
+  // run must not push it a second time. FORCE=1 (workflow input) overrides.
+  if (process.env['DRY_RUN'] !== '1' && process.env['FORCE'] !== '1') {
+    const [existing] = await db.select({ n: count() }).from(articles).where(eq(articles.briefDate, date));
+    if ((existing?.n ?? 0) > 0) {
+      console.log(`[main] ${existing!.n} article(s) already published for ${date} — skipping (set force to re-run)`);
+      return;
+    }
+  }
 
   // ── Stage 1: Fetch + keyword score + prefilter ────────────────────────────
   // Note: RSS / sources failures exit non-zero so GitHub Actions surfaces them
