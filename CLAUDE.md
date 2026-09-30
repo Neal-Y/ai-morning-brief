@@ -9,7 +9,7 @@
 
 ## TL;DR（新 session 先看這段）
 
-- 整條 pipeline 已上線：GitHub Actions 每天 07:30 台北時間跑 → 寫 Turso DB → **Web Push** 推播。
+- 整條 pipeline 已上線：GitHub Actions 每天 07:07 台北時間跑 → 寫 Turso DB → **Web Push** 推播。
 - Vercel 部署完成：`ai-morning-brief-chi.vercel.app`（Hono API + React PWA + Edge Runtime functions）。
 - **ntfy 已淘汰**（2026-04-25），現在唯一推播管道是 Web Push（VAPID + iOS standalone PWA）。
 - 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`；現在 SW (`web/public/sw.js`) 是真正的 push handler（`push` + `notificationclick` events，無 fetch cache）。
@@ -20,7 +20,7 @@
 - **產品方向重新校準（2026-04-26）**：原本 V2 設計把 quiz (F5) 排第一，當時覆盤後降級成「Library 上的 retention layer」，退場條件是「沒回頭翻 library 就不做 quiz」。詳見 [docs/decisions/2026-04-26-product-review.md](./docs/decisions/2026-04-26-product-review.md)（**背景文件，決策已被後續開發蓋過，見下一條**）。
 - **Library 頁面已 ship（2026-04-26，commit `0a61bad` / `ee694bb`）**：原 roadmap PR-A/B/C 一發併出。細節見系統架構 + 功能狀態 + Conventions。
 - **⚠️ 2026-04-26 的「Library 決策 gate」已作廢**：Quiz 實際上照做了，且已經是主力產品（app 改名「Sift」、四分頁、封測中）。不用再回頭驗證 gate 有沒有通過，這條規則不再生效，純留作歷史紀錄。
-- **現況（2026-08）**：Quiz pipeline 程式碼正常運作，但 `quiz_sync.yml` cron **目前手動關閉**（操作者選擇，等使用頻率提高再開，不是壞掉）。DB 裡已有先前生成的題庫，`/api/quiz` 的 recycle 邏輯（優先出沒答過的，答完就循環）持續供應，不會因為 cron 關閉就退回 `app/src/data.ts` 的 3 題硬編碼 fallback（那只在 API 整個打不到時才觸發）。app「Sift」在 Expo Go 封測中，狀況穩定、**程式碼保留、可繼續跑**，但 EAS Build → TestFlight 要花錢、現階段用量不到值得投資的門檻，**暫時擱置**（非凍結、非廢棄）——等用量提高再撿回來。
+- **現況（2026-09-30 更新）**：Quiz pipeline 的 `quiz_sync.yml` cron **2026-09-29 重新打開，每天 05:47 出題**（使用者決定保持開著；之前 2026-08 起手動關閉）。`/api/quiz` 的 recycle 邏輯（優先出沒答過的，答完就循環）保證題庫不會用完，不會退回 `app/src/data.ts` 的 3 題硬編碼 fallback（那只在 API 整個打不到時才觸發）。app「Sift」在 Expo Go 封測中，狀況穩定、**程式碼保留、可繼續跑**，但 EAS Build → TestFlight 要花錢、現階段用量不到值得投資的門檻，**暫時擱置**（非凍結、非廢棄）——等用量提高再撿回來。
 - **Notion 整合維持現狀、不主動投資**：使用者不會回頭看 Notion saves，但整合已經串好、成本是 sunk，先放著不拆，也不再加功能。舊的「Notion 30 天回看」檢查點作廢。
 - **Quiz / Activity 搬上 Web PWA（2026-09-07，commit `ebf73c6`）**：因為 `app/` 的 EAS Build/TestFlight 延後，把 RN app 的 Quiz + Activity 分頁整套搬進 `web/`，PWA 現在也是四分頁：Quiz `/quiz` / Feed `/` / Library `/library` / Activity `/activity`，變成主力 client。刻意不動的部分：`/` 仍是 Feed（PWA `start_url` + push 通知落地頁）、`web/public/sw.js` 沒改、manifest + `<title>` 品牌名維持「Morning Brief」、`theme_color`/`background_color`/`<meta name="theme-color">` 三處當時仍是 `#14110D`（2026-09-29 Signal 改版後是 `#0B121A`）。細節見系統架構、功能狀態、Project Structure、Key Design Decisions #8。
 - **Quiz 追問歷史其實從沒存活過（2026-09-07 發現）**：舊文件寫的「quiz 用合成 `articleId=quiz-${id}` 掛進 `conversations` table」從沒真的動起來——`api/ask-history.ts` 的 `isArticleId` 只收 16 位 hex，`quiz-6` 一律 400；就算放寬 regex，`conversations.article_id` 對 `articles.id` 的 FK 是真的有 enforce，塞不存在的文章 id 會 500。`app/` 的 `saveAskHistory` 把這個 400 吞進空 `catch {}`，所以整個 Expo Go 封測期間 quiz 追問歷史都靜默沒存到；`/api/ask` streaming 本身不吃 `articleId`，問答當下沒事，只有歷史沒存。web/ 這次改用 `web/src/askHistory.ts`：quiz 對話存 localStorage，文章對話不變，**沒有動任何後端檔案**。**2026-09-29 `app/` 也修了**：同一招，quiz 對話改存 AsyncStorage（`sift_quiz_ask_quiz-<id>`），文章對話的 save 失敗改成 `console.warn` 不再空 catch。見 Key Design Decision #8 修正版。
@@ -36,14 +36,14 @@
 
 ```
 GitHub Actions cron — 兩條獨立 pipeline，錯開時間互不影響
-  ├─ daily_sync.yml（07:30 台北）→ src/index.ts             # 文章 pipeline
+  ├─ daily_sync.yml（07:07 台北）→ src/index.ts             # 文章 pipeline
   │    ├─ rss/feed.ts                 # RSS ingestion + 24h filter + 關鍵字打分
   │    ├─ db/client.getRecentFeedback # 讀近 30 天 feedback 作為偏好 context
   │    ├─ ai/classifier.ts            # per-article LLM 分類（concurrency=3）
   │    ├─ ai/brief.ts                 # brief generator（一次 LLM call）
   │    ├─ notify/db-writer.ts         # upsert 文章到 Turso（成功後才推播）
   │    └─ notify/web-push.ts          # 對 push_subscriptions 全表發 Web Push
-  └─ quiz_sync.yml（06:00 台北）→ src/quiz-pipeline.ts       # quiz pipeline（不依賴文章）
+  └─ quiz_sync.yml（05:47 台北）→ src/quiz-pipeline.ts       # quiz pipeline（不依賴文章）
        ├─ db/client.getRecentQuizPrompts # 讀近期已出過的題目 prompt，防重複
        ├─ quiz/generate.ts             # LLM 出題（single_choice / ordering / matching / fill_blank 混出）
        └─ db/quiz-writer.ts            # 寫入 quizzes table
@@ -103,7 +103,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。2026-04-27 Vercel preview 真機驗證完成 |
 | Web PWA 四分頁（Quiz/Feed/Library/Activity）| ✅ | 2026-09-07（commit `ebf73c6`）把 app/ 的 Quiz + Activity 分頁整套搬進 web/，PWA 現在是主力 client。`/` 仍是 Feed（start_url + push 落地頁），SW / manifest / theme_color 全部沒動 |
 | React Native App「Sift」| ⏸️ 暫時擱置 | Expo SDK 54，Expo Go 開發，程式碼保留可運作；EAS Build → TestFlight 因用量不到值得投資的門檻而延後，非凍結、非廢棄 |
-| Quiz 生成 | ✅ 程式碼完成，⏸️ cron 手動暫停 | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（06:00 台北）目前手動關閉，等使用頻率提高再開。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
+| Quiz 生成 | ✅ | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（05:47 台北）2026-09-29 重新啟用，每天出題。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
 | Quiz 作答紀錄 | ✅ | `POST /api/quiz-attempt` → `quiz_attempts`；XP：答對 +20 / 答錯 +5（web `web/src/components/quiz/tokens.ts` 與 app `app/src/theme.ts` 各自的 XP 常數，web 版衍生自 `theme.ts`） |
 | 學習紀錄 / Activity | ✅ | `GET /api/activity`：年度 heatmap、週 pie、streak、正確率，皆以 device_id 為範圍。2026-09-29 起 streak / heatmap 同時計入閱讀（feedback）與答題；週統計與 recent 仍只算答題。web `Activity.tsx` 與 app `ActivityScreen.tsx` 吃同一支 API |
 | 多使用者支援 | ✅ | `device_id` 貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts；web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，**兩邊不共用、沒有遷移**，每次 fetch 帶 `X-Device-Id` |
@@ -334,7 +334,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 
 **Quiz pipeline / 多使用者：**
-- Quiz 出題完全獨立於文章 pipeline：不同 cron 檔（`quiz_sync.yml` 06:00 台北 vs `daily_sync.yml` 07:30 台北）、不同 entry（`quiz-pipeline.ts` vs `index.ts`）、不共用 selection 邏輯；共用的只有 `ai/select-provider.ts`（GPT/Claude 輪替）和同一顆 Turso DB
+- Quiz 出題完全獨立於文章 pipeline：不同 cron 檔（`quiz_sync.yml` 05:47 台北 vs `daily_sync.yml` 07:07 台北）、不同 entry（`quiz-pipeline.ts` vs `index.ts`）、不共用 selection 邏輯；共用的只有 `ai/select-provider.ts`（GPT/Claude 輪替）和同一顆 Turso DB
 - Quiz dedup 用同一招：`getRecentQuizPrompts()` 撈近期已出過的題目 prompt，附加在 `QUIZ_SYSTEM` **尾端**（"AVOID REPEATING" 區塊），保 cache prefix 穩定 — 跟 classifier 的 `buildPreferenceContext()` 手法一致，不要重新發明
 - `device_id` 是目前唯一的多使用者隔離機制（沒有帳號系統）：`feedback` / `saves` / `conversations` / `push_subscriptions` / `quiz_attempts` 都有 `device_id` 欄位，app 端由 `src/device.ts` 生成 UUID 存 AsyncStorage，每次 fetch 帶 `X-Device-Id` header。新增任何寫入型 endpoint 若涉及個人化資料，記得比照加 `device_id` 欄位 + header 檢查
 - web 跟 app 的 device_id **不共用**：web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`。2026-09-07 web port 沒有做身分遷移，是刻意決定——Activity 等個人化歷史在 web 上從零開始算，不要當成 bug 去「修」

@@ -2,8 +2,9 @@ name: AI Morning Brief
 
 on:
   schedule:
-    # 台灣時間 07:30 = UTC 23:30 (前一天)
-    - cron: '30 23 * * *'
+    # 台灣時間 07:07 = UTC 23:07 (前一天)。刻意避開整點／半點：GitHub cron 在那些時段塞車，
+    # 2026-08-27~29 曾晚 5–7 小時才跑（見 docs/DEPLOY.md）
+    - cron: '7 23 * * *'
   workflow_dispatch: # 手動觸發用於測試
 
 jobs:

@@ -15,7 +15,7 @@ Both write to the same Turso DB. Neither reads the other's tables. Either can fa
 | | Article pipeline | Quiz pipeline |
 |---|---|---|
 | Entry | `src/index.ts` | `src/quiz-pipeline.ts` |
-| Cron | `daily_sync.yml`, 07:30 Taipei | `quiz_sync.yml`, 06:00 Taipei |
+| Cron | `daily_sync.yml`, 07:07 Taipei | `quiz_sync.yml`, 05:47 Taipei |
 | Depends on | RSS feeds | Nothing external — pure LLM generation |
 | Output table | `articles` | `quizzes` |
 | Shared with the other pipeline | `ai/select-provider.ts` (GPT/Claude alternation), same Turso instance | same |
@@ -119,7 +119,7 @@ Only fires after Stage 5 succeeds (strict serial order — see [../CLAUDE.md](..
 
 ## Quiz pipeline
 
-> **Operational status (2026-08)**: the code below is shipped and works, but `quiz_sync.yml` is currently paused manually (not broken — a deliberate cost/usage call, to be re-enabled once daily usage picks up). The existing `quizzes` pool from prior runs keeps serving via the recycle logic in `GET /api/quiz` (see below); it just won't grow until the cron is turned back on. Check current GitHub Actions workflow state, not just this file, before assuming it's running.
+> **Operational status (2026-09-30)**: `quiz_sync.yml` was paused by hand from 2026-08 and re-enabled on 2026-09-29. It now runs daily at 05:47 Taipei. When it's paused, the existing `quizzes` pool still serves through the recycle logic in `GET /api/quiz` (see below); the pool just stops growing. Check current GitHub Actions workflow state, not just this file, before assuming it's running.
 
 ### Generation (`quiz/generate.ts`)
 
