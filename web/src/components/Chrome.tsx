@@ -1,6 +1,6 @@
 import type { Theme } from '../theme.ts'
 import { GLASS_BLUR } from '../theme.ts'
-import { IconFlame, StatChip } from './icons.tsx'
+import { IconFlame, SiftWordmark, StatChip } from './icons.tsx'
 
 interface TopChromeProps {
   theme: Theme
@@ -22,14 +22,10 @@ export function TopChrome({ theme, current, total, streak, dateLabel, onOpenLibr
       flexShrink: 0,
     }}>
       <div style={{
-        display: 'flex', alignItems: 'baseline', justifyContent: 'space-between',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         marginBottom: 12,
       }}>
-        <div style={{
-          fontFamily: theme.serif, fontSize: 18, fontWeight: 900,
-          color: theme.ink, letterSpacing: -0.3,
-          fontStyle: 'italic',
-        }}>The Morning Brief</div>
+        <SiftWordmark size={18} color={theme.ink} markColor={theme.accent} />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{
             fontFamily: theme.mono, fontSize: 11, color: theme.inkFaint,

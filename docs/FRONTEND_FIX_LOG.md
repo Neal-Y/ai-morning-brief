@@ -871,6 +871,21 @@ Verification: Playwright (390×844, mocked API).
 - Quiz: answer Q1, leave without 下一題, come back. The page shows 「第 2 題」, with exactly one `POST /api/quiz-attempt`.
 - After leaving the celebration, `body` background is back to `#0B121A`.
 
+## Issue 23: One brand — "Sift" everywhere (2026-09-30)
+
+The UI mixed "The Morning Brief" (the pre-Signal italic-serif Feed header and launch screen, plus the Library empty state), "Morning Brief" / "Brief" (the `<title>` and manifest), "AI Morning Brief" (push fallback titles), and "Sift" (the native app and the icon's name).
+
+Everything is now "Sift":
+- manifest `name` / `short_name`, `<title>` and `apple-mobile-web-app-title`;
+- the Feed header and the launch screen, which use `SiftWordmark` / `SiftMark` in `icons.tsx` (the home-screen icon's funnel, drawn in the accent) with Inter 800 instead of italic serif;
+- the launch tagline 「篩掉雜訊，留下訊號」;
+- the Library empty state;
+- the push fallback titles (`sw.js`, `src/index.ts`): `Sift · YYYY-MM-DD`.
+
+**Not changed, deliberately:**
+- The icon PNGs. A recoloured set was drawn, but iOS snapshots a home-screen PWA's icon and label at install. Seeing a new icon means deleting and re-adding the PWA, and deleting it wipes its storage, including `mb_device_id` and with it all history. The user chose not to.
+- The installed home-screen label, which also keeps showing "Brief" until a re-add, for the same reason.
+
 ---
 
 ## What Was Intentionally Not Changed

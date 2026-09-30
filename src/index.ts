@@ -102,7 +102,7 @@ async function main(): Promise<void> {
   if (prefiltered.length === 0) {
     console.log('[main] No articles in last 24h — sending empty-day notice');
     try {
-      await sendWebPush(`AI Morning Brief ${date}`, '今日無重大 AI 新聞');
+      await sendWebPush(`Sift · ${date}`, '今日無重大 AI 新聞');
     } catch (err) {
       console.error('[web-push] Empty-day notice failed:', err instanceof Error ? err.message : err);
       process.exit(1);
@@ -239,7 +239,7 @@ async function main(): Promise<void> {
     // path; nothing is written, so the PWA keeps showing its empty state.
     console.log('[main] No article cleared the classifier — sending empty-day notice')
     try {
-      await sendWebPush(`AI Morning Brief ${date}`, '今日無重大 AI 新聞')
+      await sendWebPush(`Sift · ${date}`, '今日無重大 AI 新聞')
     } catch (err) {
       console.error('[web-push] Empty-day notice failed:', err instanceof Error ? err.message : err)
       process.exit(1)
@@ -293,7 +293,7 @@ async function main(): Promise<void> {
 
   function buildPushContent(userArticles: ClassifiedArticle[]): { title: string; body: string } {
     const lead = userArticles[0]
-    const title = lead?.title ?? `AI Morning Brief ${date}`
+    const title = lead?.title ?? `Sift · ${date}`
     const teaser = lead ? (lead.classification.engineeringImpact || lead.classification.summary || '') : ''
     const parts = [userArticles.length > 0 ? `今日 ${userArticles.length} 篇` : '今日無重大 AI 新聞']
     if (quizCount > 0) parts.push(`還有 ${quizCount} 題判斷題等你`)

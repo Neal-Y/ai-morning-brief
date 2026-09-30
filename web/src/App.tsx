@@ -10,6 +10,7 @@ import type { Article, FeedResponse } from './types.ts'
 import { apiFetch, fetchActivity } from './api.ts'
 import { navigate } from './router.ts'
 import { useNavInset } from './nav.ts'
+import { SiftMark } from './components/icons.tsx'
 
 // The bottom nav owns the safe-area band and the home-indicator clearance that
 // FEEDBACK_BAR_BOTTOM = 56 used to provide (Issue 6). The action row now just
@@ -359,29 +360,24 @@ export default function App() {
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 10,
       }}>
-        <div style={{
-          fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
-          letterSpacing: 1.5, textTransform: 'uppercase',
-          position: 'absolute',
-          top: 'calc(24px + env(safe-area-inset-top))',
-        }}>
-          Vol. I · Daily Intelligence
+        {/* Launch screen: the home-screen icon's mark, so opening the app
+            reads as one continuous motion from icon to content. */}
+        <div style={{ animation: loading ? 'breathe 2.2s ease-in-out infinite' : undefined }}>
+          <SiftMark size={56} color={T.accent} glow />
         </div>
 
         <div style={{
-          fontFamily: T.serif, fontSize: 28, fontStyle: 'italic', color: T.ink,
-          fontWeight: 700, letterSpacing: -0.3,
-          animation: loading ? 'breathe 2.2s ease-in-out infinite' : undefined,
+          fontFamily: T.sans, fontSize: 30, fontWeight: 800, color: T.ink,
+          letterSpacing: -0.6, marginTop: 10,
         }}>
-          The Morning Brief
+          Sift
         </div>
 
         <div style={{
-          fontFamily: T.serif, fontSize: 13, fontStyle: 'italic',
-          color: T.inkMuted, letterSpacing: 0.2,
-          marginTop: -4,
+          fontFamily: T.sans, fontSize: 13, color: T.inkMuted, letterSpacing: 0.4,
+          marginTop: -2,
         }}>
-          a quiet briefing before the noise
+          篩掉雜訊，留下訊號
         </div>
 
         {!loading && !permissionResolved && (

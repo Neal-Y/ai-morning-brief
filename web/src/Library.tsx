@@ -255,7 +255,7 @@ function EmptyState({ type, onClearFilters }: {
       <div style={{
         fontFamily: T.mono, fontSize: 11, color: T.inkFaint,
         letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12,
-      }}>The Morning Brief · Library</div>
+      }}>Sift · Library</div>
       <div style={{
         fontFamily: T.serif, fontSize: 30, fontWeight: 900,
         color: T.ink, lineHeight: 1.05, letterSpacing: -0.5, marginBottom: 10,

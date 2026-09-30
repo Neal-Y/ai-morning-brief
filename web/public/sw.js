@@ -9,7 +9,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('push', (event) => {
   const data = event.data?.json() ?? {}
   event.waitUntil(
-    self.registration.showNotification(data.title ?? 'AI Morning Brief', {
+    self.registration.showNotification(data.title ?? 'Sift', {
       body: data.body ?? '今日 brief 已就緒',
       icon: '/apple-touch-icon.png',
       badge: '/apple-touch-icon.png',
