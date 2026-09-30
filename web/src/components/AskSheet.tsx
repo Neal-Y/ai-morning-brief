@@ -127,7 +127,7 @@ function useArticleSuggestions(article: Article, enabled: boolean): string[] | n
  * shell from visualViewport).
  */
 function useKeyboardFrame(sheetRef: React.RefObject<HTMLDivElement>, active: boolean) {
-  const [frame, setFrame] = useState<{ top: number; height: number } | null>(null)
+  const [frame, setFrame] = useState<{ top: number; height: number; left: number; width: number } | null>(null)
 
   useEffect(() => {
     const vv = window.visualViewport
@@ -141,17 +141,31 @@ function useKeyboardFrame(sheetRef: React.RefObject<HTMLDivElement>, active: boo
     let baseline = Math.max(document.documentElement.clientHeight, vv.height)
     const update = () => {
       baseline = Math.max(baseline, vv.height)
-      const host = sheetRef.current?.offsetParent as HTMLElement | null | undefined
+      // parentElement, not offsetParent: a position: fixed element has a null
+      // offsetParent, which would flip the frame off again on the next event.
+      const host = sheetRef.current?.parentElement
       // A keyboard takes well over 120px; smaller deltas are toolbar/URL-bar noise.
       if (!host || baseline - vv.height < 120) { setFrame(null); return }
-      setFrame({ top: vv.offsetTop - host.getBoundingClientRect().top, height: vv.height })
+      // position: fixed + vv.offsetTop, NOT absolute + (vv.offsetTop − host
+      // top): iOS scrolls the page to reveal the input and then scrolls it
+      // back after the sheet shrinks, so a host-relative top computed mid-
+      // scroll went stale and dropped the sheet behind the keyboard (second
+      // real-device test). Fixed is relative to the layout viewport, which is
+      // exactly what vv.offsetTop is measured against, so page scroll can't
+      // skew it. No ancestor sets transform/filter/perspective, so fixed
+      // really is viewport-relative here. Horizontal bounds come from the
+      // host so the 480px column is kept.
+      const r = host.getBoundingClientRect()
+      setFrame({ top: vv.offsetTop, height: vv.height, left: r.left, width: r.width })
     }
     update()
     vv.addEventListener('resize', update)
     vv.addEventListener('scroll', update)
+    window.addEventListener('scroll', update)
     return () => {
       vv.removeEventListener('resize', update)
       vv.removeEventListener('scroll', update)
+      window.removeEventListener('scroll', update)
       setFrame(null)
     }
   }, [active, sheetRef])
@@ -533,8 +547,8 @@ export function AskSheet({
 
   return (
     <div ref={sheetRef} style={{
-      position: 'absolute',
-      left: 0, right: 0,
+      position: keyboardFrame ? 'fixed' : 'absolute',
+      ...(keyboardFrame ? { left: keyboardFrame.left, width: keyboardFrame.width } : { left: 0, right: 0 }),
       // Keyboard up: occupy exactly the visible area above it (useKeyboardFrame).
       // Otherwise fullScreen fills the host layer (top+bottom pinned) rather
       // than assuming 100dvh: inside the quiz frame the host is shorter than
