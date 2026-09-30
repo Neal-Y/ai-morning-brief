@@ -3,6 +3,7 @@ import { cors } from 'hono/cors'
 import { db } from '../db/client.js'
 import { articles, feedback, saves, quizzes, quizAttempts } from '../db/schema.js'
 import { eq, desc, and, inArray, notInArray, gte, sql } from 'drizzle-orm'
+import { dueReviewIds, REVIEW_MAX_PER_SET } from '../quiz/review.js'
 
 // NOTE: /api/ask is NOT defined here. In production, Vercel rewrites /api/ask
 // directly to api/ask.ts (Edge Runtime, raw fetch streaming). Keeping a Hono
@@ -73,15 +74,33 @@ app.get('/api/quiz', async (c) => {
   const typeFilter = types.length > 0 ? inArray(quizzes.type, types) : null
 
   let attemptedIds: number[] = []
+  let reviewIds: number[] = []
   if (deviceId) {
     const rows = await db
-      .select({ quizId: quizAttempts.quizId })
+      .select({ quizId: quizAttempts.quizId, correct: quizAttempts.correct, answeredAt: quizAttempts.answeredAt })
       .from(quizAttempts)
       .where(eq(quizAttempts.deviceId, deviceId))
-    attemptedIds = rows.map((r) => r.quizId)
+    attemptedIds = [...new Set(rows.map((r) => r.quizId))]
+    reviewIds = dueReviewIds(rows)
   }
 
-  // Prefer questions this device hasn't seen yet.
+  // 1. Missed questions that are due again (src/quiz/review.ts), capped so
+  //    fresh questions still make up most of the set.
+  const reviewCap = Math.min(REVIEW_MAX_PER_SET, count)
+  let reviews: (typeof quizzes.$inferSelect)[] = []
+  if (reviewIds.length > 0 && reviewCap > 0) {
+    const candidates = reviewIds.slice(0, reviewCap * 3) // headroom for the type filter
+    const rows = await db
+      .select()
+      .from(quizzes)
+      .where(typeFilter ? and(typeFilter, inArray(quizzes.id, candidates)) : inArray(quizzes.id, candidates))
+    const byId = new Map(rows.map((r) => [r.id, r]))
+    reviews = candidates.flatMap((id) => byId.get(id) ?? []).slice(0, reviewCap)
+  }
+  const reviewSet = new Set(reviews.map((r) => r.id))
+
+  // 2. Questions this device hasn't seen yet.
+  const freshCount = count - reviews.length
   const freshCondition =
     attemptedIds.length > 0
       ? typeFilter
@@ -89,24 +108,27 @@ app.get('/api/quiz', async (c) => {
         : notInArray(quizzes.id, attemptedIds)
       : typeFilter
 
-  const freshQuery = db.select().from(quizzes).orderBy(desc(quizzes.createdAt)).limit(count)
-  const fresh = freshCondition ? await freshQuery.where(freshCondition) : await freshQuery
+  const freshQuery = db.select().from(quizzes).orderBy(desc(quizzes.createdAt)).limit(freshCount)
+  const fresh = freshCount === 0 ? [] : freshCondition ? await freshQuery.where(freshCondition) : await freshQuery
 
-  // Pool exhausted (device has answered everything matching the filter) —
-  // recycle already-attempted questions rather than returning fewer than asked.
-  let result = fresh
+  // 3. Pool exhausted (device has answered everything matching the filter) —
+  //    recycle already-attempted questions rather than returning fewer than asked.
+  let result = [...reviews, ...fresh]
   if (result.length < count && attemptedIds.length > 0) {
     const need = count - result.length
-    const recycleCondition = typeFilter
-      ? and(typeFilter, inArray(quizzes.id, attemptedIds))
-      : inArray(quizzes.id, attemptedIds)
-    const recycled = await db
-      .select()
-      .from(quizzes)
-      .where(recycleCondition)
-      .orderBy(desc(quizzes.createdAt))
-      .limit(need)
-    result = [...result, ...recycled]
+    const recyclable = attemptedIds.filter((id) => !reviewSet.has(id))
+    if (recyclable.length > 0) {
+      const recycleCondition = typeFilter
+        ? and(typeFilter, inArray(quizzes.id, recyclable))
+        : inArray(quizzes.id, recyclable)
+      const recycled = await db
+        .select()
+        .from(quizzes)
+        .where(recycleCondition)
+        .orderBy(desc(quizzes.createdAt))
+        .limit(need)
+      result = [...result, ...recycled]
+    }
   }
 
   // Parse per-row and skip any malformed payload — one bad row must not 500 the
@@ -128,6 +150,7 @@ app.get('/api/quiz', async (c) => {
       explanation: q.explanation,
       sourceName: q.sourceName,
       sourceUrl: q.sourceUrl,
+      review: reviewSet.has(q.id),
     }]
   })
 

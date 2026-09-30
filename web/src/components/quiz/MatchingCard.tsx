@@ -167,7 +167,14 @@ export function MatchingCard({ quiz, ...chrome }: Props) {
                             fontSize: 11, fontWeight: 700,
                           }}>{ok ? '✓' : '✗'}</span>
                         )}
-                        <span style={{ fontFamily: T.sans, fontSize: 13.5, lineHeight: 1.42, color: p.text }}>{text}</span>
+                        <span style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          <span style={{ fontFamily: T.sans, fontSize: 13.5, lineHeight: 1.42, color: p.text }}>{text}</span>
+                          {ok === false && (
+                            <span style={{ fontFamily: T.sans, fontSize: 12, lineHeight: 1.4, color: Q.correct }}>
+                              → {quiz.right[i]}
+                            </span>
+                          )}
+                        </span>
                       </button>
                     )
                   })}

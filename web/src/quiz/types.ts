@@ -6,6 +6,7 @@ interface BaseQuiz {
   prompt: string
   explanation: string
   source: { name: string; url: string } | null
+  review: boolean // missed earlier, due again (src/quiz/review.ts)
 }
 
 export interface SingleChoiceQuiz extends BaseQuiz {
@@ -75,6 +76,7 @@ function mapApiItem(item: RawQuizItem): Quiz | null {
     source: item.sourceName && item.sourceUrl
       ? { name: item.sourceName, url: item.sourceUrl }
       : null,
+    review: item.review === true,
   }
   const p = item.payload
   if (item.type === 'single_choice' && isSingleChoicePayload(p)) {

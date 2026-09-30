@@ -213,7 +213,13 @@ function DragList({ items, resolved, onReorder }: {
             }}>{item.value}</span>
             {!resolved && <GripIcon color={lifted ? T.accent : T.inkFaint} />}
             {state === 'right' && <span style={{ color: Q.correct, fontWeight: 700 }}>✓</span>}
-            {state === 'wrong' && <span style={{ color: Q.wrong, fontWeight: 700 }}>✗</span>}
+            {state === 'wrong' && (
+              // Name the right slot — a bare ✗ says "wrong" but not what right looks like.
+              <span style={{
+                flexShrink: 0, fontFamily: T.mono, fontSize: 11, fontWeight: 700, color: Q.wrong,
+                whiteSpace: 'nowrap',
+              }}>✗ 應為 {item.originalIndex + 1}</span>
+            )}
           </div>
         )
       })}

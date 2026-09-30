@@ -80,23 +80,36 @@ export function FillBlankCard({ quiz, ...chrome }: Props) {
                 const w = filled[b]
                 const p = blankPalette(resolved, activeBlank === b, w !== null,
                   resolved && w !== null ? blankOk(b) : undefined)
+                // A missed blank keeps the wrong pick visible (struck through)
+                // and shows the answer right beside it.
+                const missed = resolved && w !== null && !blankOk(b)
                 return (
-                  <button
-                    key={si}
-                    onClick={() => tapBlank(b)}
-                    disabled={resolved}
-                    style={{
-                      display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                      minWidth: 54, height: 28, margin: '0 3px', padding: '0 10px',
-                      verticalAlign: 'middle',
-                      borderRadius: 8,
-                      border: `1.5px ${w === null ? 'dashed' : 'solid'} ${p.border}`,
-                      background: p.bg,
-                      color: w === null ? T.inkFaint : p.text,
-                      fontFamily: T.sans, fontSize: 14, fontWeight: 700,
-                      transition: 'background 0.18s, border-color 0.18s',
-                    }}
-                  >{w === null ? '＿＿' : quiz.wordBank[w]}</button>
+                  <span key={si}>
+                    <button
+                      onClick={() => tapBlank(b)}
+                      disabled={resolved}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                        minWidth: 54, height: 28, margin: '0 3px', padding: '0 10px',
+                        verticalAlign: 'middle',
+                        borderRadius: 8,
+                        border: `1.5px ${w === null ? 'dashed' : 'solid'} ${p.border}`,
+                        background: p.bg,
+                        color: w === null ? T.inkFaint : p.text,
+                        fontFamily: T.sans, fontSize: 14, fontWeight: 700,
+                        textDecoration: missed ? 'line-through' : undefined,
+                        transition: 'background 0.18s, border-color 0.18s',
+                      }}
+                    >{w === null ? '＿＿' : quiz.wordBank[w]}</button>
+                    {missed && (
+                      <span style={{
+                        display: 'inline-flex', alignItems: 'center', height: 28, padding: '0 10px',
+                        marginRight: 3, verticalAlign: 'middle', borderRadius: 8,
+                        background: Q.correctTint, border: `1.5px solid ${Q.correct}`,
+                        color: T.ink, fontFamily: T.sans, fontSize: 14, fontWeight: 700,
+                      }}>{quiz.blanks[b]}</span>
+                    )}
+                  </span>
                 )
               })}
             </p>
