@@ -7,25 +7,17 @@
 ## Quick Start
 
 ```bash
-# Backend pipeline + API
+# Backend pipeline
 nvm use 20
 npm install
 cp .env.example .env   # 填入 keys
-npm run dev:api        # Hono API (port 3001)
 
 # Frontend (web PWA)
 cd web && npm install
 npm run dev            # Vite dev (port 5173)
 ```
 
-`web/vite.config.ts` proxies two different targets depending on the route (2026-09-07):
-
-- `/api/library`, `/api/quiz`, `/api/activity` → `http://localhost:3001` (local Hono dev server, read-only GET)
-- `/api/feed`, `/api/ask`, `/api/ask-history`, `/api/save`, `/api/unsave`, `/api/feedback`, `/api/quiz-attempt`, `/api/push-subscribe` → `https://ai-morning-brief-chi.vercel.app` (these are Edge Runtime functions and only exist on Vercel; the local Hono server has no equivalent)
-
-This means `cd web && npm run dev` alone (no `npm run dev:api` needed for POST routes) can exercise quiz answering, follow-ups, saving, and feedback. **Side effect on purpose: local 👍 / 🔖 / quiz attempts write to the production Turso DB.** This isn't new exposure — the local API server already reads/writes that same DB — but know that clicks during local dev are real rows, not sandboxed.
-
-The proxy match for the Edge routes is an anchored regex ending in `(\?|$)` rather than `$`, because Vite tests proxy keys against the full `req.url` including the query string. It's listed before the catch-all `/api` key — first matching key wins, so order in `vite.config.ts` matters if you add routes.
+There is no local API server (2026-10-01): every route is a Vercel Edge function in root `api/*.ts`, and `web/vite.config.ts` proxies all of `/api` to `https://ai-morning-brief-chi.vercel.app`. So `cd web && npm run dev` alone exercises the whole app against production. **Side effect on purpose: local 👍 / 🔖 / quiz attempts write to the production Turso DB** — clicks during local dev are real rows, not sandboxed. To test an unreleased backend change, deploy it (Vercel preview, or prod) and point `PROD_API` in `vite.config.ts` at that URL.
 
 手動跑一次文章 pipeline（會真的寫 DB + 推 Web Push）：
 
@@ -84,9 +76,9 @@ cd app && npx expo start --ios   # iOS Simulator
 vercel deploy
 ```
 
-`api/index.ts`（Hono read-only：`/api/library`、`/api/quiz`、`/api/activity`）+ `api/feed.ts` + `api/ask.ts` + `api/ask-history.ts` + `api/push-subscribe.ts` + `api/save.ts` + `api/unsave.ts` + `api/feedback.ts` + `api/quiz-attempt.ts`（皆 Edge Runtime）分別部署為 Vercel Functions。`web/` 為靜態 React PWA。
+root `api/*.ts`（feed / library / quiz / activity / weekly / ask / ask-history / push-subscribe / save / unsave / feedback / quiz-attempt / quiz-report，皆 Edge Runtime）分別部署為 Vercel Functions；2026-10-01 起沒有 Node/Hono function。`web/` 為靜態 React PWA。
 
-`vercel.json` 的 rewrite 順序：所有 Edge endpoint 必須排在 `/api/:path* → /api/index` catch-all **前面**，否則會被吞進 Hono。
+`vercel.json`：每支 API 一條 rewrite；最後的 SPA fallback 是 `/((?!api/).*)` → `/index.html`，打錯的 `/api/xxx` 會 404 而不是回 HTML。新增 endpoint 記得補 rewrite。
 
 ---
 

@@ -48,6 +48,8 @@ REACT_NATIVE_PACKAGER_HOSTNAME=192.168.0.105 npx expo start   # substitute curre
 
 **Guardrail**: When you actually want to test unreleased backend changes (`src/api/app.ts` edits before deploying), comment out that line in `app/.env` and start `npm run dev:api` — that restores LAN auto-detection. Don't forget to uncomment it again afterward, or the next Expo Go session will silently try to hit a local server that isn't running.
 
+**Superseded (2026-10-01)**: the Hono/Node backend and `npm run dev:api` were deleted (every route is an Edge function now), and `resolveApiBase()` no longer auto-detects a LAN server: it returns `EXPO_PUBLIC_API_BASE_URL` if set, else prod. Expo Go works with no `app/.env` at all. To test unreleased backend changes, point `EXPO_PUBLIC_API_BASE_URL` at a Vercel preview URL.
+
 ---
 
 ## Issue 4 — Quiz follow-up (追問) history never persisted in `app/` (fixed 2026-09-29)

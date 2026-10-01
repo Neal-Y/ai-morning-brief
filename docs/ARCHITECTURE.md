@@ -157,7 +157,7 @@ Plain insert into `quizzes` — no upsert/dedup at the DB layer; dedup happens e
 
 ### Consumption (client-side — web PWA `web/` is primary; RN app `app/` shelved, see [README.md](./README.md))
 
-- `GET /api/quiz` (Hono, read-only) — today's question set, filled in this order:
+- `GET /api/quiz` (`api/quiz.ts`, Edge since 2026-10-01; two Turso pipeline round trips) — today's question set. Reported questions (`quiz_reports`) are excluded first, then the set is filled in this order:
   1. **Spaced review** (`src/quiz/review.ts`, 2026-09-30): questions this device missed come back on a 1 → 3 → 7 Taipei-day ladder. Each correct answer since the last miss moves a question one rung, and three in a row graduate it. A new miss restarts at 1 day. At most `REVIEW_MAX_PER_SET = 2` per set, most overdue first. State is derived from `quiz_attempts` alone, with no extra table. Items carry `review: true`, and the web shows a 「複習 · 之前答錯」 tag.
   2. **Fresh**: questions never attempted, newest first.
   3. **Recycle**: already-attempted questions, newest first, used only when the pool runs short.
@@ -191,16 +191,12 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 |---|---|---|
 | `GET /api/library` (`api/library.ts`, moved from Hono 2026-10-01) | `days` (optional, 1–365) | `{ articles, hasMore? }`: non-OMIT articles newest first, joined in JS with this device's feedback / saved / notionSynced / askMessageCount. The join reads `message_count` only, never the messages JSON. One Turso pipeline round trip. With `?days=N` it returns only the latest N brief dates plus `hasMore`, which the client uses for a fast first paint |
 | `GET /api/weekly` (`api/weekly.ts`, 2026-09-30) | — (`X-Device-Id`) | This week's review (Mon 00:00 Taipei → now): `{ weekLabel, daysElapsed, activeDays, read, answered, correct, lastWeek: {answered, correct}, weakCategories[≤3], missed[≤5], saved[≤5] }`. One Turso pipeline (three statements), `no-store` |
-| `GET /api/feed` (`api/feed.ts`) | `date` (YYYY-MM-DD, default today in Taipei; anything else → 400) | `{ date, articles: RawArticle[] }`, the same shape the Hono/drizzle route returned. `Cache-Control` is `s-maxage=300, swr=300` when the day has articles and `s-maxage=30` when it is empty |
+| `GET /api/feed` (`api/feed.ts`) | `date` (YYYY-MM-DD, default today in Taipei; anything else → 400) | `{ date, articles: RawArticle[] }` (camelCase, numeric `score`, ISO `classifiedAt`). `Cache-Control` is `s-maxage=300, swr=300` when the day has articles and `s-maxage=30` when it is empty |
 
-### Hono, read-only GET (`src/api/app.ts` → `api/index.ts` on Vercel)
+| `GET /api/quiz` (`api/quiz.ts`, moved from Hono 2026-10-01) | `count` (default 5, max 20), `type` (comma list) | `{ quizzes: RawQuizItem[] }` (+ `review: boolean`); selection order in the Quiz section above. Rows with malformed payload JSON are skipped, not 500'd. `no-store` |
+| `GET /api/activity` (`api/activity.ts`, moved from Hono 2026-10-01) | — | One Turso pipeline (three statements). `{ streak, activeToday, heatmap, weekStats, recent, totalCorrect, totalAnswered }` (`totalAnswered` added 2026-09-30; `recent[].category` is the day's top category plus `+N` for the rest), scoped by `X-Device-Id`. Since 2026-09-29 a day counts for `streak` / `heatmap` if the device read (any `feedback` row) **or** answered (`quiz_attempts`). `weekStats` / `recent` / `totalCorrect` stay quiz-only. `activeToday` says whether today already counts |
 
-| Route | Query params | Returns |
-|---|---|---|
-| `GET /api/quiz` | `count`, `type` (comma list) | `RawQuizItem[]` (+ `review: boolean`) |
-| `GET /api/activity` | — | `{ streak, activeToday, heatmap, weekStats, recent, totalCorrect, totalAnswered }` (`totalAnswered` added 2026-09-30; `recent[].category` is the day's top category plus `+N` for the rest), scoped by `X-Device-Id`. Since 2026-09-29 a day counts for `streak` / `heatmap` if the device read (any `feedback` row) **or** answered (`quiz_attempts`). `weekStats` / `recent` / `totalCorrect` stay quiz-only. `activeToday` says whether today already counts |
-
-### Edge Runtime, body-reading POST (root `api/*.ts` — see [../CLAUDE.md](../CLAUDE.md) Conventions for *why* these can't be Hono routes)
+### Edge Runtime, body-reading POST (root `api/*.ts` — there is no Hono/Node backend since 2026-10-01; see [../CLAUDE.md](../CLAUDE.md) Conventions)
 
 | Route | Body | Effect |
 |---|---|---|

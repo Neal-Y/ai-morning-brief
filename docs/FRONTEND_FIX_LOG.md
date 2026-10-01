@@ -935,6 +935,22 @@ Fixes:
 
 Result under the same throttling: first open of the day ≈ 0.63–0.9 s, re-open the same day ≈ 0.6 s, and opening from a push-prefetched cache ≈ 0.57 s with the API held for 3 s. A single `/api/feed` request is made per load, and the lazy AskSheet and Quiz tab both render. **Needs a real-device check that the morning push still arrives** (sw.js changed).
 
+## Issue 28: Quiz and Activity tabs paid a Node cold start (2026-10-01)
+
+`/api/quiz` and `/api/activity` were the last two routes on the Hono app (`src/api/app.ts` → `api/index.ts`, a Node function). The first open of either tab after the function had gone idle waited on a Node cold start plus drizzle and libSQL init. Every other route was already Edge.
+
+Fix: port both to Edge functions (`api/quiz.ts`, `api/activity.ts`) with raw Turso `/v2/pipeline` SQL.
+- `/api/quiz` makes two round trips. The first fetches reported ids and this device's attempts. The second fetches due reviews, fresh questions and the recycle pool together.
+- `/api/activity` makes one round trip with three statements.
+- Both import the shared pure logic (`src/quiz/review.ts`, `src/streak.ts`) instead of copying it.
+
+Verification: on the same seeded SQLite, the old Hono handlers and the new Edge handlers produced byte-identical JSON across 60 cases. The cases covered three devices (with history, without, and no header), several `count` and `type` combinations, a malformed payload row, reported questions, and a missing `quiz_reports` table. Review items and the recycle path were both exercised.
+
+Then the Node backend was deleted: `src/api/app.ts`, `api/index.ts`, `src/api/server.ts`, `npm run dev:api`, and the `hono` / `@hono/node-server` dependencies.
+- `vercel.json` has no `/api/:path*` catch-all. The SPA fallback is now `/((?!api/).*)`, so a mistyped API path 404s instead of returning HTML.
+- `web/vite.config.ts` proxies all of `/api` to prod.
+- `app/src/api.ts` no longer guesses a local `:3001` server from Metro's host; it uses `EXPO_PUBLIC_API_BASE_URL` or prod.
+
 ---
 
 ## What Was Intentionally Not Changed
