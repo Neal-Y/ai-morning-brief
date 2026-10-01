@@ -29,6 +29,7 @@ Use Node 20+ (`nvm use 20`).
 - `npm run dev:pipeline` runs the real article pipeline; it can write to Turso and send push notifications.
 - `npm run dev:quiz` runs the real quiz pipeline; it can write to Turso (5 questions).
 - `npm run typecheck` checks `src/`, `api/`, `scripts/`, and Drizzle config without emitting files.
+- `npm test` runs the focused Vitest regressions with mocked external services; no DB credentials or live push are needed.
 - `npm run build` compiles the backend pipeline to `dist/`.
 - `npm run db:generate`, `db:migrate`, `db:push`, and `db:seed` manage Drizzle and sample data.
 - `cd web && npm run dev` starts the Vite app on port 5173.
@@ -42,7 +43,7 @@ For new API routes, write a root `api/<name>.ts` Edge function (copy the `query(
 
 ## Testing Guidelines
 
-There is no dedicated test runner yet. Before submitting changes, run `npm run typecheck` and the relevant build. For frontend work, also run `cd web && npm run build`. If adding tests, place `*.test.ts` or `*.test.tsx` near the changed module and add an npm script.
+Vitest runs the focused regression tests via `npm test`. Place `*.test.ts` or `*.test.tsx` near the changed module, but keep service-worker tests outside `web/public/` so Vite does not ship them. Mock external services. Before submitting changes, run `npm test`, `npm run typecheck`, and the relevant build. For frontend work, also run `cd web && npm run build`. CI runs these checks on pull requests and pushes to main.
 
 For Library changes, verify `/api/library` shape, `/library` routing, expanded-row content, save/unsave optimistic updates, mobile safe-area behavior, Ask count display, and AskSheet opening/restoring history from an expanded row.
 

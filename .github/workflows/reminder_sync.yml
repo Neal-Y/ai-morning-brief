@@ -12,6 +12,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: sift-afternoon-reminder
+  cancel-in-progress: false
+
 jobs:
   remind:
     runs-on: ubuntu-latest

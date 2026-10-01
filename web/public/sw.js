@@ -57,7 +57,7 @@ self.addEventListener('notificationclick', (event) => {
         if ('focus' in client) {
           // Already open: bring it forward, then route in-app (the page listens
           // for this message and calls navigate(); no full reload).
-          if (url !== '/') client.postMessage({ type: 'navigate', url })
+          client.postMessage({ type: 'navigate', url })
           return client.focus()
         }
       }

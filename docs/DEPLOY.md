@@ -48,6 +48,10 @@ cd app && npx expo start --ios   # iOS Simulator
 
 ## Deploy
 
+### Pull request checks
+
+`ci.yml` runs on pull requests and pushes to `main`, using Node 22. It installs both root and web dependencies, then runs `npm run typecheck`, `npm run build`, `npm run build --prefix web`, and `npm test`. The focused regression tests mock DB, LLM, and push services and require no secrets.
+
 ### GitHub Actions（兩條獨立 pipeline）
 
 1. Push 到 GitHub
@@ -61,6 +65,8 @@ cd app && npx expo start --ios   # iOS Simulator
    - `reminder_sync.yml`：每天台灣時間 15:53（目標 16:00 前後），下午提醒推播。只需要 `TURSO_*` + `VAPID_*`，也有 `dry_run` 勾選框（只印會推給誰）
 
 手動觸發：Actions → 對應 workflow → Run workflow
+
+三支排程各有固定的 concurrency group；同一管線的手動、排程與不同分支執行不會同時跑，且不取消執行中的工作。這個保護只涵蓋 GitHub Actions，不涵蓋直接執行本機腳本。
 
 **試跑（dry run）**：AI Morning Brief 的 Run workflow 有 `dry_run` 勾選框。勾了就只抓文章 + 分類，在 log 印出每篇的分數、bucket、工程影響和「會選哪幾篇」，不寫 DB、不推播（仍會花一次 classifier 的 LLM 費用）。新增 RSS 來源後用它確認網址抓得到（抓不到會在 log 看到 `[rss] Failed to fetch <name>`）。
 

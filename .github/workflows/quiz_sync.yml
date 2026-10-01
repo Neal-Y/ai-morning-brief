@@ -11,6 +11,10 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: sift-quiz-generator
+  cancel-in-progress: false
+
 jobs:
   quiz:
     runs-on: ubuntu-latest

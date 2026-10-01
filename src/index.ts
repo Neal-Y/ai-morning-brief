@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { pathToFileURL } from 'node:url';
 import { count, eq, isNotNull } from 'drizzle-orm';
 import { loadConfig, CLASSIFIER_CAP, PER_SOURCE_CLASSIFIER_MIN, HARD_TECH_MAX, SIGNALS_MAX, BRIEF_MAX } from './config.js';
 import { getTodaysArticles, pickForClassifier } from './rss/feed.js';
@@ -71,7 +72,7 @@ function selectForUser(
 /** No activity for this many days → skip the brief (see the idle check in main). */
 const IDLE_SKIP_DAYS = 3;
 
-async function main(): Promise<void> {
+export async function main(): Promise<void> {
   let config: ReturnType<typeof loadConfig>;
   try {
     config = loadConfig();
@@ -127,6 +128,10 @@ async function main(): Promise<void> {
   }
 
   if (prefiltered.length === 0) {
+    if (process.env['DRY_RUN'] === '1') {
+      console.log('[dry-run] No articles in last 24h — skipping empty-day notice.');
+      return;
+    }
     console.log('[main] No articles in last 24h — sending empty-day notice');
     try {
       await sendWebPush(`Sift · ${date}`, '今日無重大 AI 新聞');
@@ -134,7 +139,7 @@ async function main(): Promise<void> {
       console.error('[web-push] Empty-day notice failed:', err instanceof Error ? err.message : err);
       process.exit(1);
     }
-    process.exit(0);
+    return;
   }
 
   let provider: AIProvider;
@@ -377,7 +382,9 @@ async function main(): Promise<void> {
   }
 }
 
-main().catch((err) => {
-  console.error('[main] Unhandled error:', err);
-  process.exit(1);
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    console.error('[main] Unhandled error:', err);
+    process.exit(1);
+  });
+}

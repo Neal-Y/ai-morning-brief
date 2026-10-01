@@ -957,6 +957,12 @@ The heatmap is wider than the card and opens scrolled to the right end, so the l
 
 ---
 
+## Issue 30: Repeated feed input skipped cards; morning notification kept the old tab (2026-10-01)
+
+- **Feed:** buttons, arrow keys, and swipes could each enqueue another feedback POST and 260 ms advance timer for the same card. They now share `registerFeedback` and a synchronous ref lock acquired before any side effect. Gesture starts, undo, and keyboard input respect the lock; the pending advance timer is cleared on unmount.
+- **Notifications:** `sw.js` used to omit the navigation message when the target was `/`. An already-open Quiz or Library therefore stayed there after a morning notification. All targets now use the existing in-app navigation listener; reminder and cold-open behavior stay intact.
+- **Regression checks:** mounted-App tests mix rapid buttons, keys, and repeated swipe completion and assert one feedback plus one advance. VM tests execute the actual SW notification handler for warm and cold opens. These tests fail on the old behavior and pass with the fixes. Actual iPhone notification delivery still requires a device check.
+
 ## What Was Intentionally Not Changed
 
 - ~~`lastReadAgo="today"` placeholder~~: removed from the header in Issue 18 along with the streak row redesign.
