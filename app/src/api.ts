@@ -1,30 +1,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import Constants from 'expo-constants'
 import { fetch as expoFetch } from 'expo/fetch'
 import { getDeviceId } from './device'
 
 const PROD_BASE = 'https://ai-morning-brief-chi.vercel.app'
-const DEV_API_PORT = 3001
-
 /**
- * Resolve the API base URL:
- *  1. EXPO_PUBLIC_API_BASE_URL — explicit override (app/.env), if set.
- *  2. In Expo Go dev, auto-derive from the Metro host so the local API tracks
- *     the Mac's LAN IP automatically — no manual edits when the Wi-Fi changes.
- *  3. Production build → prod URL.
+ * API base URL: EXPO_PUBLIC_API_BASE_URL (app/.env) if set, else production.
+ *
+ * Every endpoint is a Vercel Edge function since 2026-10-01 — there is no local
+ * API server to auto-detect any more (the old Hono dev server on :3001 is gone).
  */
 function resolveApiBase(): string {
-  const override = process.env.EXPO_PUBLIC_API_BASE_URL
-  if (override) return override
-
-  // e.g. "192.168.0.158:8081" — the IP Metro is served from.
-  const hostUri = Constants.expoConfig?.hostUri
-  if (hostUri) {
-    const host = hostUri.split(':')[0]
-    if (host) return `http://${host}:${DEV_API_PORT}`
-  }
-
-  return PROD_BASE
+  return process.env.EXPO_PUBLIC_API_BASE_URL || PROD_BASE
 }
 
 const API_BASE = resolveApiBase()

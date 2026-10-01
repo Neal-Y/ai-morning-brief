@@ -13,7 +13,8 @@
     { "source": "/api/quiz-attempt", "destination": "/api/quiz-attempt" },
     { "source": "/api/quiz-report", "destination": "/api/quiz-report" },
     { "source": "/api/weekly", "destination": "/api/weekly" },
-    { "source": "/api/:path*", "destination": "/api/index" },
-    { "source": "/:path*", "destination": "/index.html" }
+    { "source": "/api/quiz", "destination": "/api/quiz" },
+    { "source": "/api/activity", "destination": "/api/activity" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }

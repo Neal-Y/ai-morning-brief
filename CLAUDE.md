@@ -10,7 +10,7 @@
 ## TL;DR（新 session 先看這段）
 
 - 整條 pipeline 已上線：GitHub Actions 每天 07:07 台北時間跑 → 寫 Turso DB → **Web Push** 推播。
-- Vercel 部署完成：`ai-morning-brief-chi.vercel.app`（Hono API + React PWA + Edge Runtime functions）。
+- Vercel 部署完成：`ai-morning-brief-chi.vercel.app`（React PWA + Edge Runtime functions；2026-10-01 起沒有 Node/Hono 後端）。
 - **ntfy 已淘汰**（2026-04-25），現在唯一推播管道是 Web Push（VAPID + iOS standalone PWA）。
 - 前端已過 5 輪 iPhone standalone PWA 穩定化（細節看 `docs/FRONTEND_FIX_LOG.md`，不要在這裡重複翻修）。第 5 輪拔掉了 `vite-plugin-pwa`；現在 SW (`web/public/sw.js`) 是真正的 push handler（`push` + `notificationclick` events，無 fetch cache）。
 - **iPhone standalone PWA footer gap 已收斂（2026-04-28）**：最終解是延伸 root height 到 `100dvh + safe-area-inset-bottom`，再把 bottom dock 作為 extended root 內的 absolute layer。不要回到 fixed footer / negative safe-area offset；細節見 `docs/FRONTEND_FIX_LOG.md` Issue 6。
@@ -49,11 +49,9 @@ GitHub Actions cron — 兩條獨立 pipeline，錯開時間互不影響
        └─ db/quiz-writer.ts            # 寫入 quizzes table
   └─ reminder_sync.yml（15:53 台北）→ src/reminder.ts          # 下午提醒：只推給今天還沒讀/答題的裝置，帶 streak，點了開 /quiz
 
-Hono API (src/api/app.ts → api/index.ts on Vercel) — read-only GET（只剩 quiz / activity）
-  ├─ GET  /api/quiz         # 今日 quiz 題組
-  └─ GET  /api/activity     # 學習紀錄：heatmap / streak / 正確率等統計（device_id 範圍）
-
-Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
+API：全部是 Vercel Edge functions（root `api/*.ts`，raw Turso HTTP，無 Node 冷啟動）。2026-10-01 最後兩支 quiz / activity 搬完後，Hono/Node 後端整個刪除 — 詳見 Conventions
+  ├─ GET      /api/quiz          # api/quiz.ts — 今日題組（排除被回報題 → 到期的答錯重出 ≤2 → 沒答過的新題 → 不夠就 recycle），兩次 Turso pipeline
+  ├─ GET      /api/activity      # api/activity.ts — 學習紀錄：heatmap / streak / 正確率等統計（device_id 範圍），一次 Turso pipeline
   ├─ GET      /api/library       # api/library.ts — 全歷史 + feedback / saved / notionSynced + ask message_count（一次 Turso pipeline，不撈 messages JSON）；`?days=N` 給首屏用（2026-10-01 從 Hono 搬來）
   ├─ GET      /api/feed          # api/feed.ts — 當日文章（2026-09-29 從 Hono 搬來 Edge：每天第一個請求，Node 冷啟動是載入慢的主因）
   ├─ POST     /api/ask           # api/ask.ts — Haiku 4.5 SSE streaming 追問（文章與 quiz 共用；quiz 用合成 articleId=`quiz-${id}`）
@@ -71,7 +69,7 @@ React PWA (web/) — 主力 client（2026-09-07 起，四分頁），仍是 Web 
   ├─ /          滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / Celebration（PWA start_url + push 通知落地頁，不可換掉）
   ├─ /quiz      Quiz.tsx：今日 quiz 題組（single_choice / ordering / matching / fill_blank）；真實 streak（讀 /api/activity）；無硬編碼 fallback 題庫，失敗給明確錯誤 + retry
   ├─ /library   全歷史頁：所有歷史 tab（filter + 日期分組 + 展開 LLM 四段） / 收藏 tab（Notion sync stats）
-  ├─ /activity  Activity.tsx：年度 heatmap / 週 pie / streak / 正確率（呼叫 /api/activity）
+  ├─ /activity  Activity.tsx：本週回顧（/api/weekly）+ 年度 heatmap / streak / 正確率 / 最近幾天（/api/activity）
   ├─ pathname routing：web/src/main.tsx 監聽 popstate，web/src/router.ts navigate() helper（仍非 react-router）
   └─ Splash gate：iOS standalone 第一次開啟 → 請求 notification permission → 寫 subscription
 
@@ -96,7 +94,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | RSS → 分類 → 寫 Turso | ✅ | V1 遺留，穩定 |
 | Web Push 推播 | ✅ | 標題 = lead story title，body = lead 的 engineeringImpact + `今日 N 篇 · 還有 K 題判斷題等你` |
 | Turso DB 寫入 | ✅ | article id = SHA-256(url).slice(0,16)；client 用 `https://` 而非 `libsql://`（serverless friendly） |
-| Vercel 部署 | ✅ | `api/index.ts` (Hono read-only) + Edge：`ask` / `ask-history` / `push-subscribe` / `save` / `unsave` / `feedback` |
+| Vercel 部署 | ✅ | 全部 API 都是 Edge function（`api/*.ts`）；2026-10-01 起沒有 Node/Hono 後端 |
 | PWA 卡片 UI | ✅ | iPhone standalone 已穩定，細節見 `docs/FRONTEND_FIX_LOG.md` |
 | 👍👎 → DB | ✅ | delete-then-insert 防誤按；Edge Runtime（2026-04-26 從 Hono 搬出，原本 504 timeout） |
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch。2026-09-30：quiz 送 `quiz` context（作答前不給解說、prompt 禁止爆雷；作答後帶你的答案 + 正確答案）；建議問題 quiz 依作答狀態、文章由 `mode: 'suggest'` 針對該篇生成並存 localStorage；鍵盤開啟時 AskSheet 貼齊 visualViewport（只限 sheet，不動 shell）。見 FRONTEND_FIX_LOG Issue 21 |
@@ -109,7 +107,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | Quiz 生成 | ✅ | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（05:47 台北）2026-09-29 重新啟用，每天出題。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
 | Quiz 答錯重出 | ✅ | 2026-09-30：`src/quiz/review.ts` 從 `quiz_attempts` 推算，答錯的題 1 → 3 → 7 天後重出（連對 3 次畢業、再錯歸零），每組最多 2 題，web 顯示「複習 · 之前答錯」。答錯時四種題型都會就地標出正確答案 |
 | Quiz 作答紀錄 | ✅ | `POST /api/quiz-attempt` → `quiz_attempts`；XP：答對 +20 / 答錯 +5（web `web/src/components/quiz/tokens.ts` 與 app `app/src/theme.ts` 各自的 XP 常數，web 版衍生自 `theme.ts`） |
-| 學習紀錄 / Activity | ✅ | `GET /api/activity`：年度 heatmap、週 pie、streak、正確率，皆以 device_id 為範圍。2026-09-29 起 streak / heatmap 同時計入閱讀（feedback）與答題；週統計與 recent 仍只算答題。web `Activity.tsx` 與 app `ActivityScreen.tsx` 吃同一支 API |
+| 學習紀錄 / Activity | ✅ | `GET /api/activity`：年度 heatmap、本週答題、streak、正確率，皆以 device_id 為範圍。2026-09-29 起 streak / heatmap 同時計入閱讀（feedback）與答題；週統計與 recent 仍只算答題。web `Activity.tsx` 與 app `ActivityScreen.tsx` 吃同一支 API |
 | 多使用者支援 | ✅ | `device_id` 貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts；web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，**兩邊不共用、沒有遷移**，每次 fetch 帶 `X-Device-Id` |
 | Quiz 追問 | ✅ 問答 + 歷史（存本機） | `/api/ask` streaming 正常（不吃 articleId）；「用合成 `articleId=quiz-${id}` 掛進 conversations」從沒真的動起來——`ask-history.ts` 的 hex regex + FK 會擋掉。所以 quiz 對話歷史改存 client 本機、不進 DB：web/ 2026-09-07 用 localStorage，app/ 2026-09-29 用 AsyncStorage（之前 app/ 端把 400 吞掉，封測期間歷史都沒存到）。見 Key Design Decision #8 |
 | 下午提醒推播 | ✅ | 2026-09-30：`reminder_sync.yml` 15:53 台北跑 `src/reminder.ts`，只推給「今天沒有 feedback 也沒有 quiz_attempts」的訂閱裝置；streak ≥ 2 時文案帶連續天數；payload 帶 `url: '/quiz'`，`sw.js` 點擊後開題目頁（已開著就 postMessage 讓 app 內 navigate）。全部推失敗 → exit(1) |
@@ -175,11 +173,10 @@ src/
   notion/client.ts    # raw fetch Notion REST API（createSavePage）
   db/schema.ts        # articles / feedback / saves / conversations / quizzes / quiz_attempts / push_subscriptions — feedback/saves/conversations/quiz_attempts/push_subscriptions 皆有 device_id 欄位
   db/client.ts        # libSQL client (https://) + getRecentFeedback() + getRecentQuizPrompts()
-  api/app.ts          # Hono app（GET /api/library + /api/quiz + /api/activity，全部 read-only；/api/feed 已搬到 Edge）
-  api/server.ts       # 本地 dev (port 3001)
-api/index.ts             # Vercel entry (hono/vercel handle)
+api/quiz.ts              # Edge Runtime GET → 今日題組（import src/quiz/review.ts 的 dueReviewIds）
+api/activity.ts          # Edge Runtime GET → 學習紀錄（import src/streak.ts 的 computeStreak）
 api/library.ts           # Edge Runtime GET → Library 全歷史 + 個人狀態 join（`?days=N` 首屏分段）
-api/feed.ts              # Edge Runtime GET → Turso HTTP API（當日文章，回傳格式跟原 Hono/drizzle 一致：camelCase、score 數字、classifiedAt ISO）
+api/feed.ts              # Edge Runtime GET → Turso HTTP API（當日文章：camelCase、score 數字、classifiedAt ISO）
 api/ask.ts               # Edge Runtime SSE for /api/ask（文章與 quiz 共用，quiz 用合成 articleId）
 api/ask-history.ts       # Edge Runtime GET/POST → Turso HTTP API（per-(article, device) conversations upsert / fetch）
 api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
@@ -204,7 +201,7 @@ web/
   src/App.tsx           # Feed 主畫面（仍是 `/`，PWA start_url + push 落地頁不可換）：swipe 物理 + streak + push permission gate；feedback dock 抬高到 nav 之上，TopChrome 拿掉重複的 Library 按鈕
   src/Library.tsx       # /library 頁面：filter / 日期分組 / 展開 LLM / saves tab；root height 改 100%（填滿 Shell layer），AskSheet z-index 提到 60
   src/Quiz.tsx           # /quiz 頁面：讀 /api/activity 真實 streak，失敗給明確錯誤 + retry，**無**硬編碼 fallback 題庫
-  src/Activity.tsx       # /activity 頁面：年度 heatmap / 週 pie / streak / 正確率，全部吃 /api/activity 真資料
+  src/Activity.tsx       # /activity 頁面：本週回顧（/api/weekly）+ 年度 heatmap / streak / 正確率 / 最近幾天（/api/activity）
   src/askHistory.ts     # quiz 對話走 localStorage（`mb_quiz_ask_quiz-<id>`），文章對話走 /api/ask-history；原本設計的 conversations 掛法對 quiz 從沒真的動起來，見 Key Design Decision #8
   src/quiz/types.ts     # Quiz union、各題型 payload validator、shuffleWithOrigin（從 app/src/data.ts 搬過來）
   src/api.ts             # apiFetch + 新增型別化層：fetchQuizzes / submitQuizAttempt / fetchActivity / fetchAskHistory / saveAskHistory
@@ -216,7 +213,7 @@ web/
     quiz/               # QuizFrame・QuizCard・SingleChoiceCard・OptionRow・OrderingCard・MatchingCard（SVG bezier connector，無新依賴）・FillBlankCard・CompletionCard・tokens.ts（quiz-only 色票 Q + XP 常數，衍生自 theme.ts）
     activity/           # Heatmap・WeekPie・StatCard
   src/{date,theme,types}.ts · index.css   # theme.ts 是唯一真理（Signal：`bg`/`card`/`raised`/`accent`/`glass` 等 token + `GLASS_BLUR` + `TAG_COLORS`），app/ 的 theme 應鏡像它（目前落後，見 TL;DR）
-  vite.config.ts        # Edge-only route（ask/ask-history/save/unsave/feedback/quiz-attempt/push-subscribe）proxy 到 prod Vercel（本地 Hono dev server 沒有這些 function）；純 GET route（feed/library/quiz/activity）仍打 localhost:3001 —— 代表本地 dev 的寫入操作會真的寫進 prod Turso DB
+  vite.config.ts        # `/api` 全部 proxy 到 prod Vercel（沒有本地 API server）—— 代表本地 dev 的寫入操作會真的寫進 prod Turso DB
 app/                     # React Native app「Sift」（Expo SDK 54，暫時擱置——非凍結，Expo Go 仍可跑；EAS Build/TestFlight 因用量不到門檻延後）
   App.tsx                # 根元件：字型載入 + bottom tab navigator（Quiz/Feed/Library/Activity）
   app.json                # expo name/slug = "Sift"
@@ -261,10 +258,9 @@ docs/
 npm run build          # tsc
 npm run dev:pipeline   # tsx src/index.ts（會真的寫 DB + 推 Web Push）
 npm run dev:quiz       # tsx src/quiz-pipeline.ts（會真的寫 DB，5 題）
-npm run dev:api        # Hono API server (port 3001)
 
 # Web
-cd web && npm run dev  # Vite dev (port 5173, proxy → 3001)
+cd web && npm run dev  # Vite dev (port 5173，/api proxy → prod Vercel)
 
 # React Native App
 cd app && npx expo start   # Expo Go 開發（Metro bundler，LAN IP 自動偵測）
@@ -332,7 +328,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - Cold-start 門檻 10 筆，低於門檻一律不注入（防過擬合）
 - 👎 per-category 要 ≥ 2 次才算負訊號（單一 👎 可能只是當天心情，別當真）
 
-**Edge Runtime endpoints（POST 一律走這裡，不要進 Hono；GET 視情況也可走 Edge）：**
+**Edge Runtime endpoints（2026-10-01 起所有 API 都是 Edge，沒有 Node/Hono 後端）：**
 - `/api/ask` → `api/ask.ts`（SSE streaming；文章與 quiz 共用，quiz 用合成 `articleId=quiz-${id}`）
 - `/api/ask-history` → `api/ask-history.ts`（GET 讀 / POST upsert per-(article, device) conversations row）
 - `/api/push-subscribe` → `api/push-subscribe.ts`（寫 Turso）
@@ -341,10 +337,10 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
 - `/api/quiz-attempt` → `api/quiz-attempt.ts`（寫 `quiz_attempts`；`X-Device-Id` header 必填，缺就 400）
 - **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。
-- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/quiz`、`/api/activity` 皆 GET；`/api/feed` 2026-09-29、`/api/library` 2026-10-01 搬到 Edge 以避開 Node 冷啟動，不要在 Hono 補回一份）。
-- `vercel.json` 的 rewrite 順序：`/api/feed`、`/api/library`、`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback`、`/api/quiz-attempt`、`/api/quiz-report`、`/api/weekly` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
-- 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
-- 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
+- **GET 也全搬了**：`/api/feed`（2026-09-29）、`/api/library`、`/api/quiz`、`/api/activity`（2026-10-01）都改成 Edge + raw Turso SQL，因為 Node function 的冷啟動就是使用者感受到的「開 App 卡一下」。quiz / activity 搬遷時用同一顆 seeded SQLite 逐 byte 比對新舊輸出（60 組 case 全一致）。搬完後 `src/api/app.ts`、`api/index.ts`、`src/api/server.ts`、`hono` / `@hono/node-server` 依賴全部刪除。
+- **規則**：新 endpoint 一律寫 `api/<name>.ts`（`export const config = { runtime: 'edge' }`，Turso 用 `/v2/pipeline` raw fetch，照抄 `api/weekly.ts` 的 `query()` helper）+ `vercel.json` rewrite。**不要**把 Hono / Node function 加回來。Edge function 可以 import `src/` 底下**純邏輯、無 Node 依賴**的模組（`api/quiz.ts` 用 `src/quiz/review.ts`、`api/activity.ts` 用 `src/streak.ts`、`api/save.ts` 用 `src/notion/client.ts`）；不要 import `src/db/client.ts`（drizzle + libSQL Node client）。
+- `vercel.json`：每支 API 一條 rewrite，最後的 SPA fallback 是 `/((?!api/).*)` → `/index.html`，所以打錯的 `/api/xxx` 會是 404 而不是回一頁 HTML。
+- 本地沒有 API server：`web/` 的 vite dev 把 `/api` 全部 proxy 到 prod；要測未上線的後端改動請 push 到 Vercel preview（或直接上 prod，看改動風險）。
 
 **Quiz pipeline / 多使用者：**
 - Quiz 出題完全獨立於文章 pipeline：不同 cron 檔（`quiz_sync.yml` 05:47 台北 vs `daily_sync.yml` 07:07 台北）、不同 entry（`quiz-pipeline.ts` vs `index.ts`）、不共用 selection 邏輯；共用的只有 `ai/select-provider.ts`（provider 選擇 + fallback）和同一顆 Turso DB
@@ -355,7 +351,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 **Web 前端 nav / Quiz+Activity port（2026-09-07）：**
 - 新頁面一律用 `useNavInset()`（`web/src/nav.ts`）拿 nav 高度，不要用 `env(safe-area-inset-bottom)` 猜——那個值在 JS 讀不到 px 數字，nav 高度是 `Shell.tsx` 量測後用 `NavInsetContext` 發佈的
 - bottom-docked 控制項要蓋過 nav 就疊 z-index，不要用 fixed footer 或 negative safe-area offset——這是 `docs/FRONTEND_FIX_LOG.md` Issue 6 的教訓，nav 本身也遵守同一條規則
-- `vite.config.ts` 把 Edge-only route（`feed` / `ask` / `ask-history` / `save` / `unsave` / `feedback` / `quiz-attempt` / `push-subscribe`）proxy 到 prod Vercel，因為本地 Hono dev server 沒有這些 function；純 GET route（`library` / `quiz` / `activity`）仍打 `localhost:3001`。**這代表本地 dev 的寫入操作（👍/🔖/quiz attempt）會真的寫進 prod Turso DB**——不是新風險（本地 API server 本來就讀寫同一顆 DB），但測試時要注意會留下真實資料
+- `vite.config.ts` 把 `/api` 全部 proxy 到 prod Vercel（2026-10-01 起沒有本地 API server）。**這代表本地 dev 的寫入操作（👍/🔖/quiz attempt）會真的寫進 prod Turso DB**，測試時要注意會留下真實資料
 - Quiz port 沒加新 npm dependency：matching 題型的連接線是手刻 SVG bezier，不是新圖形庫
 - `web/src/theme.ts` 是唯一真理（authoritative）；quiz-only palette 放在 `web/src/components/quiz/tokens.ts`，從 `theme.ts` 衍生；改色從 `theme.ts` 改起，不要在元件裡寫死色碼——`app/src/theme.ts` 才是鏡像 web/ 的那一邊，方向不能反過來
 
@@ -381,11 +377,11 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - **四分頁 bottom tab**：Quiz（✦ 今日題目）/ Feed（◎ 簡報）/ Library（⊟）/ Activity（紀錄 — 學習儀表板）
 - **字型**：NotoSansTC 400/500/700/900 + JetBrains Mono 400/500/700，由 `@expo-google-fonts` 載入；App.tsx 等字型就緒才渲染
 - **主題**：`src/theme.ts` 匯出 `T`（色彩）/ `FONT`（字型 key）/ `RADIUS` / `XP`（答對/答錯經驗值）；原本刻意鏡像 web/ dark theme；web 2026-09-29 改版 Signal 後 app/ 沒跟上，撿回來時先同步
-- **API**：`src/api.ts` 用 `Constants.expoConfig.hostUri` 自動抓 Metro LAN IP（dev），production build 固定走 `https://ai-morning-brief-chi.vercel.app`。**Expo Go dev 模式下 `hostUri` 永遠存在**，所以不設 override 的話一律假設 `npm run dev:api` 有在跑本地——沒開就整個打不通。`app/.env`（gitignored，不會被 push）目前設了 `EXPO_PUBLIC_API_BASE_URL` 固定指向 prod，讓日常用 Expo Go 不用開本地 server；要測後端改動時把這行註解掉即可切回本地自動偵測
-- **SSE 追問**：`streamAsk()` 改用 `expo/fetch`（RN 原生 fetch 無法讀 streaming body）；Edge `/api/ask` 只存在於 Vercel，本地 dev server 沒有，開發時直接打 prod。Quiz 題目追問重用同一套 AskSheet + `/api/ask`，用合成 `articleId = quiz-${id}`；追問**歷史**不進 `conversations`（`ask-history.ts` 的 hex regex + FK 會擋）——2026-09-29 起 `src/api.ts` 的 `fetchAskHistory` / `saveAskHistory` 把 `quiz-` 開頭的 thread 改存 AsyncStorage（`sift_quiz_ask_quiz-<id>`），跟 web/ 的 localStorage 同一招；在那之前 400 被空 `catch {}` 吞掉、歷史一直沒存到。見 Key Design Decision #8
+- **API**：`src/api.ts` 一律打 `https://ai-morning-brief-chi.vercel.app`，`EXPO_PUBLIC_API_BASE_URL`（`app/.env`，gitignored）有設就用它（例如指向 Vercel preview 測後端改動）。2026-10-01 前會用 `Constants.expoConfig.hostUri` 自動猜本地 `:3001` dev server；Hono 刪掉後那條路不存在了，所以拿掉
+- **SSE 追問**：`streamAsk()` 改用 `expo/fetch`（RN 原生 fetch 無法讀 streaming body）；所有 API 都只存在於 Vercel，開發時直接打 prod。Quiz 題目追問重用同一套 AskSheet + `/api/ask`，用合成 `articleId = quiz-${id}`；追問**歷史**不進 `conversations`（`ask-history.ts` 的 hex regex + FK 會擋）——2026-09-29 起 `src/api.ts` 的 `fetchAskHistory` / `saveAskHistory` 把 `quiz-` 開頭的 thread 改存 AsyncStorage（`sift_quiz_ask_quiz-<id>`），跟 web/ 的 localStorage 同一招；在那之前 400 被空 `catch {}` 吞掉、歷史一直沒存到。見 Key Design Decision #8
 - **Device ID**：`src/device.ts` 用 AsyncStorage 生成 UUID（key: `sift_device_id`），每次 fetch 帶 `X-Device-Id` header；貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts 五個 table，是多使用者隔離的唯一依據（無帳號系統）
 - **Quiz 互動類型**：`single_choice` / `ordering` / `matching` / `fill_blank`（`api/quiz-attempt.ts` 記錄作答結果，寫入 `quiz_attempts`）；出題交由獨立 `quiz_sync.yml` cron，非即時生成
-- **Activity（學習紀錄）**：`GET /api/activity`（Hono，read-only）回傳 heatmap / streak / 正確率，皆用 `X-Device-Id` 圈定範圍
+- **Activity（學習紀錄）**：`GET /api/activity`（Edge，`api/activity.ts`）回傳 heatmap / streak / 正確率，皆用 `X-Device-Id` 圈定範圍
 - **不要**在 app/ 加 SW、manifest、VAPID 相關邏輯 — push 仍由 web/ PWA 負責
 - **已知問題**：Quiz 分頁寫死 streak、Feed 分頁收藏純前端 local state 兩項已於 2026-08-04 修掉（`QuizScreen.tsx` 改叫 `fetchActivity().streak`，`FeedScreen.tsx` 改由 `fetchLibrary()` 灌初始收藏狀態）。Quiz 追問歷史沒存到的問題已於 2026-09-29 修掉（改存 AsyncStorage，見上一條 + Key Design Decision #8）。完整清單見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)
 
@@ -467,4 +463,4 @@ Act as a mentor, not only a code generator:
 - No direct coding for ambiguous features. Clarify scope, data flow, failure behavior, and verification first.
 - No broad rewrites when a narrow change preserves existing behavior.
 - No new unbounded loops, unbounded concurrency, or provider calls without explicit caps.
-- No new POST endpoint that reads a body in Hono; keep the existing Edge Runtime rule.
+- No Hono / Node API functions; every endpoint is a root `api/<name>.ts` Edge function.

@@ -15,7 +15,6 @@
     "dev:pipeline": "tsx src/index.ts",
     "dev:quiz": "tsx src/quiz-pipeline.ts",
     "dev:reminder": "tsx src/reminder.ts",
-    "dev:api": "tsx src/api/server.ts",
     "dev:web": "cd web && npm run dev",
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
     "db:migrate": "drizzle-kit migrate --config=drizzle.config.ts",
@@ -24,11 +23,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.39.0",
-    "@hono/node-server": "^1.19.14",
     "@libsql/client": "^0.17.2",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
-    "hono": "^4.12.14",
     "openai": "^4.86.0",
     "rss-parser": "^3.13.0",
     "web-push": "^3.6.7"

@@ -16,27 +16,20 @@ import react from '@vitejs/plugin-react'
 // is hand-written: only `push` + `notificationclick` handlers, no fetch /
 // cache logic (avoids the cache hell that vite-plugin-pwa caused).
 
-// The Edge Runtime endpoints (`api/*.ts`) only exist on Vercel — the local Hono
-// dev server is read-only GET and has no equivalent. Proxy them to production
-// so the whole app is exercisable locally.
+// Every API route is a Vercel Edge function (`api/*.ts`) since 2026-10-01 —
+// there is no local API server. Proxy all of /api to production so the whole
+// app is exercisable with just `npm run dev`.
 //
 // Side effect, on purpose: local 👍 / 🔖 / quiz attempts write to the production
-// Turso DB. That is not new — the local API server already reads/writes it.
+// Turso DB. To test an unreleased backend change, deploy it (Vercel preview or
+// prod) and point PROD_API at that URL.
 const PROD_API = 'https://ai-morning-brief-chi.vercel.app'
-
-// Anchored regex (vite treats a leading `^` key as a RegExp tested against the
-// full req.url, query string included — hence the `(\?|$)` tail instead of `$`).
-const EDGE_ROUTES =
-  '^/api/(feed|library|ask|ask-history|save|unsave|feedback|quiz-attempt|quiz-report|weekly|push-subscribe)(\\?|$)'
 
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      // Order matters: first matching key wins, so Edge routes are listed first.
-      [EDGE_ROUTES]: { target: PROD_API, changeOrigin: true },
-      // Read-only GETs served by the local Hono dev server.
-      '/api': 'http://localhost:3001',
+      '/api': { target: PROD_API, changeOrigin: true },
     },
   },
 })

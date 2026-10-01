@@ -3,8 +3,7 @@
 ## Project Structure & Module Organization
 
 - `src/` holds two independent scheduled pipelines: the article pipeline (RSS ingestion, AI classification, brief generation, Notion sync, push) entered via `src/index.ts`, and the quiz pipeline (`src/quiz/generate.ts`, `src/db/quiz-writer.ts`) entered via `src/quiz-pipeline.ts`. They run on separate GitHub Actions crons (`daily_sync.yml` 07:07 Taipei, `quiz_sync.yml` 05:47 Taipei) and do not depend on each other.
-- `src/api/` contains the local Hono API. It is read-oriented: `GET /api/library`, `GET /api/quiz`, and `GET /api/activity` live in `src/api/app.ts`. `GET /api/feed` is an Edge function (`api/feed.ts`, 2026-09-29), moved there to avoid the Node cold start on the first request every morning.
-- Root `api/*.ts` files are Vercel routes. Body-reading POST endpoints are Edge functions: `ask`, `ask-history`, `push-subscribe`, `save`, `unsave`, `feedback`, and `quiz-attempt`.
+- Root `api/*.ts` files are the whole API: every route is a Vercel Edge function using raw Turso HTTP (`/v2/pipeline`). There is no Node/Hono backend since 2026-10-01 (`/api/quiz` and `/api/activity` were the last to move, to remove the Node cold start). Edge files may import pure, dependency-free modules from `src/` (e.g. `src/quiz/review.ts`, `src/streak.ts`) but not `src/db/client.ts`.
 - `app/` is the React Native app, product name "Sift" (Expo SDK 54, Expo Go closed beta). Four bottom tabs: Quiz, Feed, Library, Activity (`app/src/screens/ActivityScreen.tsx` — a learning-stats dashboard with a heatmap, pie chart, and streak). As of 2026-09-07 this is **temporarily shelved** (not frozen, not abandoned): EAS Build/TestFlight costs money and isn't worth it at current usage, so it stays on hold, code untouched and still runnable in Expo Go, while `web/` takes over as the primary client.
 - `web/` is the React PWA and now the primary client (source in `web/src/`, assets and service worker in `web/public/`). As of 2026-09-07 it also has four bottom tabs — Quiz (`/quiz`), Feed (`/`), Library (`/library`), Activity (`/activity`) — ported from `app/`. `web/src/Shell.tsx` is the app shell (persistent bottom nav as an absolute layer over the extended root) and `web/src/nav.ts` exposes `useNavInset()` for any page that needs to reserve nav height.
 - `web/src/Library.tsx` is the implemented `/library` page; `web/src/Quiz.tsx` and `web/src/Activity.tsx` are the ported quiz/activity pages; `web/src/router.ts` provides the lightweight pathname router (still no react-router).
@@ -27,7 +26,6 @@
 
 Use Node 20+ (`nvm use 20`).
 
-- `npm run dev:api` starts the local Hono API server on port 3001.
 - `npm run dev:pipeline` runs the real article pipeline; it can write to Turso and send push notifications.
 - `npm run dev:quiz` runs the real quiz pipeline; it can write to Turso (5 questions).
 - `npm run typecheck` checks `src/`, `api/`, `scripts/`, and Drizzle config without emitting files.
@@ -40,7 +38,7 @@ Use Node 20+ (`nvm use 20`).
 
 Use TypeScript ES modules and keep `strict` compatibility. Follow the existing two-space indentation, semicolon, and double-quote style. Name files by feature (`classifier.ts`, `db-writer.ts`, `push-subscribe.ts`) and align Vercel route files with endpoints. Prefer typed helpers for env vars, database rows, and external API responses.
 
-For new API routes, keep GET/read endpoints in Hono only when they do not read a request body. Any POST endpoint that reads a body must be a root `api/<name>.ts` Edge function and must be listed before the `/api/:path*` catch-all in `vercel.json`.
+For new API routes, write a root `api/<name>.ts` Edge function (copy the `query()` helper from `api/weekly.ts`) and add a rewrite to `vercel.json`. Do not reintroduce Hono or Node functions.
 
 ## Testing Guidelines
 
@@ -69,7 +67,7 @@ Do not commit `.env`, `.env.local`, API keys, VAPID private keys, Turso tokens, 
 - Quiz dedup context (`getRecentQuizPrompts`) and classifier preference context (`buildRecentQuizContext` / `buildPreferenceContext`) must stay appended at the END of their respective system prompts to preserve the stable cache-prefix. Do not move either to the start or middle of the prompt.
 - `conversations.article_id` has an enforced foreign key to `articles.id`, and `api/ask-history.ts`'s `isArticleId` only accepts 16-hex ids. Synthetic quiz ids (`quiz-${id}`) fail both checks (400 then 500), so quiz follow-up history cannot be persisted server-side without a real schema change (dropping the FK needs a SQLite table rebuild, not a simple migration). Both clients work around this on the device (`web/`: `localStorage`; `app/`: AsyncStorage); do not "fix" it by relaxing the regex alone.
 - New pages must reserve nav height via `web/src/nav.ts`'s `useNavInset()` rather than reading `env(safe-area-inset-bottom)` directly in JS (it isn't readable as a number); any bottom-docked control must layer above `BottomNav.tsx` inside the extended root, not use a fixed footer or negative safe-area offset (see `docs/FRONTEND_FIX_LOG.md` Issue 6).
-- `web/vite.config.ts` proxies Edge-only routes (`ask`, `ask-history`, `save`, `unsave`, `feedback`, `quiz-attempt`, `push-subscribe`) to the production Vercel deployment since those functions don't exist on the local Hono dev server; GET routes still hit `localhost:3001`. This means local dev writes (feedback, saves, quiz attempts) land in the production Turso DB — not a new risk (the local API server already reads/writes that DB), but worth remembering when testing.
+- `web/vite.config.ts` proxies all of `/api` to the production Vercel deployment (there is no local API server). This means local dev writes (feedback, saves, quiz attempts) land in the production Turso DB — worth remembering when testing.
 - The real installed-to-homescreen iPhone PWA has not been checked against the new four-tab bottom chrome (this machine has no iOS Simulator, only Xcode Command Line Tools); verification so far is Playwright at a simulated iPhone-13 viewport. `docs/FRONTEND_FIX_LOG.md` Issue 6's acceptance target is the actual installed standalone PWA — treat that as still outstanding.
 
 ## [ADDED CONTENT] Engineering Workflow & Review Framework

@@ -36,11 +36,11 @@ Web Push 只在 DB 寫入成功後才送出（Stage 5 → Stage 6 強制串行�
 
 ## 技術決策說明
 
-### 為什麼 POST 全走 Edge Runtime，不走 Hono？
+### 為什麼 API 全走 Edge Runtime，沒有 Hono / Node？
 
 Hono 在 Vercel Node.js adapter 上，`c.req.json()` 對部分 POST request 會 hang 到 5 分鐘 timeout——2026-04-26 在 `/api/feedback` 重現，body < 100 bytes 也觸發。排查過 DB、libSQL、drizzle、VAPID 都不是病灶；結論是 adapter 本身的問題。Edge Runtime 用原生 `Request.json()` 沒這問題。
 
-現行規則：所有需要讀 request body 的新 POST endpoint，直接寫 `api/<name>.ts`（Edge Runtime）+ `vercel.json` rewrite，不加進 Hono app。Hono 現在 read-only（`/api/feed`、`/api/library`、`/api/quiz`、`/api/activity` 皆 GET）。
+GET 後來也全搬了：Node function 的冷啟動就是開 App 時那一下卡頓。2026-10-01 最後兩支（`/api/quiz`、`/api/activity`）搬完後，Hono / Node 後端整個刪除。現行規則：任何新 endpoint 直接寫 `api/<name>.ts`（Edge Runtime）+ `vercel.json` rewrite。
 
 ### 為什麼用 Turso HTTP API 而不是 `libsql://`？
 
@@ -68,13 +68,11 @@ GitHub Actions cron — 兩條獨立 pipeline
        ├─ quiz/generate.ts     LLM 出題（4 題型混出）
        └─ db/quiz-writer.ts    寫入 quizzes table
 
-Hono API  (src/api/app.ts → api/index.ts on Vercel) — read-only
-  ├─ GET  /api/feed?date=      api/feed.ts（Edge）— 當日文章
-  ├─ GET  /api/library         歷史文章 + feedback/saves/ask count 狀態
-  ├─ GET  /api/quiz            今日 quiz 題組
-  └─ GET  /api/activity        學習紀錄：heatmap / streak / 正確率（device_id 範圍）
-
-Edge Functions (Vercel 獨立路由，不走 Hono)
+Edge Functions（全部 API，root api/*.ts，raw Turso HTTP）
+  ├─ GET  /api/feed?date=      api/feed.ts — 當日文章
+  ├─ GET  /api/library         api/library.ts — 歷史文章 + feedback/saves/ask count 狀態
+  ├─ GET  /api/quiz            api/quiz.ts — 今日 quiz 題組（含答錯重出）
+  ├─ GET  /api/activity        api/activity.ts — 學習紀錄：heatmap / streak / 正確率（device_id 範圍）
   ├─ POST /api/ask             api/ask.ts — Haiku 4.5 SSE streaming 追問（文章與 quiz 共用）
   ├─ GET/POST /api/ask-history api/ask-history.ts — 每篇文章一份對話歷史（Turso HTTP API）
   ├─ POST /api/push-subscribe  api/push-subscribe.ts — 寫 push_subscriptions
@@ -87,7 +85,7 @@ React PWA (web/) — 主力 client，四分頁 bottom tab（鏡像原 Sift app �
   ├─ /quiz     題目：今日 quiz 題組（4 題型）+ AskSheet 追問
   ├─ /         簡報：今日滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / streak（PWA start_url，Web Push 落點，故意留在 `/`）
   ├─ /library  Library：歷史頁，日期分組、filter、展開 LLM 內容、收藏/移除收藏、AskSheet + Ask count
-  ├─ /activity 紀錄：學習儀表板（年度 heatmap、週 pie、streak、正確率）
+  ├─ /activity 紀錄：學習儀表板（本週回顧、年度 heatmap、streak、正確率）
   └─ Splash gate：iOS standalone 第一次開啟時請求 notification 權限 + 寫 subscription
 
 React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、非凍結
@@ -160,7 +158,7 @@ React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、
 - **雙每日 pipeline**：GitHub Actions 文章（07:07 台北）+ quiz（05:47 台北）各自獨立排程，寫同一顆 Turso DB
 - **Web PWA 四分頁（主力 client）**：題目 (`/quiz`) / 簡報 (`/`) / Library (`/library`) / 紀錄 (`/activity`)；device_id 做多使用者隔離。原 Sift RN app 四分頁邏輯已原樣搬過來，app/ 本身暫時擱置（見上方 Architecture）
 - **Quiz**：4 種互動題型（single_choice / ordering / matching / fill_blank），答對 +20 XP / 答錯 +5 XP，AskSheet 追問重用文章 Ask 基礎設施
-- **Activity 學習紀錄**：年度 heatmap、週 pie、streak、正確率
+- **Activity 學習紀錄**：本週回顧、年度 heatmap、streak、正確率
 - **簡報滑卡瀏覽**：👍👎 回饋、💬 追問（Haiku streaming）、🔖 收藏、streak 計數
 - **Library / 歷史頁** (`/library`)：所有歷史文章 + 收藏 tab、filter、日期分組、展開 LLM 四段內容、收藏／移除收藏、AskSheet 直接從歷史卡開追問並恢復該篇歷史對話
 - **Web Push (VAPID)**：iOS standalone PWA 支援，通知標題 = lead story headline，body 第 1 行 = lead 文章的 `engineeringImpact`（LLM 判斷直接上鎖屏）
