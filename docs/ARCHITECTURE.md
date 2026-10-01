@@ -131,6 +131,7 @@ A separate job, not part of the article pipeline. It targets subscribed devices 
 - **Copy:** leads with the streak through yesterday (`src/streak.ts`, the same function as `/api/activity`) when it is ≥ 2.
 - **Tap target:** the payload carries `url: '/quiz'`. `sw.js` opens that path, or posts `{type:'navigate'}` to an already-open window, which `main.tsx` routes in-app.
 - **Failure:** if every push fails, the job exits 1.
+- **Once per day (2026-10-01):** each successful push is logged in `reminder_log (device_id, date)`, a table the job creates lazily, like `quiz_reports`. Devices already logged for today are skipped. GitHub's schedule is unreliable: the first scheduled 15:53 run still hadn't started at 16:01. A manual run plus a late scheduled run therefore can't double-push.
 - **Dry run:** the `dry_run` input logs recipients and copy without sending.
 
 ---

@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { and, eq, gte, isNotNull, sql } from 'drizzle-orm'
-import { db } from './db/client.js'
+import { db, isMissingTable } from './db/client.js'
 import { feedback, pushSubscriptions, quizAttempts } from './db/schema.js'
 import { sendWebPush } from './notify/web-push.js'
 import { computeStreak, taipeiDateString } from './streak.js'
@@ -36,6 +36,25 @@ async function activeDeviceIdsToday(): Promise<Set<string>> {
   return new Set([...quizRows, ...readRows].map((r) => r.deviceId!).filter(Boolean))
 }
 
+// Once per device per Taipei day (2026-10-01). GitHub's schedule is late or
+// skipped often enough that the reminder sometimes has to be fired by hand,
+// and the delayed scheduled run must not push the same device again. The table
+// is created lazily, like quiz_reports — no migration needed.
+async function remindedToday(date: string): Promise<Set<string>> {
+  try {
+    const rows = await db.all<{ device_id: string }>(sql`SELECT device_id FROM reminder_log WHERE date = ${date}`)
+    return new Set(rows.map((r) => r.device_id))
+  } catch (err) {
+    if (isMissingTable(err)) return new Set()
+    throw err
+  }
+}
+
+async function logReminder(deviceId: string, date: string): Promise<void> {
+  await db.run(sql`CREATE TABLE IF NOT EXISTS reminder_log (device_id TEXT NOT NULL, date TEXT NOT NULL, PRIMARY KEY (device_id, date))`)
+  await db.run(sql`INSERT OR IGNORE INTO reminder_log (device_id, date) VALUES (${deviceId}, ${date})`)
+}
+
 async function streakThroughYesterday(deviceId: string): Promise<number> {
   const since = new Date(Date.now() - STREAK_LOOKBACK_DAYS * DAY_MS)
   const day = (col: typeof quizAttempts.answeredAt | typeof feedback.createdAt) =>
@@ -67,10 +86,12 @@ async function main() {
   const subscribed = await db.selectDistinct({ deviceId: pushSubscriptions.deviceId })
     .from(pushSubscriptions)
     .where(isNotNull(pushSubscriptions.deviceId))
+  const today = taipeiDateString()
   const active = await activeDeviceIdsToday()
-  const targets = subscribed.map((r) => r.deviceId!).filter((id) => id && !active.has(id))
+  const already = await remindedToday(today)
+  const targets = subscribed.map((r) => r.deviceId!).filter((id) => id && !active.has(id) && !already.has(id))
 
-  console.log(`[reminder] ${taipeiDateString()} — ${subscribed.length} subscribed device(s), ${active.size} active today, ${targets.length} to remind`)
+  console.log(`[reminder] ${today} — ${subscribed.length} subscribed device(s), ${active.size} active today, ${already.size} already reminded, ${targets.length} to remind`)
   if (targets.length === 0) return
 
   let sent = 0
@@ -86,6 +107,12 @@ async function main() {
     try {
       await sendWebPush(title, body, deviceId, '/quiz')
       sent++
+      try {
+        await logReminder(deviceId, today)
+      } catch (err) {
+        // The push already went out; a missing log row only risks a duplicate later today.
+        console.warn(`[reminder] ${tag}… sent but not logged:`, err instanceof Error ? err.message : err)
+      }
     } catch (err) {
       failures.push(`${tag}…: ${err instanceof Error ? err.message : String(err)}`)
     }
