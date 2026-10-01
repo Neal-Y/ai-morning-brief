@@ -49,12 +49,12 @@ GitHub Actions cron — 兩條獨立 pipeline，錯開時間互不影響
        └─ db/quiz-writer.ts            # 寫入 quizzes table
   └─ reminder_sync.yml（15:53 台北）→ src/reminder.ts          # 下午提醒：只推給今天還沒讀/答題的裝置，帶 streak，點了開 /quiz
 
-Hono API (src/api/app.ts → api/index.ts on Vercel) — read-only GET
-  ├─ GET  /api/library      # 全歷史 + feedback / saved / notionSynced + ask message_count 多表 JS-join（不撈 messages JSON），read-only no-store
+Hono API (src/api/app.ts → api/index.ts on Vercel) — read-only GET（只剩 quiz / activity）
   ├─ GET  /api/quiz         # 今日 quiz 題組
   └─ GET  /api/activity     # 學習紀錄：heatmap / streak / 正確率等統計（device_id 範圍）
 
 Edge functions（Vercel 獨立路由，不走 Hono — 詳見 Conventions）
+  ├─ GET      /api/library       # api/library.ts — 全歷史 + feedback / saved / notionSynced + ask message_count（一次 Turso pipeline，不撈 messages JSON）；`?days=N` 給首屏用（2026-10-01 從 Hono 搬來）
   ├─ GET      /api/feed          # api/feed.ts — 當日文章（2026-09-29 從 Hono 搬來 Edge：每天第一個請求，Node 冷啟動是載入慢的主因）
   ├─ POST     /api/ask           # api/ask.ts — Haiku 4.5 SSE streaming 追問（文章與 quiz 共用；quiz 用合成 articleId=`quiz-${id}`）
   ├─ GET/POST /api/ask-history   # api/ask-history.ts — per-(article, device) conversations 讀 / upsert messages JSON
@@ -103,7 +103,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | 💬 追問歷史 | ✅ | `api/ask-history.ts` Edge：GET hydrate / POST upsert；`conversations` 一篇一 row；AskSheet 開啟還原、turn 完成保存；Library 顯示 ask message count |
 | Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
 | 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful；dedupe 靠 DB `notion_page_id` 快取 + Notion `Article ID` 直查兩層。`/api/unsave` 是硬刪除（2026-08-05 修正，原本設計的 soft-hide 因欄位從未 migrate 進 DB 而一直是壞的，詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)） |
-| Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（Edge）。2026-04-27 Vercel preview 真機驗證完成 |
+| Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（皆 Edge）。2026-10-01 提速：先畫 localStorage 快取（`mb_cache_library`，只在完整歷史載完後寫入）；沒快取時先抓 `?days=14` 畫首屏，再換成完整歷史（搜尋 / filter 是 client 端，需要全部） |
 | Web PWA 四分頁（Quiz/Feed/Library/Activity）| ✅ | 2026-09-07（commit `ebf73c6`）把 app/ 的 Quiz + Activity 分頁整套搬進 web/，PWA 現在是主力 client。`/` 仍是 Feed（start_url + push 落地頁），SW / manifest / theme_color 全部沒動 |
 | React Native App「Sift」| ⏸️ 暫時擱置 | Expo SDK 54，Expo Go 開發，程式碼保留可運作；EAS Build → TestFlight 因用量不到值得投資的門檻而延後，非凍結、非廢棄 |
 | Quiz 生成 | ✅ | `src/quiz-pipeline.ts` 獨立於文章 pipeline；`quiz_sync.yml`（05:47 台北）2026-09-29 重新啟用，每天出題。現有題庫透過 `/api/quiz` recycle 邏輯持續供應，不會變空 |
@@ -178,6 +178,7 @@ src/
   api/app.ts          # Hono app（GET /api/library + /api/quiz + /api/activity，全部 read-only；/api/feed 已搬到 Edge）
   api/server.ts       # 本地 dev (port 3001)
 api/index.ts             # Vercel entry (hono/vercel handle)
+api/library.ts           # Edge Runtime GET → Library 全歷史 + 個人狀態 join（`?days=N` 首屏分段）
 api/feed.ts              # Edge Runtime GET → Turso HTTP API（當日文章，回傳格式跟原 Hono/drizzle 一致：camelCase、score 數字、classifiedAt ISO）
 api/ask.ts               # Edge Runtime SSE for /api/ask（文章與 quiz 共用，quiz 用合成 articleId）
 api/ask-history.ts       # Edge Runtime GET/POST → Turso HTTP API（per-(article, device) conversations upsert / fetch）
@@ -339,8 +340,8 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
 - `/api/quiz-attempt` → `api/quiz-attempt.ts`（寫 `quiz_attempts`；`X-Device-Id` header 必填，缺就 400）
 - **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。
-- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/library`、`/api/quiz`、`/api/activity` 皆 GET；`/api/feed` 2026-09-29 搬到 Edge 以避開 Node 冷啟動，不要在 Hono 補回一份）。
-- `vercel.json` 的 rewrite 順序：`/api/feed`、`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback`、`/api/quiz-attempt`、`/api/quiz-report`、`/api/weekly` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
+- **規則**：以後任何**新的 POST endpoint 要讀 body**，直接寫 `api/<name>.ts` + `vercel.json` rewrite，**不要**加進 `src/api/app.ts`。Hono app 現在 read-only（`/api/quiz`、`/api/activity` 皆 GET；`/api/feed` 2026-09-29、`/api/library` 2026-10-01 搬到 Edge 以避開 Node 冷啟動，不要在 Hono 補回一份）。
+- `vercel.json` 的 rewrite 順序：`/api/feed`、`/api/library`、`/api/ask`、`/api/ask-history`、`/api/push-subscribe`、`/api/save`、`/api/unsave`、`/api/feedback`、`/api/quiz-attempt`、`/api/quiz-report`、`/api/weekly` 必須排在 `/api/:path* → /api/index` **前面**，不然會被 catch-all 吃掉送進 Hono。
 - 不要為了 local dev 方便在 Hono app 裡複製一份 — 會 prompt drift / 行為不一致。
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 
