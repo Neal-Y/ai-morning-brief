@@ -1,5 +1,5 @@
 import webpush from 'web-push'
-import { eq } from 'drizzle-orm'
+import { eq, inArray } from 'drizzle-orm'
 import { db } from '../db/client.js'
 import { pushSubscriptions } from '../db/schema.js'
 
@@ -55,6 +55,25 @@ export async function sendWebPush(
       )
     )
   )
+
+  // 404/410 from the push service = the subscription is gone for good
+  // (permission revoked, PWA removed, browser rotated the endpoint). Delete
+  // those rows so they stop showing up as a failure on every run; anything
+  // else (5xx, network) may be transient and is kept.
+  const gone = subs.filter((_, i) => {
+    const r = results[i]
+    if (r?.status !== 'rejected') return false
+    const code = (r.reason as { statusCode?: number } | undefined)?.statusCode
+    return code === 404 || code === 410
+  })
+  if (gone.length > 0) {
+    try {
+      await db.delete(pushSubscriptions).where(inArray(pushSubscriptions.endpoint, gone.map((s) => s.endpoint)))
+      console.log(`[web-push] Removed ${gone.length} expired subscription(s)`)
+    } catch (err) {
+      console.warn('[web-push] Failed to remove expired subscriptions:', err instanceof Error ? err.message : err)
+    }
+  }
 
   const ok = results.filter((r) => r.status === 'fulfilled').length
   const fail = results.filter((r) => r.status === 'rejected').length

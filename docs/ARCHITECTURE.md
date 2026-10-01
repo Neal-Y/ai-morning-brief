@@ -119,6 +119,8 @@ Single LLM call for all selected articles.
 
 Only fires after Stage 5 succeeds (strict serial order — see [../CLAUDE.md](../CLAUDE.md) Conventions). Title = lead story headline. Body line 1 = lead article's `engineeringImpact`. Body line 2 = `今日 N 篇 · 還有 K 題判斷題等你`, where K = min(5, quiz pool size). If the pool lookup fails the quiz half is dropped and the push still goes out. Before 2026-09-29 this line was the section labels (`Hard Tech AI · Signals · +2 篇`).
 
+Dead subscriptions are cleaned up as they are found (since 2026-10-01). When the push service answers 404/410, `notify/web-push.ts` deletes that `push_subscriptions` row instead of logging the same failure on every run. Other errors, such as 5xx or network failures, may be transient, so those rows are kept.
+
 ### Afternoon reminder (`src/reminder.ts`, `reminder_sync.yml`, 15:53 Taipei)
 
 A separate job, not part of the article pipeline. It targets subscribed devices with **no** `feedback` row and **no** `quiz_attempts` row since Taipei midnight, so anyone who already read or answered today is never reminded.

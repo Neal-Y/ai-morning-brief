@@ -162,7 +162,7 @@ src/
   date.ts             # Taipei date helper
   rss/feed.ts
   ai/provider.ts      # AIProvider interface + 共用 types
-  ai/select-provider.ts # GPT/Claude 輪替邏輯（文章 + quiz pipeline 共用）
+  ai/select-provider.ts # provider 選擇 + fallbackProvider()（文章 + quiz pipeline 共用）
   ai/classifier.ts    # 分類器 + buildPreferenceContext()
   ai/brief.ts         # brief generator + degraded fallback
   ai/retry.ts
@@ -278,7 +278,7 @@ npm run db:seed        # 3 篇假文章（今日日期）
 ```
 TURSO_DATABASE_URL    # libsql://xxx.turso.io（client.ts 內部換成 https:// transport）
 TURSO_AUTH_TOKEN      # JWT
-AI_PROVIDER           # "openai" | "anthropic" | "alternate"
+AI_PROVIDER           # "openai" | "anthropic" | "alternate" — 2026-10-01 起 prod 設 anthropic（Claude 主力，GPT 備援）
 OPENAI_API_KEY
 ANTHROPIC_API_KEY
 VAPID_SUBJECT         # mailto:you@example.com
@@ -345,7 +345,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - 結果：本地 `npm run dev:api` 無法測這些 endpoint，要測請 push 到 Vercel preview。
 
 **Quiz pipeline / 多使用者：**
-- Quiz 出題完全獨立於文章 pipeline：不同 cron 檔（`quiz_sync.yml` 05:47 台北 vs `daily_sync.yml` 07:07 台北）、不同 entry（`quiz-pipeline.ts` vs `index.ts`）、不共用 selection 邏輯；共用的只有 `ai/select-provider.ts`（GPT/Claude 輪替）和同一顆 Turso DB
+- Quiz 出題完全獨立於文章 pipeline：不同 cron 檔（`quiz_sync.yml` 05:47 台北 vs `daily_sync.yml` 07:07 台北）、不同 entry（`quiz-pipeline.ts` vs `index.ts`）、不共用 selection 邏輯；共用的只有 `ai/select-provider.ts`（provider 選擇 + fallback）和同一顆 Turso DB
 - Quiz dedup 用同一招：`getRecentQuizPrompts()` 撈近期已出過的題目 prompt，附加在 `QUIZ_SYSTEM` **尾端**（"AVOID REPEATING" 區塊），保 cache prefix 穩定 — 跟 classifier 的 `buildPreferenceContext()` 手法一致，不要重新發明
 - `device_id` 是目前唯一的多使用者隔離機制（沒有帳號系統）：`feedback` / `saves` / `conversations` / `push_subscriptions` / `quiz_attempts` 都有 `device_id` 欄位，app 端由 `src/device.ts` 生成 UUID 存 AsyncStorage，每次 fetch 帶 `X-Device-Id` header。新增任何寫入型 endpoint 若涉及個人化資料，記得比照加 `device_id` 欄位 + header 檢查
 - web 跟 app 的 device_id **不共用**：web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`。2026-09-07 web port 沒有做身分遷移，是刻意決定——Activity 等個人化歷史在 web 上從零開始算，不要當成 bug 去「修」
@@ -391,7 +391,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 
 ## Key Design Decisions
 
-1. **Provider alternation**：GPT / Claude 按台北 day-of-year 奇偶輪替。**2026-10-01 起有 fallback**：當天的 provider 整批失敗（例：OpenAI 額度用完，24 篇分類全 429）時，文章分類與 quiz 出題會自動改用另一家（`fallbackProvider()`），兩家都掛才 `exit(1)`。在這之前全部分類失敗會被當成「全是 DROP」，送出假的「今日無重大 AI 新聞」推播
+1. **Provider：Claude 主力、GPT 備援（2026-10-01）**：prod 的 `AI_PROVIDER=anthropic`。之前是 `alternate`（GPT / Claude 按台北 day-of-year 奇偶輪替），改掉的理由：兩家分類尺度不同，選文品質會隔天跳動、feedback 偏好學習也被兩套標準稀釋。`alternate` 模式程式仍保留。**fallback**：主力 provider 整批失敗（例：OpenAI 額度用完，24 篇分類全 429）時，文章分類與 quiz 出題會自動改用另一家（`fallbackProvider()`），兩家都掛才 `exit(1)`。在這之前全部分類失敗會被當成「全是 DROP」，送出假的「今日無重大 AI 新聞」推播
 2. **Rendering levels**：FULL / LIGHT / OMIT by brief generator
 3. **Category tags**：#model-release #api-platform #infra-inference #tooling-open-source #benchmark-eval #agent-systems #policy-regulation #company-market #social-opinion #event-promo #research-adjacent
 4. **Web design**：2026-09-29 起是「Signal」——icon 的深墨藍＋琥珀、圓角卡片、tonal 按鈕、毛玻璃 nav/dock，偏 iOS 原生感；字體沿用 Source Serif 4（標題）＋ Inter ＋ JetBrains Mono（標籤）。之前是報紙 / FT editorial 暖棕風格
