@@ -71,6 +71,8 @@ cd app && npx expo start --ios   # iOS Simulator
 - **題目**：每台近 14 天有答題的裝置都還有 ≥10 題沒答，就不出新題，log 會印 `Every active device has ≥ 10 unanswered`。
 - 兩支 workflow 都可以勾 `force` 強制跑。
 
+**下午提醒沒到時**：先看 Actions 的 Afternoon Reminder 有沒有跑（GitHub 排程常晚到）。可以手動 Run workflow 補發；每台裝置一天只會收到一則（`reminder_log`），晚到的排程不會再推一次。勾 `dry_run` 只會印出會推給誰。
+
 **為什麼是 07:07 / 05:47 而不是整點（2026-09-30）**：GitHub Actions 的 schedule 是 best-effort，整點和半點是最多人排的時段，塞車時會延後甚至跳過。原本 `30 23 * * *`（07:30）在 2026-08-22~26 大多只晚 10–15 分，但 08-27~29 晚了 5–7 小時（12:34 / 14:58 / 12:12 才跑）。改到非整點能降低延遲，但不保證準時；如果還是常晚，下一步是用外部排程（例如 cron-job.org）打 GitHub API 的 `workflow_dispatch`，代價是要把一組有 `actions:write` 權限的 token 放到第三方。
 
 另外 2026-08-29 ~ 09-29 兩個 workflow 都被手動停用（使用者覺得選文篩選不夠好，想之後再處理），所以這段期間沒有簡報、也沒有推播——不是排程壞掉。Actions 頁面看到的空窗就是這個。
