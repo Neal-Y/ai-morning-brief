@@ -80,7 +80,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
   ├─ FeedScreen   — 滑卡瀏覽今日文章；swipe right=有用 / left=略過；💬 AskSheet / 🔖 save
   ├─ LibraryScreen — 全歷史 + 收藏 tab（呼叫 /api/library）
   ├─ ActivityScreen — 學習紀錄：年度 heatmap（DotGrid）/ 週 pie / streak / 正確率（呼叫 /api/activity）
-  ├─ src/api.ts   — 自動偵測 Metro host（dev LAN）或 fallback 到 prod；quiz-attempt / ask SSE（expo/fetch）
+  ├─ src/api.ts   — 一律打 prod（`EXPO_PUBLIC_API_BASE_URL` 可覆寫）；quiz-attempt / ask SSE（expo/fetch）
   ├─ src/theme.ts — T / FONT / RADIUS / XP 設計 token（原本鏡像 web/ dark theme；web 2026-09-29 改版 Signal 後尚未同步）
   └─ src/device.ts — AsyncStorage device UUID（`sift_device_id`，X-Device-Id header，多使用者隔離用）
 ```
@@ -113,18 +113,19 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | 沒人用就不生成 | ✅ | 2026-10-01：文章管線在 3 天沒有 feedback / 答題 / 開 App（`push_subscriptions.updated_at`）時跳過，不呼叫 LLM、不推播；出題管線在每台近 14 天有答題的裝置都還有 ≥10 題沒答時跳過。兩者 `force` 可覆寫。細節見 ARCHITECTURE.md |
 | 下午提醒推播 | ✅ | 2026-09-30：`reminder_sync.yml` 15:53 台北跑 `src/reminder.ts`，只推給「今天沒有 feedback 也沒有 quiz_attempts」的訂閱裝置；streak ≥ 2 時文案帶連續天數；payload 帶 `url: '/quiz'`，`sw.js` 點擊後開題目頁（已開著就 postMessage 讓 app 內 navigate）。全部推失敗 → exit(1) |
 | 回報爛題 | ✅ | 2026-09-30：題目頁「回報」→ `POST /api/quiz-report`（答案有誤 / 題意不清 / 太簡單 / 其他）；被回報的題 `/api/quiz` 對所有人排除，出題 prompt 尾端加「AVOID THESE MISTAKES」。回報後可「跳過這題」（不記 attempt，results 存 null） |
-| Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
+| Skill-tag 雙軸 | ❌ 不做 | 2026-10-01 決定不做；schema 的 `skillTags` 欄位留著，classifier 不產 |
 | 每週回顧 | ✅ | 2026-09-30：紀錄頁「本週回顧」卡（活躍天數 / 讀幾篇 / 答幾題 / 正確率對上週 / 最常卡住分類 / 這週答錯的題 / 這週收藏），資料來自 Edge `GET /api/weekly`；紀錄頁、題目頁 streak 走 localStorage 快取先顯示再背景更新（`mb_cache_*`）；讀完簡報會背景預抓今日題組（`web/src/quiz/session.ts`） |
 
 ---
 
-## 下一步（2026-09 現況重排）
+## 下一步（2026-10-01 重排）
 
 > 舊版（2026-08）把「Sift → TestFlight」列為唯一 active 任務。實際發展：EAS Build / TestFlight 要花錢，現階段用量不到值得投資的門檻，這步延後（不是取消）。已經 ship 的是把 app/ 的 Quiz + Activity 分頁整套搬上 web PWA（2026-09-07，commit `ebf73c6`），web/ 現在是四分頁主力 client。以下是延後 TestFlight 後真正的優先序。
 
-1. **內容品質一輪**（文章 pipeline）：
-   - RSS 源擴充：Anthropic news / OpenAI blog / Cloudflare blog / AWS ML blog。上線前要 `curl` 驗證 URL 仍有效
-   - Skill-tag 產出（`skillTags` classifier 還沒產）：Library filter chip 第三維度
+0. **先停手、實際用兩週（2026-10-01 決定）**：速度 / 成本 / 可靠性都處理完了，瓶頸是使用量——2026-10-01 dry_run 顯示近 30 天 👍👎 < 10 筆，classifier 偏好學習還沒啟動過。兩週後回來看：偏好有沒有啟動、Cloudflare 會不會長期洗版（當天 24 篇送分類裡佔 8 篇）、idle skip / 題庫庫存檢查實際行為
+1. **內容品質**（文章 pipeline）：
+   - ~~RSS 源擴充~~：2026-09-30 已加 OpenAI News / Google DeepMind / Cloudflare Blog / AWS ML（`primary` tier），2026-10-01 dry_run 確認 10 個來源全部抓得到。Anthropic 沒有官方 RSS，不加（爬網頁太脆）
+   - ~~Skill-tag 產出~~：使用者 2026-10-01 決定不做（Library 很少回頭翻，第三維 filter 價值低）。`skillTags` 欄位留著不動
    - 不要做：AWS What's New（firehose）、Google AI Blog（行銷腔）、各家 changelog feeds（太細粒度）
 2. ~~晨間 Recall Quiz~~：2026-09-30 做成下午 4 點提醒推播（見功能狀態）
 3. **Notion 整合**：維持現狀，不主動投資、不拆——已串好且 sunk cost，使用者不會回頭看，優先度最低
@@ -212,7 +213,7 @@ web/
     icons.tsx           # IconFlame / IconBolt / IconSparkle / StatChip（取代 🔥⚡ emoji，吃主題色）
     BottomNav.tsx       # 四分頁 nav：absolute at bottom:0、padding-bottom: env(safe-area-inset-bottom)、z-index 50、inline SVG icon；沿用 FRONTEND_FIX_LOG Issue 6 手法，不要改回 fixed footer
     quiz/               # QuizFrame・QuizCard・SingleChoiceCard・OptionRow・OrderingCard・MatchingCard（SVG bezier connector，無新依賴）・FillBlankCard・CompletionCard・tokens.ts（quiz-only 色票 Q + XP 常數，衍生自 theme.ts）
-    activity/           # Heatmap・WeekPie・StatCard
+    activity/           # Heatmap（月份標籤依今天推算，被左緣切到的標籤隱藏）・StatCard・WeeklyReview（本週回顧卡）
   src/{date,theme,types}.ts · index.css   # theme.ts 是唯一真理（Signal：`bg`/`card`/`raised`/`accent`/`glass` 等 token + `GLASS_BLUR` + `TAG_COLORS`），app/ 的 theme 應鏡像它（目前落後，見 TL;DR）
   vite.config.ts        # `/api` 全部 proxy 到 prod Vercel（沒有本地 API server）—— 代表本地 dev 的寫入操作會真的寫進 prod Turso DB
 app/                     # React Native app「Sift」（Expo SDK 54，暫時擱置——非凍結，Expo Go 仍可跑；EAS Build/TestFlight 因用量不到門檻延後）
@@ -220,7 +221,7 @@ app/                     # React Native app「Sift」（Expo SDK 54，暫時擱�
   app.json                # expo name/slug = "Sift"
   package.json           # expo ^54, react-native 0.81, @expo-google-fonts/*
   src/
-    api.ts               # fetch wrapper（Metro host 自動偵測 dev / prod fallback）；fetchActivity() / submitQuizAttempt()
+    api.ts               # fetch wrapper（一律打 prod，`EXPO_PUBLIC_API_BASE_URL` 可覆寫）；fetchActivity() / submitQuizAttempt()
     theme.ts             # T / FONT / RADIUS / XP 設計 token（仍是 web 改版前的暖棕，web 2026-09-29 換 Signal 後未同步）
     device.ts            # AsyncStorage device UUID（`sift_device_id`，X-Device-Id header）
     types.ts             # Article / FeedResponse 等共用型別
@@ -264,7 +265,7 @@ npm run dev:quiz       # tsx src/quiz-pipeline.ts（會真的寫 DB，5 題）
 cd web && npm run dev  # Vite dev (port 5173，/api proxy → prod Vercel)
 
 # React Native App
-cd app && npx expo start   # Expo Go 開發（Metro bundler，LAN IP 自動偵測）
+cd app && npx expo start   # Expo Go 開發（API 直接打 prod，不需要本地 server）
 cd app && npx expo start --ios   # iOS Simulator
 
 # DB
