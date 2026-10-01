@@ -8,7 +8,7 @@ import { classifyArticles, buildPreferenceContext } from './ai/classifier.js';
 import { generateBrief, buildDegradedBrief } from './ai/brief.js';
 import { sendWebPush } from './notify/web-push.js';
 import { writeArticlesToDB } from './notify/db-writer.js';
-import { db, getRecentFeedback, getQuizPoolSize } from './db/client.js';
+import { db, getRecentFeedback, getQuizPoolSize, getLastActivityAt } from './db/client.js';
 import type { FeedbackRow } from './db/client.js';
 import { articles, pushSubscriptions } from './db/schema.js';
 import { getTaipeiDateString } from './date.js';
@@ -68,6 +68,9 @@ function selectForUser(
   return [...hardTech, ...signals].slice(0, BRIEF_MAX)
 }
 
+/** No activity for this many days → skip the brief (see the idle check in main). */
+const IDLE_SKIP_DAYS = 3;
+
 async function main(): Promise<void> {
   let config: ReturnType<typeof loadConfig>;
   try {
@@ -88,6 +91,18 @@ async function main(): Promise<void> {
     const [existing] = await db.select({ n: count() }).from(articles).where(eq(articles.briefDate, date));
     if ((existing?.n ?? 0) > 0) {
       console.log(`[main] ${existing!.n} article(s) already published for ${date} — skipping (set force to re-run)`);
+      return;
+    }
+
+    // Idle skip (2026-10-01): if nobody has opened the app, swiped or answered
+    // for IDLE_SKIP_DAYS, don't spend LLM calls on a brief nobody reads, and
+    // don't push. The afternoon reminder (src/reminder.ts, no LLM) keeps going
+    // and is what brings the user back; the next morning after any activity
+    // runs normally. FORCE=1 overrides.
+    const lastActivity = await getLastActivityAt();
+    const idleMs = lastActivity ? Date.now() - lastActivity.getTime() : Infinity;
+    if (idleMs > IDLE_SKIP_DAYS * 24 * 60 * 60 * 1000) {
+      console.log(`[main] Idle since ${lastActivity?.toISOString() ?? 'ever'} (> ${IDLE_SKIP_DAYS} days) — skipping today's brief (set force to run anyway)`);
       return;
     }
   }

@@ -24,6 +24,10 @@ Both write to the same Turso DB. Neither reads the other's tables. Either can fa
 
 ## Article pipeline
 
+**Before Stage 1 — skip checks (`src/index.ts`, bypassed by `DRY_RUN` and `FORCE`):**
+1. **Already published**: if `articles` already has today's `brief_date`, exit 0. Late or duplicate runs never push twice.
+2. **Idle (2026-10-01)**: `getLastActivityAt()` takes the newest of `feedback.created_at`, `quiz_attempts.answered_at` and `push_subscriptions.updated_at`. The last one counts bare app opens, because the Feed re-posts its subscription on every open. If that is more than `IDLE_SKIP_DAYS = 3` days ago (or there has never been activity), exit 0 with no LLM calls and no push. The afternoon reminder has no LLM cost and keeps running, so it is what brings the user back. Any activity resumes the brief the next morning.
+
 ### Stage 1 — Fetch + Prefilter (`rss/feed.ts`)
 
 1. Filter: `pubDate` within the last 24h.
@@ -134,6 +138,16 @@ A separate job, not part of the article pipeline. It targets subscribed devices 
 ## Quiz pipeline
 
 > **Operational status (2026-09-30)**: `quiz_sync.yml` was paused by hand from 2026-08 and re-enabled on 2026-09-29. It now runs daily at 05:47 Taipei. When it's paused, the existing `quizzes` pool still serves through the recycle logic in `GET /api/quiz` (see below); the pool just stops growing. Check current GitHub Actions workflow state, not just this file, before assuming it's running.
+
+### Stock check (`src/quiz-pipeline.ts`, 2026-10-01; bypassed by `FORCE`)
+
+Questions never expire, since `/api/quiz` serves unseen ones first and then recycles. Generation therefore runs only when someone is running low:
+- `getUnseenQuizCounts(14)` returns `pool size − distinct questions answered` for every device that answered anything in the last 14 days.
+- If there is no such device, skip.
+- If every one of them still has `MIN_UNSEEN = 10` or more unanswered questions, skip.
+- Otherwise generate the usual 5.
+
+At 5 answers a day this settles at roughly 10 unanswered in stock. Reported questions still count toward the pool size; there are only a handful, so the check accepts that.
 
 ### Generation (`quiz/generate.ts`)
 
