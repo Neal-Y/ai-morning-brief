@@ -1,17 +1,23 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { THEME_DARK } from './theme.ts'
 import { ArticleCard } from './components/Card.tsx'
 import { TopChrome, FeedbackBar } from './components/Chrome.tsx'
 import { isPushSupported, isStandalone, completeSubscription } from './push.ts'
-import { AskSheet } from './components/AskSheet.tsx'
 import { Celebration } from './components/Celebration.tsx'
 import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
 import type { Article, FeedResponse } from './types.ts'
 import { apiFetch, fetchActivity, readCache, writeCache, type ActivityData } from './api.ts'
 import { prefetchTodaysQuiz } from './quiz/session.ts'
+import { fetchFeed, readLocalFeed, readPushPrefetchedFeed, writeLocalFeed } from './feedLoader.ts'
 import { navigate } from './router.ts'
 import { useNavInset } from './nav.ts'
 import { SiftMark } from './components/icons.tsx'
+
+// AskSheet pulls in react-markdown + remark-gfm (the bulk of the old bundle)
+// but is only needed once someone taps ASK. Load it then, and prefetch it in
+// the background after the brief is on screen.
+const loadAskSheet = () => import('./components/AskSheet.tsx')
+const AskSheet = lazy(() => loadAskSheet().then(m => ({ default: m.AskSheet })))
 
 // The bottom nav owns the safe-area band and the home-indicator clearance that
 // FEEDBACK_BAR_BOTTOM = 56 used to provide (Issue 6). The action row now just
@@ -80,6 +86,10 @@ export default function App() {
   const [swipeX, setSwipeX] = useState(0)
   const [transitioning, setTransitioning] = useState(false)
   const [showAsk, setShowAsk] = useState(false)
+  // Mount the (lazy) AskSheet on first use and keep it mounted after, so its
+  // close animation and per-article history behave as before.
+  const [askMounted, setAskMounted] = useState(false)
+  useEffect(() => { if (showAsk) setAskMounted(true) }, [showAsk])
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
   const [saved, setSaved] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
@@ -140,31 +150,55 @@ export default function App() {
   useEffect(() => {
     const today = getTaipeiDateString()
     setBriefDate(today)
-    apiFetch(`/api/feed?date=${today}`)
-      .then(async (r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json() as Promise<FeedResponse>
-      })
-      .then(data => {
-        const date = data.date ?? today
-        const parsed = parseArticles(data.articles)
+    let cancelled = false
+    // Ids of the list on screen. A later source with the same articles is a
+    // no-op, so the network refresh never resets a brief already being read.
+    let shownIds: string | null = null
+
+    const apply = (data: FeedResponse) => {
+      if (cancelled) return
+      const date = data.date ?? today
+      const parsed = parseArticles(data.articles)
+      const ids = parsed.map(a => a.id).join(',')
+      if (ids === shownIds) return
+      const first = shownIds === null
+      shownIds = ids
+      if (first) {
         const session = readFeedSession(date)
         if (session) {
           setIdx(Math.min(session.idx, parsed.length))
           setFeedback(session.feedback)
           setSaved(session.saved)
         }
-        setBriefDate(date)
-        setArticles(parsed)
-        setLoading(false)
         // The brief is on screen; fetch today's quiz set in the background so
         // 「去答今天的判斷題」/ the Quiz tab opens with no spinner.
         setTimeout(prefetchTodaysQuiz, 1500)
+        setTimeout(() => { void loadAskSheet() }, 2000)
+      } else {
+        setIdx(i => Math.min(i, parsed.length))
+      }
+      setBriefDate(date)
+      setArticles(parsed)
+      setLoading(false)
+    }
+
+    // Fastest source first (see feedLoader.ts); the network copy always runs
+    // and refreshes the cache.
+    const local = readLocalFeed(today)
+    if (local) apply(local)
+    else void readPushPrefetchedFeed(today).then(d => { if (d && shownIds === null) apply(d) })
+
+    fetchFeed(today)
+      .then(data => {
+        writeLocalFeed(data.date ?? today, data)
+        apply(data)
       })
       .catch(() => {
+        if (cancelled || shownIds !== null) return // a cached copy is already on screen
         setError('無法載入今日 brief')
         setLoading(false)
       })
+    return () => { cancelled = true }
   }, [])
 
   useEffect(() => {
@@ -566,13 +600,15 @@ export default function App() {
           />
         )}
 
-        {curArticle && (
-          <AskSheet
-            theme={T}
-            article={curArticle}
-            visible={showAsk}
-            onClose={() => setShowAsk(false)}
-          />
+        {curArticle && askMounted && (
+          <Suspense fallback={null}>
+            <AskSheet
+              theme={T}
+              article={curArticle}
+              visible={showAsk}
+              onClose={() => setShowAsk(false)}
+            />
+          </Suspense>
         )}
 
       </div>

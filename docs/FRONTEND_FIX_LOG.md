@@ -920,6 +920,21 @@ Verification:
 - Handler run against local SQLite through a fake `/v2/pipeline` `fetch`: OMIT excluded, ordering (date desc, score desc), joins (`clear` feedback ignored, notionSynced), and `days` slicing / `hasMore` / validation all correct.
 - Playwright, with the full response held 8s: the first page painted in 0.36s and search found a 30-day-old article after the full load. Warm open from cache painted in 0.3s with the API held 5s.
 
+## Issue 27: Opening the app took ~1s (2026-10-01)
+
+Measured with Playwright at 4× CPU throttle and 300 ms API latency: about 1.0–1.2 s from launch to the first article. Three steps ran strictly one after another:
+1. The single 407 KB bundle was downloaded and parsed.
+2. Only after React mounted did `/api/feed` start.
+3. Only after the response arrived did the cards render.
+
+Fixes:
+- **Feed cache (`web/src/feedLoader.ts`).** Today's non-empty `/api/feed` response is kept in `mb_cache_feed`, so any re-open the same day renders without waiting. The network copy still runs and refreshes the cache. When it brings back the same article ids it is a no-op, so a brief being read is never reset.
+- **Early request.** An inline script in `index.html` starts `/api/feed?date=<Taipei today>` (via `formatToParts`) as soon as the HTML parses, on `/` only, and stores the promise in `window.__siftFeed`. `fetchFeed()` uses it once, and only if the date matches; otherwise, or on error, it does its own fetch.
+- **Code splitting.** The Quiz, Library and Activity tabs load lazily and are prefetched on idle. AskSheet (react-markdown + remark-gfm) is lazy, mounted on first ASK, and prefetched 2 s after the brief renders. The main bundle went from 407 KB to 182 KB (125 → 58 KB gzip).
+- **Push-time prefetch (`sw.js`).** After `showNotification` for the morning push (url `/`), the SW fetches today's feed into Cache Storage `sift-feed-v1`, keeping only today's entry. `feedLoader` reads that cache when there is no local copy. This is best-effort: errors are swallowed, and it can't delay or block the notification. There is still **no fetch handler**, so the Issue 14 cache-hell risk doesn't apply. Empty days are not cached.
+
+Result under the same throttling: first open of the day ≈ 0.63–0.9 s, re-open the same day ≈ 0.6 s, and opening from a push-prefetched cache ≈ 0.57 s with the API held for 3 s. A single `/api/feed` request is made per load, and the lazy AskSheet and Quiz tab both render. **Needs a real-device check that the morning push still arrives** (sw.js changed).
+
 ---
 
 ## What Was Intentionally Not Changed
