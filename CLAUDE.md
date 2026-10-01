@@ -200,6 +200,7 @@ web/
   src/router.ts         # navigate(path) helper（pushState + popstate dispatch）
   src/Shell.tsx          # app shell：extended root 上的 absolute layer + 常駐 bottom nav；path 由 main.tsx 傳入，Shell 自己不讀 window.location
   src/nav.ts             # NAV_ROW_H=54 / NAV_GESTURE_GAP=10（tab 列與 home bar 之間的不可點底座，防滑回主畫面誤觸）/ TABS / tabForPath() / NavInsetContext・useNavInset()；nav 高度用量測值發布，因為 env(safe-area-inset-bottom) 在 JS 讀不到 px 數字
+  src/feedLoader.ts     # 開 App 時今日文章的來源順序：localStorage 快取 → 推播時 SW 預存的 Cache Storage → index.html 提早發的請求 → 一般 fetch
   src/App.tsx           # Feed 主畫面（仍是 `/`，PWA start_url + push 落地頁不可換）：swipe 物理 + streak + push permission gate；feedback dock 抬高到 nav 之上，TopChrome 拿掉重複的 Library 按鈕
   src/Library.tsx       # /library 頁面：filter / 日期分組 / 展開 LLM / saves tab；root height 改 100%（填滿 Shell layer），AskSheet z-index 提到 60
   src/Quiz.tsx           # /quiz 頁面：讀 /api/activity 真實 streak，失敗給明確錯誤 + retry，**無**硬編碼 fallback 題庫
@@ -362,7 +363,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - **不要**重新加 `vite-plugin-pwa` 或其他 SW 產生器。app 是「每天開一次抓新資料」，沒有 offline 需求，SW 只會製造 cache 地獄（見 FRONTEND_FIX_LOG Issue 14）。
 - Manifest 用靜態 `web/public/manifest.json`（index.html 單一 `<link rel="manifest">`）。
 - `theme_color` / `background_color` / `<meta name="theme-color">` 三處（加上 `index.css` 的 html/body 背景）必須全部對齊 `T.bg = #0B121A`，不然 iOS standalone 會出現 status bar 色差「框框」。
-- `web/public/sw.js` 現在是 **真正的 push handler**（`push` + `notificationclick` events），**沒有** fetch / cache event handler。如果以後加 fetch handler 一定要小心 cache 地獄重演。
+- `web/public/sw.js` 現在是 **真正的 push handler**（`push` + `notificationclick` events），**沒有** fetch event handler。2026-10-01 起早上那則推播（url 為 `/`）在 `showNotification` 之後會順手 `fetch` 當天 `/api/feed` 存進 Cache Storage `sift-feed-v1`（只留當天一筆），讓點通知進來不用等網路；頁面由 `web/src/feedLoader.ts` 主動讀，SW 不會攔截任何請求。如果以後加 fetch handler 一定要小心 cache 地獄重演。
 
 **Web Push / iOS PWA：**
 - iOS Web Push **只在 standalone 模式下支援**（首頁捷徑開啟，不是 Safari 直接開網址）。所以 `App.tsx` 的 splash gate `permissionResolved` 初始判定要先過 `isStandalone()`。

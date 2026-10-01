@@ -1,10 +1,7 @@
-import { StrictMode, useEffect, useState } from 'react'
+import { StrictMode, Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
-import Library from './Library.tsx'
-import Quiz from './Quiz.tsx'
 import { navigate } from './router.ts'
-import Activity from './Activity.tsx'
 import { Shell } from './Shell.tsx'
 import './index.css'
 
@@ -18,6 +15,24 @@ async function registerSW(): Promise<void> {
 }
 
 void registerSW()
+
+// Feed (`/`) is the start_url and push landing page, so it ships in the main
+// bundle; the other tabs load on demand and are prefetched once the browser is
+// idle, so switching tabs stays instant (2026-10-01: the single 407 KB bundle
+// was the first ~third of the ~1s it took to open the app on a phone).
+const loadQuiz = () => import('./Quiz.tsx')
+const loadLibrary = () => import('./Library.tsx')
+const loadActivity = () => import('./Activity.tsx')
+const Quiz = lazy(loadQuiz)
+const Library = lazy(loadLibrary)
+const Activity = lazy(loadActivity)
+
+function prefetchTabs() {
+  void loadQuiz(); void loadLibrary(); void loadActivity()
+}
+const idle = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void }).requestIdleCallback
+if (idle) idle(prefetchTabs, { timeout: 4000 })
+else setTimeout(prefetchTabs, 2500)
 
 // Minimal pathname-based routing. `navigate()` from any component pushes state
 // and dispatches popstate so this Root re-renders without a full reload —
@@ -52,7 +67,15 @@ function Root() {
     }
   }, [])
 
-  return <Shell path={path}>{pageFor(path)}</Shell>
+  // Fallback is the page background: a chunk that isn't prefetched yet loads
+  // in a few ms over HTTP cache, and a spinner would only flash.
+  return (
+    <Shell path={path}>
+      <Suspense fallback={<div style={{ position: 'absolute', inset: 0, background: '#0B121A' }} />}>
+        {pageFor(path)}
+      </Suspense>
+    </Shell>
+  )
 }
 
 createRoot(document.getElementById('root')!).render(

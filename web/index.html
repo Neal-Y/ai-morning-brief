@@ -8,6 +8,30 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Sift" />
     <title>Sift</title>
+    <!-- Start today's /api/feed request while the JS bundle is still
+         downloading, so network and JS parse overlap instead of queueing
+         (web/src/feedLoader.ts picks it up). Feed route only: it's the PWA
+         start_url and where the morning push lands. -->
+    <script>
+      (function () {
+        try {
+          if (location.pathname !== '/') return;
+          var p = {};
+          new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Taipei', year: 'numeric', month: '2-digit', day: '2-digit' })
+            .formatToParts(new Date()).forEach(function (x) { p[x.type] = x.value; });
+          var date = p.year + '-' + p.month + '-' + p.day; // same as getTaipeiDateString()
+          window.__siftFeed = {
+            date: date,
+            promise: fetch('/api/feed?date=' + date).then(function (r) {
+              if (!r.ok) throw new Error('HTTP ' + r.status);
+              return r.json();
+            }),
+          };
+          // Never surface as an unhandled rejection; feedLoader falls back to its own fetch.
+          window.__siftFeed.promise.catch(function () {});
+        } catch (e) {}
+      })();
+    </script>
     <link rel="manifest" href="/manifest.json" />
     <link rel="icon" type="image/svg+xml" href="/icon-512.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
