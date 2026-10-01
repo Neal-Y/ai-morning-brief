@@ -5,6 +5,11 @@ on:
     # 台灣時間 05:47 = UTC 21:47 (前一天) — 跟文章 pipeline (07:07) 錯開，互不影響；避開整點塞車
     - cron: '47 21 * * *'
   workflow_dispatch: # 手動觸發用於測試
+    inputs:
+      force:
+        description: '強制出題：就算每台活躍裝置都還有 ≥10 題沒答，也照樣出 5 題'
+        type: boolean
+        default: false
 
 jobs:
   quiz:
@@ -32,3 +37,4 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+          FORCE: ${{ inputs.force && '1' || '' }}

@@ -110,6 +110,7 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | 學習紀錄 / Activity | ✅ | `GET /api/activity`：年度 heatmap、本週答題、streak、正確率，皆以 device_id 為範圍。2026-09-29 起 streak / heatmap 同時計入閱讀（feedback）與答題；週統計與 recent 仍只算答題。web `Activity.tsx` 與 app `ActivityScreen.tsx` 吃同一支 API |
 | 多使用者支援 | ✅ | `device_id` 貫穿 feedback / saves / conversations / push_subscriptions / quiz_attempts；web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，**兩邊不共用、沒有遷移**，每次 fetch 帶 `X-Device-Id` |
 | Quiz 追問 | ✅ 問答 + 歷史（存本機） | `/api/ask` streaming 正常（不吃 articleId）；「用合成 `articleId=quiz-${id}` 掛進 conversations」從沒真的動起來——`ask-history.ts` 的 hex regex + FK 會擋掉。所以 quiz 對話歷史改存 client 本機、不進 DB：web/ 2026-09-07 用 localStorage，app/ 2026-09-29 用 AsyncStorage（之前 app/ 端把 400 吞掉，封測期間歷史都沒存到）。見 Key Design Decision #8 |
+| 沒人用就不生成 | ✅ | 2026-10-01：文章管線在 3 天沒有 feedback / 答題 / 開 App（`push_subscriptions.updated_at`）時跳過，不呼叫 LLM、不推播；出題管線在每台近 14 天有答題的裝置都還有 ≥10 題沒答時跳過。兩者 `force` 可覆寫。細節見 ARCHITECTURE.md |
 | 下午提醒推播 | ✅ | 2026-09-30：`reminder_sync.yml` 15:53 台北跑 `src/reminder.ts`，只推給「今天沒有 feedback 也沒有 quiz_attempts」的訂閱裝置；streak ≥ 2 時文案帶連續天數；payload 帶 `url: '/quiz'`，`sw.js` 點擊後開題目頁（已開著就 postMessage 讓 app 內 navigate）。全部推失敗 → exit(1) |
 | 回報爛題 | ✅ | 2026-09-30：題目頁「回報」→ `POST /api/quiz-report`（答案有誤 / 題意不清 / 太簡單 / 其他）；被回報的題 `/api/quiz` 對所有人排除，出題 prompt 尾端加「AVOID THESE MISTAKES」。回報後可「跳過這題」（不記 attempt，results 存 null） |
 | Skill-tag 雙軸 | ⏳ 未做 | schema 已有 `skillTags`，classifier 沒產 |
@@ -311,6 +312,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - Selection caps：`HARD_TECH_MAX=2`, `SIGNALS_MAX=1`, `BRIEF_MAX=3`
 - **沒有 filler（2026-09-30 拿掉）**：HARD_TECH + SIGNALS 不足 3 篇就少於 3 篇，0 篇就發「今日無重大 AI 新聞」且不寫 DB。以前會拿 DROP 的文章改標 Signals 補滿，是「怎麼會出現這篇」的主因，不要加回來
 - 送進 classifier 前：跨來源去重（同 URL 或標題高度重疊，留 tier 高的）→ 每個來源保底 2 篇 → 其餘依關鍵字分數補到 `CLASSIFIER_CAP=24`。來源分三層 `primary`（OpenAI / DeepMind / Cloudflare / AWS ML 一手部落格）> `technical` > `broad`；The Verge 已移除
+- **沒人用就不生成（2026-10-01）**：`src/index.ts` 的 idle check（`IDLE_SKIP_DAYS=3`，看 `getLastActivityAt()`）、`src/quiz-pipeline.ts` 的庫存檢查（`MIN_UNSEEN=10` / `ACTIVE_DAYS=14`，看 `getUnseenQuizCounts()`）。跳過一律 exit 0（不是錯誤）。下午提醒**不**套 idle check——它不花 LLM 錢，而且是唯一把閒置使用者叫回來的管道，不要拿掉
 - 調整選文邏輯後先用試跑驗證：Actions → AI Morning Brief → Run workflow → 勾 `dry_run`（只分類＋印出會選哪幾篇，不寫 DB、不推播）
 - Pipeline 順序固定是 brief → DB persist → Web Push。Web Push 是 PWA 入口，不可在 DB 寫入成功前送出。
 - Infra 錯誤不送 Web Push：RSS 全掛、config/provider 錯誤、DB 寫入失敗、Web Push 全部發送失敗都要 `exit(1)`，讓 GitHub Actions failed；Actions log 是錯誤診斷 source of truth。

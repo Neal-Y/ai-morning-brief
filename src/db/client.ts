@@ -114,3 +114,42 @@ export async function getReportedQuizzes(): Promise<ReportedQuiz[]> {
   }
 }
 
+
+// ── Idle / stock checks (2026-10-01) ────────────────────────────────────────
+// The pipelines skip their LLM calls when nobody would read the output.
+
+/**
+ * Most recent sign that anyone is using the app: a 👍/👎, a quiz answer, or an
+ * app open. Opening the Feed in the installed PWA re-posts the push
+ * subscription (web/src/App.tsx → /api/push-subscribe), which rewrites
+ * `push_subscriptions.updated_at` — so a bare open counts, not only a swipe.
+ * Null when there has never been any activity.
+ */
+export async function getLastActivityAt(): Promise<Date | null> {
+  const rs = await client.execute(`
+    SELECT max(t) AS t FROM (
+      SELECT max(created_at) AS t FROM feedback
+      UNION ALL SELECT max(answered_at) FROM quiz_attempts
+      UNION ALL SELECT max(updated_at) FROM push_subscriptions
+    )`)
+  const t = rs.rows[0]?.['t']
+  return t == null ? null : new Date(Number(t) * 1000)
+}
+
+/**
+ * Unanswered questions left for each device that answered at least one quiz
+ * in the last `activeDays` days. Empty when nobody has been answering.
+ * (Reported questions still count toward the pool — a handful at most.)
+ */
+export async function getUnseenQuizCounts(activeDays: number): Promise<{ deviceId: string; unseen: number }[]> {
+  const since = Math.floor((Date.now() - activeDays * 24 * 60 * 60 * 1000) / 1000)
+  const rs = await client.execute({
+    sql: `
+      SELECT d.device_id AS device_id,
+             (SELECT count(*) FROM quizzes)
+               - (SELECT count(DISTINCT a.quiz_id) FROM quiz_attempts a WHERE a.device_id = d.device_id) AS unseen
+      FROM (SELECT DISTINCT device_id FROM quiz_attempts WHERE device_id IS NOT NULL AND answered_at >= ?) d`,
+    args: [since],
+  })
+  return rs.rows.map((r) => ({ deviceId: String(r['device_id']), unseen: Number(r['unseen']) }))
+}
