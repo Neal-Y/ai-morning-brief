@@ -1,169 +1,162 @@
-# Sift 「AI Morning Brief — 個人化每日晨報 pipeline」
+<p align="center">
+  <img src="docs/images/hero.png" alt="Sift — 每天早上 3 篇 AI 技術簡報 + 5 題工程判斷題" width="100%">
+</p>
 
-兩條每日自動運行的資料管線，共用一顆 DB、一個 client 殼：
-- **文章管線**：RSS 擷取 → LLM 分類 → Turso DB 持久化 → Web Push 交付
-- **Quiz 管線**：LLM 出題（backend/infra 判斷力題目）→ Turso DB 持久化
+<h1 align="center">Sift</h1>
 
-兩條管線各自獨立排程、獨立 cron，不互相依賴——出題不需要文章資料，文章 pipeline 掛掉也不影響 quiz。
-GitHub Actions cron 驅動，Vercel Edge Runtime 提供 API 服務層。
-自 2026 年 4 月起持續每日運行。
+<p align="center">
+  <b>每天早上，把 AI 新聞篩成 3 篇工程師真正該讀的，再用 5 題判斷題把它變成自己的東西。</b><br>
+  一個人從零做到上線、每天自動運行的全端作品：LLM 資料管線 × 間隔複習 × iOS PWA 推播。
+</p>
 
-使用者端主力是 Web PWA（四分頁：題目／簡報／Library／紀錄）：每日推播新聞 → 滑卡閱讀 → 👍👎 回饋 → 追問 → 收藏同步 Notion；每日 quiz → 遊戲化作答（4 種題型）→ 學習紀錄儀表板。歷史內容可在 Library 回溯。React Native app「Sift」（Expo）程式碼仍在、仍可跑，但 2026-09-07 起暫時擱置——EAS Build / TestFlight 的成本在目前使用量下不划算，四分頁已原樣搬進 PWA。
-
-**Live (Web PWA):** https://ai-morning-brief-chi.vercel.app
-
----
-
-## 四個工程重點
-
-### 1. 兩條內容管線解耦，不是硬塞進同一條 pipeline
-
-文章和 quiz 是完全獨立的兩套產出：不同 cron 排程（07:07 / 05:47 台北，刻意錯開）、不同 entry point、不同 dedup 邏輯，只共用 provider 選擇邏輯和同一顆 DB。好處是任一條掛掉不拖累另一條，各自可以獨立重跑、獨立調整節奏。使用者端的 Ask 追問則反過來刻意共用：quiz 題目用合成 `articleId = quiz-${id}` 共用同一套 AskSheet + `/api/ask` SSE，沒有為 quiz 另建一套幾乎一樣的串流邏輯（歷史例外：`conversations` 的 FK 擋掉合成 id，quiz 對話改存各 client 本機，見 docs/KNOWN_ISSUES.md）——同一決策原則（重不重複用）在兩個方向上給出不同答案，取決於失敗域是否該隔離。
-
-### 2. 有回饋迴路的 Feedback Loop，不是一次性腳本
-
-Classifier 每次選文前會讀取近 30 天的 👍👎 回饋作為偏好 context，並附加在 system prompt **尾端**（保 Anthropic cache prefix 穩定，不插中間或開頭）。冷啟動門檻 ≥ 10 筆才啟動，防過擬合；per-category 負訊號需 ≥ 2 次 👎 才算（單筆可能是噪音）。
-
-### 3. 成本被當成設計約束
-
-啟用 prompt caching、classifier 每日上限 24 篇（`CLASSIFIER_CAP` 可線性調整成本；每個來源保底 2 篇）、Claude Sonnet 4.6 為主力、GPT-4o 為自動備援（主力整批失敗才切換；2026-10-01 前是按日輪替），全系統年成本控制在 **~$40–45**。`CLASSIFIER_CONCURRENCY=3` 是 free-tier Anthropic TPM 的安全邊際。完整拆解見 [Cost](#cost)。
-
-### 4. 錯誤邊界與執行順序硬編碼
-
-Web Push 只在 DB 寫入成功後才送出（Stage 5 → Stage 6 強制串行），避免推播後 DB 寫入失敗導致使用者開 app 看不到內容。RSS 全掛、config/provider 錯誤、DB 寫入失敗、Web Push 全部發送失敗都會 `exit(1)`，GitHub Actions 標記 workflow failed；Classifier 的 fallback bucket 是 DROP（不是靜默晉升），避免低分文章因例外處理而進入 brief。基礎設施問題由 Actions log 負責，不推播給使用者。
+<p align="center">
+  <a href="https://ai-morning-brief-chi.vercel.app"><b>Live Demo</b></a> ·
+  <a href="./docs/ARCHITECTURE.md">Architecture</a> ·
+  <a href="./docs/FRONTEND_FIX_LOG.md">iOS PWA 踩坑紀錄</a>
+</p>
 
 ---
 
-## 技術決策說明
+## 為什麼做這個
 
-### 為什麼 API 全走 Edge Runtime，沒有 Hono / Node？
+AI 新聞量很大，但大部分跟「我明天寫 code 的決定」無關，讀過的東西也很快就忘。Sift 每天做兩件事：
 
-Hono 在 Vercel Node.js adapter 上，`c.req.json()` 對部分 POST request 會 hang 到 5 分鐘 timeout——2026-04-26 在 `/api/feedback` 重現，body < 100 bytes 也觸發。排查過 DB、libSQL、drizzle、VAPID 都不是病灶；結論是 adapter 本身的問題。Edge Runtime 用原生 `Request.json()` 沒這問題。
-
-GET 後來也全搬了：Node function 的冷啟動就是開 App 時那一下卡頓。2026-10-01 最後兩支（`/api/quiz`、`/api/activity`）搬完後，Hono / Node 後端整個刪除。現行規則：任何新 endpoint 直接寫 `api/<name>.ts`（Edge Runtime）+ `vercel.json` rewrite。
-
-### 為什麼用 Turso HTTP API 而不是 `libsql://`？
-
-Edge Runtime 是 stateless、短命的執行環境，`libsql://` 的 WebSocket persistent connection 在這裡無法建立。Edge functions 統一用 Turso 的 HTTP API（`https://` transport）——等同 REST over HTTP，無狀態連線，天然適合 serverless。Pipeline（GitHub Actions Node.js 環境）同樣使用 `https://` transport，統一行為減少環境差異。
+1. **篩**：從 10 個來源（OpenAI、Google DeepMind、Cloudflare、AWS ML 等官方部落格，加上 Hacker News、Simon Willison 等技術社群）抓新文章，讓 LLM 逐篇判斷對後端／infra 工程師有沒有用。只留最多 3 篇，每篇寫出「對工程的影響」。寧可少給，也不拿湊數的文章充版面。
+2. **練**：每天出 5 題 backend / infra 判斷題，有單選、排序、配對、填空四種題型。答錯的題會在 1 → 3 → 7 天後重出，連對三次才算學會。
 
 ---
 
-## Architecture
+## 一天的流程
 
-Full mechanics (classifier decision tables, rank+select algorithm, quiz validation rules, complete DB schema, complete API contract) live in **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)**. Below is the summary.
+| 時間（台北） | 發生什麼 |
+|---|---|
+| 05:47 | 出題管線生成 5 題新題目，避開近期出過的、被使用者回報過的題型 |
+| 07:07 | 文章管線抓 RSS，LLM 分類 → 選文 → 寫簡報 → 存 DB → **推播到 iPhone 鎖定畫面** |
+| 早上 | 點通知直接進簡報（推播時 Service Worker 已預先抓好內容，打開不用等）→ 滑卡 👍👎 → 讀完一鍵去答題 |
+| 15:53 | 今天還沒讀也沒答題的裝置，才會收到一則提醒，文案帶著連續天數 |
 
-### System Overview
+---
 
-```
-GitHub Actions cron — 兩條獨立 pipeline
-  ├─ daily_sync.yml (07:07 台北) → src/index.ts
-  │    ├─ rss/feed.ts          RSS 抓取 + 24h 過濾 + 關鍵字打分
-  │    ├─ db/client.ts         讀近 30 天 feedback 作偏好 context
-  │    ├─ ai/classifier.ts     per-article LLM 分類（concurrency=3）
-  │    ├─ ai/brief.ts          brief 生成（1 次 LLM call）
-  │    ├─ notify/db-writer.ts  upsert 文章到 Turso
-  │    └─ notify/web-push.ts   對 push_subscriptions 全表發 Web Push
-  └─ quiz_sync.yml (05:47 台北) → src/quiz-pipeline.ts   （不依賴文章資料）
-       ├─ db/client.ts         讀近期已出題 prompt 防重複
-       ├─ quiz/generate.ts     LLM 出題（4 題型混出）
-       └─ db/quiz-writer.ts    寫入 quizzes table
+## 畫面
 
-Edge Functions（全部 API，root api/*.ts，raw Turso HTTP）
-  ├─ GET  /api/feed?date=      api/feed.ts — 當日文章
-  ├─ GET  /api/library         api/library.ts — 歷史文章 + feedback/saves/ask count 狀態
-  ├─ GET  /api/quiz            api/quiz.ts — 今日 quiz 題組（含答錯重出）
-  ├─ GET  /api/activity        api/activity.ts — 學習紀錄：heatmap / streak / 正確率（device_id 範圍）
-  ├─ POST /api/ask             api/ask.ts — Haiku 4.5 SSE streaming 追問（文章與 quiz 共用）
-  ├─ GET/POST /api/ask-history api/ask-history.ts — 每篇文章一份對話歷史（Turso HTTP API）
-  ├─ POST /api/push-subscribe  api/push-subscribe.ts — 寫 push_subscriptions
-  ├─ POST /api/save            api/save.ts — Notion Article ID 去重 + upsert/restore saves
-  ├─ POST /api/unsave          api/unsave.ts — 硬刪除 saves row（Notion page 不動，dedupe 靠直查 Notion）
-  ├─ POST /api/feedback        api/feedback.ts — 👍👎 回饋（delete-then-insert；`clear` = 撤回）
-  └─ POST /api/quiz-attempt    api/quiz-attempt.ts — 寫入 quiz_attempts
+> 截圖為示範資料，介面與互動為實際產品。
 
-React PWA (web/) — 主力 client，四分頁 bottom tab（鏡像原 Sift app 的分頁配置）
-  ├─ /quiz     題目：今日 quiz 題組（4 題型）+ AskSheet 追問
-  ├─ /         簡報：今日滑卡 / 👍👎 / 💬 追問 / 🔖 收藏 / streak（PWA start_url，Web Push 落點，故意留在 `/`）
-  ├─ /library  Library：歷史頁，日期分組、filter、展開 LLM 內容、收藏/移除收藏、AskSheet + Ask count
-  ├─ /activity 紀錄：學習儀表板（本週回顧、年度 heatmap、streak、正確率）
-  └─ Splash gate：iOS standalone 第一次開啟時請求 notification 權限 + 寫 subscription
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="docs/images/feed.png" width="260"><br><b>簡報</b><br><sub>一次一張卡，LLM 寫的 Context 與 Engineering Impact；左右滑 = 👎 / 👍，回饋會影響明天的選文</sub></td>
+    <td align="center" width="33%"><img src="docs/images/ask.png" width="260"><br><b>追問</b><br><sub>對任何一篇或任何一題直接問 Claude，串流回答，對話歷史會保存</sub></td>
+    <td align="center" width="33%"><img src="docs/images/quiz.png" width="260"><br><b>判斷題</b><br><sub>答完立刻給解說與 XP；答題前追問不會被爆雷</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/ordering.png" width="260"><br><b>拖曳排序 + 複習</b><br><sub>之前答錯的題會帶「複習」標籤回來</sub></td>
+    <td align="center"><img src="docs/images/library.png" width="260"><br><b>Library</b><br><sub>所有讀過的文章，可搜尋、篩選、收藏（同步 Notion）</sub></td>
+    <td align="center"><img src="docs/images/activity.png" width="260"><br><b>學習紀錄</b><br><sub>連續天數、本週回顧（最常卡住的分類、這週答錯的題）、一年熱力圖</sub></td>
+  </tr>
+</table>
 
-React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、非凍結
-  ├─ 程式碼原樣保留，Expo Go 仍可跑；四分頁邏輯已搬進 web PWA
-  └─ EAS Build → TestFlight 在目前使用量下不划算，先不投資；用量提高再重啟
+---
+
+## 架構
+
+```mermaid
+flowchart LR
+  subgraph GA["GitHub Actions（排程）"]
+    Q["05:47 出題管線"]
+    A["07:07 文章管線<br/>RSS → 分類 → 選文 → 簡報"]
+    R["15:53 提醒"]
+  end
+  LLM[("Claude Sonnet<br/>GPT-4o 備援")]
+  DB[("Turso<br/>SQLite")]
+  subgraph V["Vercel"]
+    E["Edge Functions<br/>13 支 API，無冷啟動"]
+    W["React PWA"]
+  end
+  P["iPhone<br/>主畫面 PWA"]
+
+  Q --> LLM
+  A --> LLM
+  Q --> DB
+  A --> DB
+  A -- Web Push --> P
+  R -- Web Push --> P
+  P <--> W
+  W <--> E
+  E <--> DB
+  E -- 追問串流 --> H[("Claude Haiku")]
 ```
 
-### Pipeline Stages（文章管線；quiz 管線是獨立的單步驟：出題 → 寫入，見上方架構圖）
-
-| Stage | 檔案 | 輸入 → 輸出 |
-|-------|------|-------------|
-| 1 Feed | `rss/feed.ts` | RSS feeds → `ArticleSummary[]`（過濾 + 打分）|
-| 2 Classify | `ai/classifier.ts` | top 12 篇 → `ClassifiedArticle[]`（bucket / renderLevel / score）|
-| 3 Select | `src/index.ts` | 全部分類 → 最多 3 篇（HARD_TECH ≤2, SIGNALS ≤1；不足就少給，不用被判 DROP 的文章補）|
-| 4 Brief | `ai/brief.ts` | 3 篇 → `BriefResult`（summary / context / engineeringImpact）|
-| 5 Persist | `notify/db-writer.ts` | `BriefResult` → Turso upsert |
-| 6 Push | `notify/web-push.ts` | lead title + engineeringImpact + 「今日 N 篇 · 還有 K 題判斷題等你」→ 訂閱者 |
-
-### Database Schema（Turso / libSQL）
-
-| Table | 用途 |
-|-------|------|
-| `articles` | 每日文章 + 分類結果 |
-| `feedback` | 👍👎 回饋，用於 classifier 偏好調整 |
-| `saves` | 🔖 收藏紀錄；`(device_id, article_id)` unique；unsave 是硬刪除，不是 soft-delete（2026-08-05 修正，過程見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)） |
-| `conversations` | 💬 追問對話歷史；一 (article, device) 一筆，`messages` JSON + `message_count` 供 Library 輕量顯示；只存文章對話——quiz 對話被 FK 擋在外面，存在 client 本機（web localStorage / app AsyncStorage） |
-| `quizzes` | Quiz 題目（4 題型，polymorphic `payload` JSON）|
-| `quiz_attempts` | Quiz 作答紀錄：`quiz_id` / `device_id` / `correct` |
-| `push_subscriptions` | Web Push subscription endpoint + VAPID keys |
-
-> `feedback` / `saves` / `conversations` / `quiz_attempts` / `push_subscriptions` 都有 `device_id` 欄位——沒有帳號系統，靠 app 端生成的 UUID（AsyncStorage）做多使用者隔離。
+- **兩條管線完全解耦**：出題不依賴文章。排程、入口、去重邏輯都各自獨立，只共用 LLM provider 的選擇邏輯和同一顆 DB，所以任一條掛掉都不拖累另一條，也能各自重跑。
+- **API 全部是 Edge Functions**：13 支 API 都跑在 Vercel Edge，直接用 HTTP 打 Turso，沒有 Node 冷啟動。完整 API contract 與 DB schema 見 [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)。
 
 ---
 
-## Cost
+## 工程上值得一提的地方
 
-每天跑兩條 pipeline，加上 Web 追問，估計年費：
+### 1. 回饋迴路，不是一次性腳本
+Classifier 選文前會讀近 30 天的 👍👎，當作偏好 context。
+- **防噪音**：累積到 10 筆才開始注入；某個分類要被 👎 兩次以上，才算負訊號。
+- **保 cache**：偏好接在 system prompt 的**尾端**。前面穩定的部分維持 Anthropic prompt cache 命中，變動的偏好不會讓整段 cache 失效。
 
-| 元件 | 模型 | 用途 | 估計年費 |
-| ---- | ---- | ---- | -------- |
-| Classifier | Sonnet 4.6（GPT-4o 備援） | 每天 top 12 篇各送一次 LLM | ~$32 |
-| Brief | Sonnet 4.6（GPT-4o 備援） | 每天 1 次 LLM call | ~$4 |
-| Quiz 生成 | Sonnet 4.6（GPT-4o 備援） | 每天 1 次 LLM call，出 5 題 | ~$4（量級同 Brief，未精算） |
-| Ask | Claude Haiku 4.5 | 使用者追問（文章 + quiz），streaming | ~$1 |
-| **總計** | | | **~$40–45/年** |
+### 2. 失敗要大聲，不要假裝沒事
+- **執行順序**：推播一定排在 DB 寫入成功之後。否則可能發生「通知到了，點開卻沒內容」。
+- **LLM 失敗**：主力 LLM 整批失敗時（例如額度用完、全部 429），自動切到備援。兩家都失敗就讓 workflow 紅燈。這是踩坑後補的：之前全部失敗會被當成「沒有值得讀的文章」，結果送出一則假的「今日無重大 AI 新聞」。
+- **排程延遲**：GitHub cron 偶爾會晚好幾個小時才跑，所以管線做成每日冪等，手動重跑不會重複推播。
 
-定價參考（prompt caching 已啟用）：
+### 3. 間隔複習完全由作答紀錄推算
+「哪些題該重出」不另開一張表，而是每次從 `quiz_attempts` 即時推算：
+- 規則：最後一次答錯後，連對 0 / 1 / 2 次，分別在 1 / 3 / 7 天後重出；連對 3 次就畢業。
+- 好處：沒有排程狀態需要同步，也不會跟作答紀錄不一致。
 
-| Model | Input /M | Output /M | Cache Read /M |
-| ----- | -------- | --------- | ------------- |
-| gpt-4o | $2.50 | $10.00 | $1.25（自動）|
-| claude-sonnet-4-6 | $3.00 | $15.00 | $0.30（cache_control opt-in）|
-| claude-haiku-4-5 | $0.80 | $4.00 | $0.08（cache_control opt-in）|
+### 4. iOS 主畫面 PWA 的細節
+iOS standalone PWA 有很多非標準行為，踩過的坑都記在 [FRONTEND_FIX_LOG](./docs/FRONTEND_FIX_LOG.md)，目前 28 則。例如：
+- **底部對齊**：safe-area 與 home indicator 的對齊。
+- **鍵盤**：鍵盤彈出時，追問視窗要貼齊 `visualViewport`。
+- **防誤觸**：底部導覽列要和「滑回主畫面」手勢區隔開。
 
-調整 `src/config.ts` 的 `CLASSIFIER_CAP`（目前 24；2026-09-30 從 18 調高，classifier 成本約 +33%）可線性控制 classifier 成本。
+### 5. 開 App 要快
+目標是打開就有內容，不等網路：
+- **今天打開過**：直接用 localStorage 快取顯示。
+- **從推播點進來**：Service Worker 收到推播時已經把當天簡報抓進 Cache Storage。
+- **都沒有的話**：`index.html` 不等 JS 載完就先發出 API 請求。
+- **其他頁面**：程式碼分割加閒置時預載。
+
+在 4 倍 CPU 降速下實測：從 ~1.1 秒降到 ~0.6 秒。
 
 ---
 
-## Local Setup & Deploy
+## 成本
 
-本地開發指令、GitHub Actions / Vercel 部署步驟、完整 Environment Variables 表、Notion manual setup，見 **[docs/DEPLOY.md](./docs/DEPLOY.md)**。
+全系統每年約 **US$45**。下表依實際 Actions log 的 token 用量估算；prompt caching 已啟用。
+
+| 元件 | 模型 | 每天 | 年費 |
+|---|---|---|---|
+| 文章分類 | Claude Sonnet 4.6 | 24 篇各 1 次（共用 cached system prompt） | ~$36 |
+| 簡報生成 | Claude Sonnet 4.6 | 1 次 | ~$4 |
+| 出題 | Claude Sonnet 4.6 | 1 次，5 題 | ~$4 |
+| 追問 | Claude Haiku 4.5 | 依使用量 | ~$1 |
+| Vercel / Turso / GitHub Actions | — | — | $0（免費額度） |
 
 ---
 
-## 功能概覽
+## Tech Stack
 
-<details>
-<summary>展開</summary>
+| | |
+|---|---|
+| 前端 | React + Vite（PWA，手寫 Service Worker，無 vite-plugin-pwa）、iOS standalone Web Push（VAPID） |
+| API | Vercel Edge Functions（raw fetch，無框架） |
+| 資料 | Turso（libSQL / SQLite），Drizzle（管線端） |
+| 排程 | GitHub Actions cron |
+| LLM | Claude Sonnet 4.6 主力、GPT-4o 備援、Claude Haiku 4.5 追問 |
+| 其他 | Notion API（收藏同步）、React Native / Expo（原生 app 版本，暫時擱置） |
 
-- **雙每日 pipeline**：GitHub Actions 文章（07:07 台北）+ quiz（05:47 台北）各自獨立排程，寫同一顆 Turso DB
-- **Web PWA 四分頁（主力 client）**：題目 (`/quiz`) / 簡報 (`/`) / Library (`/library`) / 紀錄 (`/activity`)；device_id 做多使用者隔離。原 Sift RN app 四分頁邏輯已原樣搬過來，app/ 本身暫時擱置（見上方 Architecture）
-- **Quiz**：4 種互動題型（single_choice / ordering / matching / fill_blank），答對 +20 XP / 答錯 +5 XP，AskSheet 追問重用文章 Ask 基礎設施
-- **Activity 學習紀錄**：本週回顧、年度 heatmap、streak、正確率
-- **簡報滑卡瀏覽**：👍👎 回饋、💬 追問（Haiku streaming）、🔖 收藏、streak 計數
-- **Library / 歷史頁** (`/library`)：所有歷史文章 + 收藏 tab、filter、日期分組、展開 LLM 四段內容、收藏／移除收藏、AskSheet 直接從歷史卡開追問並恢復該篇歷史對話
-- **Web Push (VAPID)**：iOS standalone PWA 支援，通知標題 = lead story headline，body 第 1 行 = lead 文章的 `engineeringImpact`（LLM 判斷直接上鎖屏）
-- **🔖 → Notion 同步**：點收藏自動同步 Notion page；重存時查 DB 快取或直接查 Notion `Article ID` 找回舊 page，避免同篇重複建頁；unsave 是硬刪除 saves row，不動 Notion page
-- **Feedback loop**：Classifier 讀近 30 天 👍👎 回饋調整選文偏好（≥10 筆啟動）
-- **Provider**：Claude Sonnet 4.6 主力、GPT-4o 自動備援（2026-10-01 前是按日輪替；輪替會讓選文尺度隔天跳動），文章與 quiz pipeline 共用同一套邏輯
+---
 
-</details>
+## 文件
+
+| 文件 | 內容 |
+|---|---|
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | 分類規則、選文演算法、出題驗證、完整 DB schema 與 API contract |
+| [docs/DEPLOY.md](./docs/DEPLOY.md) | 本地開發、部署、環境變數 |
+| [docs/FRONTEND_FIX_LOG.md](./docs/FRONTEND_FIX_LOG.md) | Web / iOS PWA 修復史 |
+| [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md) | 目前已知的問題 |
+| [docs/PRINCIPLES.md](./docs/PRINCIPLES.md) | 做這個專案累積的產品與工程判斷原則 |
