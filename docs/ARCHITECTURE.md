@@ -189,6 +189,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 
 | Route | Query params | Returns |
 |---|---|---|
+| `GET /api/library` (`api/library.ts`, moved from Hono 2026-10-01) | `days` (optional, 1–365) | `{ articles, hasMore? }`: non-OMIT articles newest first, joined in JS with this device's feedback / saved / notionSynced / askMessageCount. The join reads `message_count` only, never the messages JSON. One Turso pipeline round trip. With `?days=N` it returns only the latest N brief dates plus `hasMore`, which the client uses for a fast first paint |
 | `GET /api/weekly` (`api/weekly.ts`, 2026-09-30) | — (`X-Device-Id`) | This week's review (Mon 00:00 Taipei → now): `{ weekLabel, daysElapsed, activeDays, read, answered, correct, lastWeek: {answered, correct}, weakCategories[≤3], missed[≤5], saved[≤5] }`. One Turso pipeline (three statements), `no-store` |
 | `GET /api/feed` (`api/feed.ts`) | `date` (YYYY-MM-DD, default today in Taipei; anything else → 400) | `{ date, articles: RawArticle[] }`, the same shape the Hono/drizzle route returned. `Cache-Control` is `s-maxage=300, swr=300` when the day has articles and `s-maxage=30` when it is empty |
 
@@ -196,7 +197,6 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 
 | Route | Query params | Returns |
 |---|---|---|
-| `GET /api/library` | — | All-history articles JOINed with feedback/saves/notionSynced/ask-message-count (JS-join, no `messages` JSON) |
 | `GET /api/quiz` | `count`, `type` (comma list) | `RawQuizItem[]` (+ `review: boolean`) |
 | `GET /api/activity` | — | `{ streak, activeToday, heatmap, weekStats, recent, totalCorrect, totalAnswered }` (`totalAnswered` added 2026-09-30; `recent[].category` is the day's top category plus `+N` for the rest), scoped by `X-Device-Id`. Since 2026-09-29 a day counts for `streak` / `heatmap` if the device read (any `feedback` row) **or** answered (`quiz_attempts`). `weekStats` / `recent` / `totalCorrect` stay quiz-only. `activeToday` says whether today already counts |
 

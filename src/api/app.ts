@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { db, isMissingTable } from '../db/client.js'
-import { articles, conversations, feedback, saves, quizzes, quizAttempts, quizReports } from '../db/schema.js'
+import { feedback, quizzes, quizAttempts, quizReports } from '../db/schema.js'
 import { eq, desc, and, inArray, notInArray, gte, sql } from 'drizzle-orm'
 import { dueReviewIds, REVIEW_MAX_PER_SET } from '../quiz/review.js'
 import { computeStreak } from '../streak.js'
@@ -20,58 +20,9 @@ app.use('*', cors())
 // first request every morning and the Node function's cold start was the
 // visible part of the app's load time. Don't re-add a Hono copy.
 
-app.get('/api/library', async (c) => {
-  // Library is read-only history. Three small tables, joined in JS to avoid
-  // duplicating articles when an article has multiple feedback rows. In
-  // practice feedback is delete-then-insert so at most one per article, but
-  // we don't want this endpoint to depend on that invariant.
-  const deviceId = c.req.header('X-Device-Id') ?? null
-  const [articleRows, feedbackRows, savesRows, askRows] = await Promise.all([
-    db.select().from(articles).orderBy(desc(articles.briefDate), desc(articles.score)),
-    deviceId
-      ? db.select().from(feedback).where(eq(feedback.deviceId, deviceId))
-      : Promise.resolve([]),
-    deviceId
-      // NOTE: NOT filtering on deleted_at here — that column was never actually
-      // migrated into the live `saves` table (see docs/KNOWN_ISSUES.md). Filtering
-      // on it 500s every request. Revisit once the migration actually lands.
-      ? db.select().from(saves).where(eq(saves.deviceId, deviceId))
-      : Promise.resolve([]),
-    // Only the count — never the messages JSON, so the payload stays small.
-    // This join was dropped in the multi-user change (b23f1d5) and the
-    // Library's ask-count mark silently read 0 ever since.
-    deviceId
-      ? db.select({ articleId: conversations.articleId, messageCount: conversations.messageCount })
-          .from(conversations)
-          .where(eq(conversations.deviceId, deviceId))
-      : Promise.resolve([]),
-  ])
-
-  const feedbackMap = new Map<string, 'up' | 'down'>()
-  for (const f of feedbackRows) {
-    if (f.signal === 'up' || f.signal === 'down') feedbackMap.set(f.articleId, f.signal)
-  }
-  const savesMap = new Map<string, { notionPageId: string | null }>()
-  for (const s of savesRows) {
-    savesMap.set(s.articleId, { notionPageId: s.notionPageId })
-  }
-
-  const askCountMap = new Map(askRows.map((r) => [r.articleId, r.messageCount]))
-
-  const enriched = articleRows
-    .filter((a) => a.renderLevel !== 'OMIT')
-    .map((a) => ({
-      ...a,
-      feedback: feedbackMap.get(a.id) ?? null,
-      saved: savesMap.has(a.id),
-      notionSynced: !!savesMap.get(a.id)?.notionPageId,
-      askMessageCount: askCountMap.get(a.id) ?? 0,
-    }))
-
-  // Library reflects user state (feedback/saves), so don't cache at the edge.
-  c.header('Cache-Control', 'private, no-store')
-  return c.json({ articles: enriched })
-})
+// GET /api/library lives in api/library.ts (Edge Runtime, 2026-10-01): one
+// Turso round trip, no Node cold start, plus ?days=N for a fast first paint.
+// Don't re-add a Hono copy.
 
 const MAX_QUIZ_COUNT = 20
 

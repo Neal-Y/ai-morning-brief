@@ -908,6 +908,18 @@ Verification: Playwright (390×844, mocked API).
 - **Line clamp bleeding.** `-webkit-line-clamp` on an element that also has padding let a third line show through in the padding. The padding moved to a wrapper element.
 - **Misleading 「最近 5 天」 label.** The row showed only the day's top category, which read as if every question that day was in it. It now shows `TOP +N`.
 
+## Issue 26: Library opened slowly (2026-10-01)
+
+`/api/library` was a Hono route on the Node function. Every open paid the cold start, and the payload (all history) grows every day.
+
+- **Edge.** It now lives in `api/library.ts` and runs one Turso pipeline (articles + this device's feedback / saves / ask counts), with the same response shape as before. The Hono copy is removed.
+- **Cache first.** `Library.tsx` renders `mb_cache_library` on the first frame and refreshes in the background. The cache is written only from the complete list, so a partial page never replaces a complete cache. After that it tracks local changes (saves, ask counts).
+- **Two-stage cold load.** With no cache, the page fetches `?days=14` and paints it, then fetches the full history and swaps it in. A late first page never overwrites the full list. If the full request fails, the error is shown only when nothing is on screen. Search and filters run client-side, so they work on the full list once it arrives.
+
+Verification:
+- Handler run against local SQLite through a fake `/v2/pipeline` `fetch`: OMIT excluded, ordering (date desc, score desc), joins (`clear` feedback ignored, notionSynced), and `days` slicing / `hasMore` / validation all correct.
+- Playwright, with the full response held 8s: the first page painted in 0.36s and search found a 30-day-old article after the full load. Warm open from cache painted in 0.3s with the API held 5s.
+
 ---
 
 ## What Was Intentionally Not Changed

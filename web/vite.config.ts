@@ -27,7 +27,7 @@ const PROD_API = 'https://ai-morning-brief-chi.vercel.app'
 // Anchored regex (vite treats a leading `^` key as a RegExp tested against the
 // full req.url, query string included — hence the `(\?|$)` tail instead of `$`).
 const EDGE_ROUTES =
-  '^/api/(feed|ask|ask-history|save|unsave|feedback|quiz-attempt|quiz-report|weekly|push-subscribe)(\\?|$)'
+  '^/api/(feed|library|ask|ask-history|save|unsave|feedback|quiz-attempt|quiz-report|weekly|push-subscribe)(\\?|$)'
 
 export default defineConfig({
   plugins: [react()],

@@ -3,7 +3,7 @@ import { THEME_DARK, TAG_COLORS } from './theme.ts'
 import { navigate } from './router.ts'
 import { AskSheet } from './components/AskSheet.tsx'
 import type { Article } from './types.ts'
-import { apiFetch } from './api.ts'
+import { apiFetch, readCache, writeCache } from './api.ts'
 import { useNavInset } from './nav.ts'
 import { IconSparkle } from './components/icons.tsx'
 
@@ -122,6 +122,26 @@ function toUi(row: LibraryArticle): UiArticle {
     askMessageCount: row.askMessageCount ?? 0,
     asArticle,
   }
+}
+
+// Loading strategy (2026-10-01): render the last copy from localStorage on the
+// first frame; with no cache, paint the latest FIRST_PAINT_DAYS brief dates
+// first, then swap in the full history (search / filters are client-side, so
+// they need all of it). The cache is written from the full list only, so a
+// partial first page never overwrites a complete cache.
+const LIBRARY_CACHE_KEY = 'library'
+const FIRST_PAINT_DAYS = 14
+
+function readLibraryCache(): UiArticle[] | null {
+  const cached = readCache<UiArticle[]>(LIBRARY_CACHE_KEY)
+  return Array.isArray(cached) && cached.length > 0 && typeof cached[0]?.dateLabel === 'string' ? cached : null
+}
+
+async function fetchLibrary(days?: number): Promise<UiArticle[]> {
+  const r = await apiFetch(days ? `/api/library?days=${days}` : '/api/library')
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  const data = await r.json() as LibraryResponse
+  return data.articles.map(toUi)
 }
 
 function fuzzyMatch(a: UiArticle, query: string): boolean {
@@ -680,8 +700,10 @@ export default function Library() {
   const [query, setQuery] = useState('')
   const [activeCategories, setActiveCategories] = useState<string[]>([])
   const [activeFeedback, setActiveFeedback] = useState<string[]>([])
-  const [articles, setArticles] = useState<UiArticle[]>([])
-  const [loading, setLoading] = useState(true)
+  const [initialCache] = useState(readLibraryCache)
+  const [articles, setArticles] = useState<UiArticle[]>(() => initialCache ?? [])
+  const [loading, setLoading] = useState(() => initialCache === null)
+  const [complete, setComplete] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [askArticle, setAskArticle] = useState<Article | null>(null)
   const [askVisible, setAskVisible] = useState(false)
@@ -690,23 +712,41 @@ export default function Library() {
 
   useEffect(() => {
     let cancelled = false
-    apiFetch('/api/library')
-      .then(async r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json() as Promise<LibraryResponse>
-      })
-      .then(data => {
+    let fullArrived = false
+    let shown = initialCache !== null
+    if (!initialCache) {
+      fetchLibrary(FIRST_PAINT_DAYS)
+        .then(list => {
+          if (cancelled || fullArrived) return // the full list already won the race
+          shown = true
+          setArticles(list)
+          setLoading(false)
+        })
+        .catch(() => { /* the full request below reports errors */ })
+    }
+    fetchLibrary()
+      .then(list => {
+        fullArrived = true
         if (cancelled) return
-        setArticles(data.articles.map(toUi))
+        setArticles(list)
         setLoading(false)
+        setComplete(true)
       })
       .catch(() => {
         if (cancelled) return
-        setError('無法載入 Library')
+        // Keep whatever is already on screen (cache / first page); only show
+        // the error when there is nothing to show.
         setLoading(false)
+        if (!shown) setError('無法載入 Library')
       })
     return () => { cancelled = true }
   }, [])
+
+  // Keep the cache in step with what's on screen (saves / ask counts change
+  // locally), but only once the full history is in.
+  useEffect(() => {
+    if (complete) writeCache(LIBRARY_CACHE_KEY, articles)
+  }, [articles, complete])
 
   function toggleCategory(cat: string) {
     setActiveCategories(prev => prev.includes(cat) ? prev.filter(c => c !== cat) : [...prev, cat])
