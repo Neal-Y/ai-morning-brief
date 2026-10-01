@@ -951,6 +951,10 @@ Then the Node backend was deleted: `src/api/app.ts`, `api/index.ts`, `src/api/se
 - `web/vite.config.ts` proxies all of `/api` to prod.
 - `app/src/api.ts` no longer guesses a local `:3001` server from Metro's host; it uses `EXPO_PUBLIC_API_BASE_URL` or prod.
 
+## Issue 29: Heatmap month label cut in half (2026-10-01)
+
+The heatmap is wider than the card and opens scrolled to the right end, so the leftmost visible column is only partly shown. A month label starting there was clipped by the scroll edge: "Apr" read as "pr". Fix (`web/src/components/activity/Heatmap.tsx`): track the scroll position and only render labels whose column starts at or after it. The cells themselves still scroll as before.
+
 ---
 
 ## What Was Intentionally Not Changed

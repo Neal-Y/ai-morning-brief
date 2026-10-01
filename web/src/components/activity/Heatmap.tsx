@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { THEME_DARK } from '../../theme.ts'
 
 const T = THEME_DARK
@@ -44,11 +44,16 @@ function monthLabels(): { week: number; label: string }[] {
 
 export function Heatmap({ data }: { data: number[][] }) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  // Current horizontal scroll, so a month label cut by the left edge
+  // ("Apr" showing as "pr") is hidden instead of half-drawn.
+  const [scrollX, setScrollX] = useState(0)
 
   // The most recent week is the rightmost column — start there, not at Jan.
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollLeft = el.scrollWidth
+    if (!el) return
+    el.scrollLeft = el.scrollWidth
+    setScrollX(el.scrollLeft)
   }, [data])
 
   return (
@@ -69,10 +74,10 @@ export function Heatmap({ data }: { data: number[][] }) {
         ))}
       </div>
 
-      <div ref={scrollRef} style={{ overflowX: 'auto', flex: 1 }}>
+      <div ref={scrollRef} onScroll={e => setScrollX(e.currentTarget.scrollLeft)} style={{ overflowX: 'auto', flex: 1 }}>
         <div style={{ width: TOTAL_W }}>
           <div style={{ position: 'relative', height: 12, marginBottom: 6 }}>
-            {monthLabels().map(m => (
+            {monthLabels().filter(m => m.week * STRIDE >= scrollX - 1).map(m => (
               <span key={m.week} style={{
                 position: 'absolute', left: m.week * STRIDE,
                 fontFamily: T.mono, fontSize: 9, color: T.inkFaint,
