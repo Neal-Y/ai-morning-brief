@@ -26,7 +26,7 @@ Classifier 每次選文前會讀取近 30 天的 👍👎 回饋作為偏好 con
 
 ### 3. 成本被當成設計約束
 
-啟用 prompt caching、classifier 每日上限 24 篇（`CLASSIFIER_CAP` 可線性調整成本；每個來源保底 2 篇）、GPT-4o 與 Claude Sonnet 4.6 按台北日期奇偶輪替（分散單一供應商 rate limit 與依賴風險），全系統年成本控制在 **~$40–45**。`CLASSIFIER_CONCURRENCY=3` 是 free-tier Anthropic TPM 的安全邊際。完整拆解見 [Cost](#cost)。
+啟用 prompt caching、classifier 每日上限 24 篇（`CLASSIFIER_CAP` 可線性調整成本；每個來源保底 2 篇）、Claude Sonnet 4.6 為主力、GPT-4o 為自動備援（主力整批失敗才切換；2026-10-01 前是按日輪替），全系統年成本控制在 **~$40–45**。`CLASSIFIER_CONCURRENCY=3` 是 free-tier Anthropic TPM 的安全邊際。完整拆解見 [Cost](#cost)。
 
 ### 4. 錯誤邊界與執行順序硬編碼
 
@@ -128,9 +128,9 @@ React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、
 
 | 元件 | 模型 | 用途 | 估計年費 |
 | ---- | ---- | ---- | -------- |
-| Classifier | GPT-4o / Sonnet 4.6（輪替） | 每天 top 12 篇各送一次 LLM | ~$32 |
-| Brief | GPT-4o / Sonnet 4.6（輪替） | 每天 1 次 LLM call | ~$4 |
-| Quiz 生成 | GPT-4o / Sonnet 4.6（輪替） | 每天 1 次 LLM call，出 5 題 | ~$4（量級同 Brief，未精算） |
+| Classifier | Sonnet 4.6（GPT-4o 備援） | 每天 top 12 篇各送一次 LLM | ~$32 |
+| Brief | Sonnet 4.6（GPT-4o 備援） | 每天 1 次 LLM call | ~$4 |
+| Quiz 生成 | Sonnet 4.6（GPT-4o 備援） | 每天 1 次 LLM call，出 5 題 | ~$4（量級同 Brief，未精算） |
 | Ask | Claude Haiku 4.5 | 使用者追問（文章 + quiz），streaming | ~$1 |
 | **總計** | | | **~$40–45/年** |
 
@@ -166,6 +166,6 @@ React Native App「Sift」(app/) — 暫時擱置（2026-09-07），非刪除、
 - **Web Push (VAPID)**：iOS standalone PWA 支援，通知標題 = lead story headline，body 第 1 行 = lead 文章的 `engineeringImpact`（LLM 判斷直接上鎖屏）
 - **🔖 → Notion 同步**：點收藏自動同步 Notion page；重存時查 DB 快取或直接查 Notion `Article ID` 找回舊 page，避免同篇重複建頁；unsave 是硬刪除 saves row，不動 Notion page
 - **Feedback loop**：Classifier 讀近 30 天 👍👎 回饋調整選文偏好（≥10 筆啟動）
-- **Provider alternation**：GPT-4o / Claude Sonnet 4.6 按日輪替，文章與 quiz pipeline 共用同一套邏輯
+- **Provider**：Claude Sonnet 4.6 主力、GPT-4o 自動備援（2026-10-01 前是按日輪替；輪替會讓選文尺度隔天跳動），文章與 quiz pipeline 共用同一套邏輯
 
 </details>

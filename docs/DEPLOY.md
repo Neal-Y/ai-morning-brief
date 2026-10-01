@@ -128,4 +128,6 @@ vercel deploy
 
 Notion sync 失敗不阻斷收藏：`saves` row 仍寫入（`notion_page_id = NULL`），下次點同一篇自動 retry。再次 save 前先用 Notion `Article ID` property 查重，有既有 page 直接 reuse，不建新頁。`/api/unsave` 是硬刪除 `saves` row（不刪 Notion page）——不需要保留 row，因為重存的查重是直接查 Notion，不靠本地 row。
 
-`alternate` 模式：偶數天（年內第幾天）→ GPT-4o，奇數天 → Claude Sonnet 4.6。
+**目前 prod 設定（2026-10-01）**：`AI_PROVIDER=anthropic`，Claude 主力。兩個 key 都保留，主力整批失敗（額度用完、key 失效）時文章分類與 quiz 出題會自動改用另一家（`fallbackProvider()`），兩家都失敗才讓 Action 失敗，不會推假的「今日無新聞」。OpenAI 保留少量額度當備援即可。
+
+`alternate` 模式（仍支援）：偶數天（年內第幾天）→ GPT-4o，奇數天 → Claude Sonnet 4.6。
