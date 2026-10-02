@@ -118,6 +118,7 @@ export default function Quiz() {
               correctCount={correctCount}
               total={answeredCount}
               xpToday={xpToday}
+              missed={quizzes.filter((_, i) => results[i] === false)}
               bottomInset={navInset}
               onRestart={() => load(true)}
             />

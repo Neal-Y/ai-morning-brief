@@ -8,7 +8,7 @@ import { formatBriefDateLong, getTaipeiDateString } from './date.ts'
 import type { Article, FeedResponse } from './types.ts'
 import { apiFetch, fetchActivity, readCache, writeCache, type ActivityData } from './api.ts'
 import { prefetchTodaysQuiz } from './quiz/session.ts'
-import { fetchFeed, readLocalFeed, readPushPrefetchedFeed, writeLocalFeed } from './feedLoader.ts'
+import { useFeed } from './useFeed.ts'
 import { navigate } from './router.ts'
 import { useNavInset } from './nav.ts'
 import { SiftMark } from './components/icons.tsx'
@@ -92,8 +92,8 @@ export default function App() {
   useEffect(() => { if (showAsk) setAskMounted(true) }, [showAsk])
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({})
   const [saved, setSaved] = useState<Record<string, boolean>>({})
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data: feed, loading, error } = useFeed()
+  const shownFeedRef = useRef<{ date: string; articles: Article[] } | null>(null)
   const [briefDate, setBriefDate] = useState(() => getTaipeiDateString())
   const [springing, setSpringing] = useState(false)
   // One streak for the whole app, computed server-side from reading (feedback)
@@ -146,75 +146,58 @@ export default function App() {
     return () => clearInterval(interval)
   }, [subscribing])
 
-  useEffect(() => {
-    fetchActivity()
-      .then(a => {
-        setActivity({ streak: a.streak, activeToday: a.activeToday ?? false })
-        writeCache('activity', a)
-      })
-      .catch(() => {}) // streak chip just reads 0; never block the feed on it
-  }, [])
 
-  useEffect(() => {
-    const today = getTaipeiDateString()
-    setBriefDate(today)
-    let cancelled = false
-    // Ids of the list on screen. A later source with the same articles is a
-    // no-op, so the network refresh never resets a brief already being read.
-    let shownIds: string | null = null
-
-    const apply = (data: FeedResponse) => {
-      if (cancelled) return
-      const date = data.date ?? today
-      const parsed = parseArticles(data.articles)
-      const ids = parsed.map(a => a.id).join(',')
-      if (ids === shownIds) return
-      const first = shownIds === null
-      shownIds = ids
-      if (first) {
-        const session = readFeedSession(date)
-        if (session) {
-          setIdx(Math.min(session.idx, parsed.length))
-          setFeedback(session.feedback)
-          setSaved(session.saved)
-        }
-        // The brief is on screen; fetch today's quiz set in the background so
-        // 「去答今天的判斷題」/ the Quiz tab opens with no spinner.
-        setTimeout(prefetchTodaysQuiz, 1500)
-        setTimeout(() => { void loadAskSheet() }, 2000)
+  useLayoutEffect(() => {
+    if (!feed) return
+    const parsed = parseArticles(feed.articles)
+    const previous = shownFeedRef.current
+    const changedDay = previous?.date !== feed.date
+    const changedIds = previous?.articles.map(a => a.id).join(',') !== parsed.map(a => a.id).join(',')
+    if (changedDay || changedIds) {
+      // A previous day's pending animation must never advance the new brief.
+      if (transitionTimerRef.current !== null) clearTimeout(transitionTimerRef.current)
+      transitionTimerRef.current = null
+      transitionRef.current = false
+      setTransitioning(false)
+      setSwipeX(0)
+      dragStart.current = null
+      if (changedDay) {
+        const session = readFeedSession(feed.date)
+        setIdx(Math.min(session?.idx ?? 0, parsed.length))
+        setFeedback(session?.feedback ?? {})
+        setSaved(session?.saved ?? {})
+        setShowAsk(false)
+        fetchActivity().then(a => {
+          if (getTaipeiDateString() !== feed.date) return
+          setActivity({ streak: a.streak, activeToday: a.activeToday ?? false })
+          writeCache('activity', a)
+        }).catch(() => {})
       } else {
-        setIdx(i => Math.min(i, parsed.length))
+        setIdx(i => {
+          const currentId = previous?.articles[i]?.id
+          const found = parsed.findIndex(a => a.id === currentId)
+          return found >= 0 ? found : Math.min(i, parsed.length)
+        })
       }
-      setBriefDate(date)
-      setArticles(parsed)
-      setLoading(false)
     }
-
-    // Fastest source first (see feedLoader.ts); the network copy always runs
-    // and refreshes the cache.
-    const local = readLocalFeed(today)
-    if (local) apply(local)
-    else void readPushPrefetchedFeed(today).then(d => { if (d && shownIds === null) apply(d) })
-
-    fetchFeed(today)
-      .then(data => {
-        writeLocalFeed(data.date ?? today, data)
-        apply(data)
-      })
-      .catch(() => {
-        if (cancelled || shownIds !== null) return // a cached copy is already on screen
-        setError('無法載入今日 brief')
-        setLoading(false)
-      })
-    return () => { cancelled = true }
-  }, [])
+    shownFeedRef.current = { date: feed.date, articles: parsed }
+    setBriefDate(feed.date)
+    setArticles(parsed)
+  }, [feed])
 
   useEffect(() => {
     if (articles.length === 0) return
+    const quizTimer = setTimeout(prefetchTodaysQuiz, 1500)
+    const askTimer = setTimeout(() => { void loadAskSheet() }, 2000)
+    return () => { clearTimeout(quizTimer); clearTimeout(askTimer) }
+  }, [briefDate, articles.length])
+
+  useEffect(() => {
+    if (!feed || feed.date !== briefDate || articles.length === 0) return
     try {
       localStorage.setItem(FEED_SESSION_KEY, JSON.stringify({ date: briefDate, idx, feedback, saved }))
     } catch { /* private mode / quota */ }
-  }, [articles.length, briefDate, idx, feedback, saved])
+  }, [feed, articles.length, briefDate, idx, feedback, saved])
 
   const atCelebration = idx >= articles.length && articles.length > 0
   const curArticle = !atCelebration && articles[idx] ? articles[idx] : null
@@ -232,8 +215,7 @@ export default function App() {
     }, 260)
   }
 
-  // Undo: step back one card and withdraw the 👍/👎 it received, so a
-  // mis-swipe doesn't feed the classifier's preference signal.
+  // Undo withdraws an explicit preference but keeps the article's read record.
   const undo = () => {
     if (transitionRef.current || idx === 0) return
     const prev = articles[idx - 1]
@@ -254,13 +236,13 @@ export default function App() {
     }
   }
 
-  const registerFeedback = (signal: 'up' | 'down') => {
+  const registerFeedback = (signal: 'up' | 'down' | 'read', direction = 1) => {
     if (!curArticle || transitionRef.current) return
     transitionRef.current = true
     flyRotRef.current = Math.min(Math.abs(velocity.current.vx) * 30 + 12, 28)
     dragStart.current = null
-    setSwipeX(signal === 'up' ? 120 : -120)
-    setFeedback(f => ({ ...f, [curArticle.id]: signal }))
+    setSwipeX(signal === 'down' || direction < 0 ? -120 : 120)
+    if (signal !== 'read') setFeedback(f => ({ ...f, [curArticle.id]: signal }))
     apiFetch('/api/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -329,8 +311,7 @@ export default function App() {
     const overThreshold = Math.abs(swipeX) > 90
 
     if (dragStart.current.axis === 'x' && curArticle && (overThreshold || isFlick)) {
-      const signal = (isFlick ? vx > 0 : swipeX > 0) ? 'up' : 'down'
-      registerFeedback(signal)
+      registerFeedback('read', (isFlick ? vx : swipeX) > 0 ? 1 : -1)
       return
     }
     if (dragStart.current?.axis === 'x' && Math.abs(swipeX) > 10) {
@@ -363,10 +344,9 @@ export default function App() {
         return
       }
       if (!curArticle) return
-      // Through registerFeedback so the signal is actually POSTed — the arrow
-      // keys used to set local state only, and the row never reached the DB.
-      if (e.key === 'ArrowRight') registerFeedback('up')
-      if (e.key === 'ArrowLeft') registerFeedback('down')
+      // Navigation is neutral; only the explicit preference buttons vote.
+      if (e.key === 'ArrowRight') registerFeedback('read')
+      if (e.key === 'ArrowLeft') undo()
       if (e.key === 'ArrowUp') setShowAsk(true)
     }
     window.addEventListener('keydown', onKey)
@@ -630,6 +610,8 @@ export default function App() {
           >
             <FeedbackBar
               theme={T}
+              onNext={() => registerFeedback('read')}
+              isLast={idx === articles.length - 1}
               feedback={feedback[curArticle!.id]}
               saved={saved[curArticle!.id] ?? false}
               onLike={() => registerFeedback('up')}

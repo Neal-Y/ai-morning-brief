@@ -96,6 +96,8 @@ interface FeedbackBarProps {
   theme: Theme
   feedback?: 'up' | 'down'
   saved: boolean
+  onNext: () => void
+  isLast?: boolean
   onLike: () => void
   onDislike: () => void
   onAsk: () => void
@@ -103,7 +105,7 @@ interface FeedbackBarProps {
   onOpen: () => void
 }
 
-export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, onSave, onOpen }: FeedbackBarProps) {
+export function FeedbackBar({ theme, feedback, saved, onNext, isLast, onLike, onDislike, onAsk, onSave, onOpen }: FeedbackBarProps) {
   // Tonal buttons on a frosted-glass capsule: no outlines, an inset top
   // highlight for the raised read, colour only when a state is on.
   const tonal = 'rgba(255,255,255,0.05)'
@@ -131,7 +133,7 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
         flex: 1,
         fontFamily: theme.mono, fontSize: 11, fontWeight: 700,
         letterSpacing: 0.6,
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4,
         cursor: 'pointer',
       }}
     >{content}</button>
@@ -169,7 +171,7 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
     <div style={{
       margin: '0 12px',
       padding: 6,
-      display: 'flex', gap: 6,
+      display: 'flex', flexDirection: 'column', gap: 6,
       alignItems: 'stretch',
       flexShrink: 0,
       borderRadius: 24,
@@ -179,36 +181,48 @@ export function FeedbackBar({ theme, feedback, saved, onLike, onDislike, onAsk, 
       border: `1px solid ${theme.glassEdge}`,
       boxShadow: '0 12px 30px rgba(0,0,0,0.4)',
     }}>
+      <div style={{ display: 'flex', gap: 6 }}>
       {primaryBtn(onDislike, (
         <>
           <span
             key={feedback === 'down' ? 'dislike-on' : 'dislike-off'}
             style={{ display: 'inline-flex', animation: feedback === 'down' ? 'thumbDown 0.5s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none' }}
           ><IconThumbDown size={16} /></span>
-          {'LESS'}
+          {'少看這類'}
         </>
       ), feedback === 'down', 'dislike')}
 
-      {iconBtn(onAsk, <IconChat size={17} />, 'ASK')}
+      {iconBtn(onAsk, <IconChat size={17} />, '追問')}
 
       {iconBtn(onSave, (
         <span
           key={saved ? 'bm-on' : 'bm-off'}
           style={{ display: 'inline-flex', animation: saved ? 'stampIn 0.38s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none' }}
         ><IconBookmark size={17} filled={saved} /></span>
-      ), saved ? 'SAVED' : 'SAVE', saved)}
+      ), saved ? '已收藏' : '收藏', saved)}
 
-      {iconBtn(onOpen, <IconExternal size={17} />, 'READ')}
+      {iconBtn(onOpen, <IconExternal size={17} />, '原文')}
 
       {primaryBtn(onLike, (
         <>
-          {'MORE'}
           <span
             key={feedback === 'up' ? 'like-on' : 'like-off'}
             style={{ display: 'inline-flex', animation: feedback === 'up' ? 'thumbUp 0.5s cubic-bezier(0.175,0.885,0.32,1.275)' : 'none' }}
           ><IconThumbUp size={16} /></span>
+          {'多看這類'}
         </>
       ), feedback === 'up', 'like')}
+      </div>
+      <button
+        className="btn-press"
+        onClick={onNext}
+        style={{
+          minHeight: 44, width: '100%', border: 'none', borderRadius: 14,
+          background: theme.accent, color: theme.onAccent,
+          fontFamily: theme.sans, fontSize: 14, fontWeight: 700,
+          cursor: 'pointer',
+        }}
+      >{isLast ? '看完今日簡報' : '下一篇'}</button>
     </div>
   )
 }

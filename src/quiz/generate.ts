@@ -14,12 +14,32 @@ networking, databases, caching, distributed systems, concurrency, API design, sc
 observability, security fundamentals. Draw on your own general engineering knowledge —
 do NOT invent obscure or disputed trivia, and do NOT require citing a specific source.
 
+## Test decisions in context, not isolated terminology
+
+- Every question must start from a concrete engineering situation: an observed symptom
+  or goal, relevant constraints, and a decision the engineer needs to make. Keep the
+  setup short enough to read on a phone (usually 2-3 sentences).
+- Ask what to do first, which design fits the constraints, or how to order diagnostic /
+  recovery steps. Do not ask for a definition, acronym expansion, or protocol sequence
+  from memory. Naming a technology alone must not solve the question.
+- State the constraints that make one answer best (e.g. consistency needs, latency,
+  failure mode, workload, or operational cost). If two approaches would be reasonable
+  under the stated facts, tighten the scenario rather than pretending one is always right.
+- Distractors should be plausible engineering actions with a tradeoff that makes them
+  less suitable here, not unrelated terms or obviously absurd choices.
+- Keep all four question types: ordering can prioritize incident response steps;
+  matching can pair short failure symptoms with remedies within a stated scenario;
+  fill_blank can complete a concrete mitigation plan. Do not fall back to glossary
+  matching or sentence-completion definitions just to use those formats.
+- Explanations must connect the answer to the scenario's evidence and constraints,
+  explain why the most tempting alternative is weaker here, and name the key tradeoff.
+
 ## Question types — produce a FREE MIX of these four. Vary it across the batch.
 
 1. "single_choice" — payload: { "options": string[4], "correctIndex": 0-3 }
 2. "ordering" — payload: { "items": string[] } — list 3-5 items ALREADY IN CORRECT ORDER
    (e.g. steps of a process, in the right sequence). The client shuffles them for display
-   and checks if the user can tap them back into this order — so the array order you give
+   and checks if the user can drag them back into this order — so the array order you give
    IS the answer key. Do not include a separate answer field.
 3. "matching" — payload: { "left": string[], "right": string[] } — 3-4 pairs. right[i]
    MUST be the correct match for left[i] (parallel arrays, matched by index). The client

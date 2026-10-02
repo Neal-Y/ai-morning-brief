@@ -27,7 +27,7 @@ function applyFeedbackBoost(
   const downCats = new Map<string, number>()
   for (const f of feedbackRows) {
     if (f.signal === 'up') upCats.set(f.categoryTag, (upCats.get(f.categoryTag) ?? 0) + 1)
-    else downCats.set(f.categoryTag, (downCats.get(f.categoryTag) ?? 0) + 1)
+    else if (f.signal === 'down') downCats.set(f.categoryTag, (downCats.get(f.categoryTag) ?? 0) + 1)
   }
   return classified.map((a) => {
     const cat = a.classification.category

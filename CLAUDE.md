@@ -25,7 +25,8 @@
 - **Quiz / Activity 搬上 Web PWA（2026-09-07，commit `ebf73c6`）**：因為 `app/` 的 EAS Build/TestFlight 延後，把 RN app 的 Quiz + Activity 分頁整套搬進 `web/`，PWA 現在也是四分頁：Quiz `/quiz` / Feed `/` / Library `/library` / Activity `/activity`，變成主力 client。刻意不動的部分：`/` 仍是 Feed（PWA `start_url` + push 通知落地頁）、`web/public/sw.js` 沒改、manifest + `<title>` 品牌名當時維持「Morning Brief」（**2026-09-30 已統一成「Sift」**：manifest name/short_name、`<title>` + `apple-mobile-web-app-title`、Feed header 與啟動畫面的 SiftMark 字標、推播預設標題；已安裝的主畫面標籤與圖示要刪掉重加才會變，而 iOS 刪 PWA 會清掉 `mb_device_id`，所以刻意沒要求重裝）、`theme_color`/`background_color`/`<meta name="theme-color">` 三處當時仍是 `#14110D`（2026-09-29 Signal 改版後是 `#0B121A`）。細節見系統架構、功能狀態、Project Structure、Key Design Decisions #8。
 - **Quiz 追問歷史其實從沒存活過（2026-09-07 發現）**：舊文件寫的「quiz 用合成 `articleId=quiz-${id}` 掛進 `conversations` table」從沒真的動起來——`api/ask-history.ts` 的 `isArticleId` 只收 16 位 hex，`quiz-6` 一律 400；就算放寬 regex，`conversations.article_id` 對 `articles.id` 的 FK 是真的有 enforce，塞不存在的文章 id 會 500。`app/` 的 `saveAskHistory` 把這個 400 吞進空 `catch {}`，所以整個 Expo Go 封測期間 quiz 追問歷史都靜默沒存到；`/api/ask` streaming 本身不吃 `articleId`，問答當下沒事，只有歷史沒存。web/ 這次改用 `web/src/askHistory.ts`：quiz 對話存 localStorage，文章對話不變，**沒有動任何後端檔案**。**2026-09-29 `app/` 也修了**：同一招，quiz 對話改存 AsyncStorage（`sift_quiz_ask_quiz-<id>`），文章對話的 save 失敗改成 `console.warn` 不再空 catch。見 Key Design Decision #8 修正版。
 - **Web 視覺改版「Signal」（2026-09-29）**：配色從暖棕＋餘燼橘換成 app icon 的深墨藍（`#0B121A`）＋琥珀（`#F5A524`）；材質改成圓角內縮卡片、無框 tonal 按鈕、毛玻璃 bottom nav 與 feedback dock（`backdrop-filter`）；🔥⚡ emoji 換成 SVG（`web/src/components/icons.tsx`）；全域關掉 tap highlight / 長按選字。字體與版面模型（Issue 6 的 extended root + absolute nav/dock）都沒動。`app/` 擱置中，**沒有**跟著改——`app/src/theme.ts` 現在仍是舊暖棕，撿回 app 時要先同步。細節見 `docs/FRONTEND_FIX_LOG.md` Issue 18
-- **早晨流程（2026-09-29）**：簡報讀完的結束頁有「去答今天的判斷題」直達 `/quiz`；滑錯可按「上一篇」回去，並用 `POST /api/feedback { signal: 'clear' }` 撤回該篇 👍👎（不讓誤滑污染 classifier 偏好）；streak 統一見 Key Design Decision #5
+- **閱讀體驗（2026-10-02）**：Web「下一篇」與左右滑只記 `read`；明確按「多看這類／少看這類」才記偏好。已讀每台裝置、文章、台北日去重，撤票保留閱讀日期；偏好最近 20 筆與門檻 10 筆只計 up/down。卡片先顯示摘要與工程影響，背景可展開。通知、回前景與台北跨日會刷新簡報，同日保留進度，跨日換新簡報。完成頁和本週回顧可唯讀查看錯題答案與解析，不新增作答或 XP。
+- **早晨流程（2026-09-29，閱讀手勢已由上列更新）**：簡報讀完的結束頁有「去答今天的判斷題」直達 `/quiz`；滑錯可按「上一篇」回去，並用 `POST /api/feedback { signal: 'clear' }` 撤回該篇 👍👎（不讓誤滑污染 classifier 偏好）；streak 統一見 Key Design Decision #5
 - **device_id 不跨 client 同步**：web 用 localStorage `mb_device_id`，app 用 AsyncStorage `sift_device_id`，這次 web port 沒有做身分遷移——Activity 等個人化歷史在 web 上從零開始算，是刻意決定，不是漏做。
 
 ---
@@ -58,7 +59,7 @@ API：全部是 Vercel Edge functions（root `api/*.ts`，raw Turso HTTP，無 N
   ├─ GET/POST /api/ask-history   # api/ask-history.ts — per-(article, device) conversations 讀 / upsert messages JSON
   ├─ POST     /api/push-subscribe# api/push-subscribe.ts — 寫 push_subscriptions
   ├─ POST     /api/save          # api/save.ts — 查 article + Notion dedupe（Article ID lookup + DB sync lock）+ upsert saves
-  ├─ POST     /api/feedback      # api/feedback.ts — up/down（delete-then-insert，同 articleId 只留最新）
+  ├─ POST     /api/feedback      # api/feedback.ts — read/up/down/clear（交易內記已讀與更新偏好，撤票保留已讀）
   ├─ POST     /api/unsave        # api/unsave.ts — 硬刪除 saves row（DELETE；不動 articles、不動 Notion page）
   ├─ POST     /api/quiz-attempt  # api/quiz-attempt.ts — 寫入 quiz_attempts（quizId / deviceId / correct）
   ├─ POST     /api/quiz-report   # api/quiz-report.ts — 回報爛題（quiz_reports，表由此處 CREATE TABLE IF NOT EXISTS 自建）
@@ -96,10 +97,10 @@ React Native App「Sift」(app/) — 暫時擱置（非凍結，程式碼保留�
 | Turso DB 寫入 | ✅ | article id = SHA-256(url).slice(0,16)；client 用 `https://` 而非 `libsql://`（serverless friendly） |
 | Vercel 部署 | ✅ | 全部 API 都是 Edge function（`api/*.ts`）；2026-10-01 起沒有 Node/Hono 後端 |
 | PWA 卡片 UI | ✅ | iPhone standalone 已穩定，細節見 `docs/FRONTEND_FIX_LOG.md` |
-| 👍👎 → DB | ✅ | delete-then-insert 防誤按；Edge Runtime（2026-04-26 從 Hono 搬出，原本 504 timeout） |
+| 已讀／👍👎 → DB | ✅ | 已讀與偏好分開，交易內去重與替換，撤票保留歷史閱讀；Edge Runtime（2026-04-26 從 Hono 搬出，原本 504 timeout） |
 | 💬 追問（Haiku SSE） | ✅ | `api/ask.ts` Edge Runtime raw fetch。2026-09-30：quiz 送 `quiz` context（作答前不給解說、prompt 禁止爆雷；作答後帶你的答案 + 正確答案）；建議問題 quiz 依作答狀態、文章由 `mode: 'suggest'` 針對該篇生成並存 localStorage；鍵盤開啟時 AskSheet 貼齊 visualViewport（只限 sheet，不動 shell）。見 FRONTEND_FIX_LOG Issue 21 |
 | 💬 追問歷史 | ✅ | `api/ask-history.ts` Edge：GET hydrate / POST upsert；`conversations` 一篇一 row；AskSheet 開啟還原、turn 完成保存；Library 顯示 ask message count |
-| Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10；偏好附 system prompt 尾端 |
+| Classifier 吃 feedback | ✅ | 近 30 天 / 20 筆 / 門檻 10（只計 up/down）；偏好附 system prompt 尾端 |
 | 🔖 Notion 整合 | ✅ | Edge Runtime + raw fetch；失敗 graceful；dedupe 靠 DB `notion_page_id` 快取 + Notion `Article ID` 直查兩層。`/api/unsave` 是硬刪除（2026-08-05 修正，原本設計的 soft-hide 因欄位從未 migrate 進 DB 而一直是壞的，詳見 [docs/KNOWN_ISSUES.md](./docs/KNOWN_ISSUES.md)） |
 | Library 頁面 | ✅ | `/library` route + `GET /api/library` + `POST /api/unsave`（皆 Edge）。2026-10-01 提速：先畫 localStorage 快取（`mb_cache_library`，只在完整歷史載完後寫入）；沒快取時先抓 `?days=14` 畫首屏，再換成完整歷史（搜尋 / filter 是 client 端，需要全部） |
 | Web PWA 四分頁（Quiz/Feed/Library/Activity）| ✅ | 2026-09-07（commit `ebf73c6`）把 app/ 的 Quiz + Activity 分頁整套搬進 web/，PWA 現在是主力 client。`/` 仍是 Feed（start_url + push 落地頁），SW / manifest / theme_color 全部沒動 |
@@ -183,7 +184,7 @@ api/ask.ts               # Edge Runtime SSE for /api/ask（文章與 quiz 共用
 api/ask-history.ts       # Edge Runtime GET/POST → Turso HTTP API（per-(article, device) conversations upsert / fetch）
 api/push-subscribe.ts    # Edge Runtime POST → Turso HTTP API（寫 push_subscriptions）
 api/save.ts              # Edge Runtime POST → Notion dedupe (DB notion_page_id 快取 + Article ID 直查) + Turso HTTP API（upsert saves）
-api/feedback.ts          # Edge Runtime POST → Turso HTTP API（delete-then-insert feedback）
+api/feedback.ts          # Edge Runtime POST → Turso HTTP API（交易批次：read 去重、up/down 替換、clear 只撤票）
 api/unsave.ts            # Edge Runtime POST → Turso HTTP API（硬刪除 saves row；不動 articles、不動 Notion page）
 api/quiz-attempt.ts      # Edge Runtime POST → Turso HTTP API（寫 quiz_attempts，device_id 必填）
 api/quiz-report.ts       # Edge Runtime POST → 回報爛題（lazy CREATE TABLE quiz_reports + upsert）
@@ -199,6 +200,7 @@ web/
   src/router.ts         # navigate(path) helper（pushState + popstate dispatch）
   src/Shell.tsx          # app shell：extended root 上的 absolute layer + 常駐 bottom nav；path 由 main.tsx 傳入，Shell 自己不讀 window.location
   src/nav.ts             # NAV_ROW_H=54 / NAV_GESTURE_GAP=10（tab 列與 home bar 之間的不可點底座，防滑回主畫面誤觸）/ TABS / tabForPath() / NavInsetContext・useNavInset()；nav 高度用量測值發布，因為 env(safe-area-inset-bottom) 在 JS 讀不到 px 數字
+  src/useFeed.ts        # 通知／回前景／台北跨日刷新；防晚到舊回應覆蓋新簡報
   src/feedLoader.ts     # 開 App 時今日文章的來源順序：localStorage 快取 → 推播時 SW 預存的 Cache Storage → index.html 提早發的請求 → 一般 fetch
   src/App.tsx           # Feed 主畫面（仍是 `/`，PWA start_url + push 落地頁不可換）：swipe 物理 + streak + push permission gate；feedback dock 抬高到 nav 之上，TopChrome 拿掉重複的 Library 按鈕
   src/Library.tsx       # /library 頁面：filter / 日期分組 / 展開 LLM / saves tab；root height 改 100%（填滿 Shell layer），AskSheet z-index 提到 60
@@ -337,7 +339,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/push-subscribe` → `api/push-subscribe.ts`（寫 Turso）
 - `/api/save` → `api/save.ts`（查 article、Notion dedupe lookup、upsert saves，sync lock 防併發 double-create）
 - `/api/unsave` → `api/unsave.ts`（硬刪除 saves row；不動 articles、不動 Notion page）
-- `/api/feedback` → `api/feedback.ts`（delete-then-insert feedback）
+- `/api/feedback` → `api/feedback.ts`（交易批次：read 去重、up/down 替換、clear 只撤票）
 - `/api/quiz-attempt` → `api/quiz-attempt.ts`（寫 `quiz_attempts`；`X-Device-Id` header 必填，缺就 400）
 - **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。
 - **GET 也全搬了**：`/api/feed`（2026-09-29）、`/api/library`、`/api/quiz`、`/api/activity`（2026-10-01）都改成 Edge + raw Turso SQL，因為 Node function 的冷啟動就是使用者感受到的「開 App 卡一下」。quiz / activity 搬遷時用同一顆 seeded SQLite 逐 byte 比對新舊輸出（60 組 case 全一致）。搬完後 `src/api/app.ts`、`api/index.ts`、`src/api/server.ts`、`hono` / `@hono/node-server` 依賴全部刪除。

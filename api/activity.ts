@@ -115,7 +115,7 @@ export default async function handler(req: Request): Promise<Response> {
         args: [text(deviceId), int(cutoff)],
       },
       {
-        sql: `SELECT date(created_at, 'unixepoch', '+8 hours') AS day, count(*) AS n
+        sql: `SELECT date(created_at, 'unixepoch', '+8 hours') AS day, count(DISTINCT article_id) AS n
               FROM feedback WHERE device_id = ? AND created_at >= ? GROUP BY day`,
         args: [text(deviceId), int(cutoff)],
       },

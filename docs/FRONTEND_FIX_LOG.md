@@ -963,6 +963,14 @@ The heatmap is wider than the card and opens scrolled to the right end, so the l
 - **Notifications:** `sw.js` used to omit the navigation message when the target was `/`. An already-open Quiz or Library therefore stayed there after a morning notification. All targets now use the existing in-app navigation listener; reminder and cold-open behavior stay intact.
 - **Regression checks:** mounted-App tests mix rapid buttons, keys, and repeated swipe completion and assert one feedback plus one advance. VM tests execute the actual SW notification handler for warm and cold opens. These tests fail on the old behavior and pass with the fixes. Actual iPhone notification delivery still requires a device check.
 
+## Issue 30: Reading without voting, useful first screen, and return visits (2026-10-02)
+
+- Next and horizontal swipes now record a neutral read; only explicit preference buttons send up/down. ArrowRight advances neutrally; ArrowLeft goes back and withdraws any explicit vote while preserving the read day. All advance paths retain the shared transition lock.
+- Cards show the summary and engineering impact first. Background/reason live in a native disclosure. Observe the full content wrapper so opening it recalculates space above the dock; reset disclosure and scrolling on article change.
+- `useFeed` refreshes on foreground/pageshow, notification and Taipei midnight. Foreground events coalesce; a publication notification supersedes any older request and can consume the newly prefetched SW copy. Notification fetches and SW push prefetch use a fresh query URL to avoid the CDN's earlier empty-day response; the SW still stores under the canonical date key. Same-day refresh preserves position/reactions; a new day restores only that day's session. Old responses and stale empty responses cannot erase a displayed brief.
+- Completion and weekly review can show missed questions and explanations through a shared read-only view. It does not mount answer controls or send attempts; old weekly caches without question details show a fallback.
+- Regression coverage includes midnight, late responses, notification during pending fetch, rapid neutral advance, read/vote SQL behavior, all four review answer types and unchanged attempts/XP/session. iPhone standalone notification delivery still needs a physical-device check.
+
 ## What Was Intentionally Not Changed
 
 - ~~`lastReadAgo="today"` placeholder~~: removed from the header in Issue 18 along with the streak row redesign.
@@ -971,6 +979,8 @@ The heatmap is wider than the card and opens scrolled to the right end, so the l
 
 ```bash
 source ~/.nvm/nvm.sh && nvm use 20
+npm test
+npm run typecheck
 npm run build
 
 cd web

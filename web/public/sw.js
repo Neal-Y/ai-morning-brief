@@ -23,7 +23,9 @@ function taipeiDate() {
 // ever served from cache behind the page's back (FRONTEND_FIX_LOG Issue 14).
 async function prefetchTodaysFeed() {
   const url = `/api/feed?date=${taipeiDate()}`
-  const res = await fetch(url)
+  // The canonical URL may still hold a pre-publication empty CDN response.
+  // Fetch a distinct URL, then store under the canonical key the page reads.
+  const res = await fetch(`${url}&refresh=${Date.now()}`, { cache: 'no-store' })
   if (!res.ok) return
   const body = await res.clone().json()
   if (!Array.isArray(body.articles) || body.articles.length === 0) return

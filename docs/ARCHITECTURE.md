@@ -42,7 +42,7 @@ Both write to the same Turso DB. Neither reads the other's tables. Either can fa
 - Selection for the classifier (`pickForClassifier`, 2026-09-30): each source first gets its top `PER_SOURCE_CLASSIFIER_MIN = 2` by keyword score, then the best-scoring leftovers fill up to `CLASSIFIER_CAP = 24` (cost lever, see README Cost section). The old rule was top-N by keyword score only. It let generic words decide, and cut low-text sources (HN titles, short blog titles) before the LLM saw them.
 - The classifier sees the title, source, URL and the first 800 characters of the snippet (was 500).
 - One article failing does not abort the run — it falls back to bucket `DROP` (not a silent promotion; see [../CLAUDE.md](../CLAUDE.md) Key Design Decisions).
-- Preference context (`buildPreferenceContext()`, near-30-day feedback) is appended at the **end** of the system prompt, never the start/middle — preserves the Anthropic cache prefix across days. Cold-start threshold: 10 rows. Per-category negative signal needs ≥2 👎 to count.
+- Preference context (`buildPreferenceContext()`, near-30-day feedback) is appended at the **end** of the system prompt, never the start/middle — preserves the Anthropic cache prefix across days. Cold-start threshold: 10 up/down rows (read rows are filtered before both threshold and LIMIT 20). Per-category negative signal needs ≥2 👎 to count.
 
 Per-article output shape:
 
@@ -161,8 +161,10 @@ One LLM call, `QUIZ_COUNT = 5` questions per run, free mix of 4 types:
 | `matching` | `{ left: string[], right: string[] }` | `right[i]` matches `left[i]` by index — client shuffles `right` |
 | `fill_blank` | `{ template: string, blanks: string[], wordBank: string[] }` | template has `{{0}}`, `{{1}}`... placeholders; `wordBank` = blanks + distractors, shuffled client-side |
 
+- Questions start from a concrete operational scenario, symptom or constraint and ask for a decision, next step or tradeoff. Alternatives must be plausible in context; avoid bare definition recall. Existing stock is unchanged until generation next runs.
 - Dedup: `getRecentQuizPrompts()` pulls recent question prompts (window/row-count capped by `QUIZ_DEDUP_WINDOW_DAYS`/`QUIZ_DEDUP_MAX_ROWS` in `config.ts`), appended at the **end** of `QUIZ_SYSTEM` as an "AVOID REPEATING" block — same cache-prefix-preserving technique as the classifier's preference context. Do not move it to the start/middle.
 - Web client keeps today's set + progress in localStorage `mb_quiz_session` (keyed by Taipei date), so leaving the Quiz tab doesn't refetch — a refetch would reshuffle the set, since `/api/quiz` serves unattempted questions first.
+- Completion and weekly missed-question reviews show correct answers/explanations without logging attempts, changing XP or changing the saved daily session.
 - Every generated item is validated (`isValidPayload`) before being accepted — malformed items are dropped with a `console.warn`, not silently coerced. If the whole batch validates to 0 items, the pipeline throws (retried once via `withRetry`, then fails the GitHub Actions run).
 - Output language: Traditional Chinese for question text, options, explanations. English retained only for established technical terms.
 
@@ -188,7 +190,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 | Table | Key columns | Notes |
 |---|---|---|
 | `articles` | `id` (SHA-256(url).slice(0,16)) pk, `url` unique, `score`, `renderLevel`, `categoryTag`, `skillTags` (JSON string, unused by classifier today), `briefDate` | No `device_id` — articles are global, not per-user |
-| `feedback` | `articleId` fk, `signal` ('up'\|'down'), `deviceId` | delete-then-insert on write — same (device, article) pair only ever has the latest signal |
+| `feedback` | `articleId` fk, `signal` ('read'\|'up'\|'down'), `deviceId` | `read`: one per device/article/Taipei day. Votes: latest up/down, replaced inside one conditional transaction. Clearing votes preserves historical read days. Existing signal is TEXT; no migration. Any future unique vote index must exclude read rows |
 | `saves` | `articleId` fk, `deviceId`, `notionPageId` | unique on `(deviceId, articleId)`. Unsave is a **hard delete** (`DELETE FROM saves`, fixed 2026-08-05 — see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) for why an earlier soft-delete design never actually worked). Safe because Notion dedupe checks Notion directly (`findSavePageByArticleId`), not this row — re-saving after unsave still finds and reuses the same Notion page |
 | `conversations` | `articleId` fk, `deviceId`, `messages` (JSON), `messageCount`, `model` | unique on `(articleId, deviceId)`. Full-overwrite on save, not append-diff. `/api/library` selects `messageCount` only — never loads `messages`. FK to `articles.id` **is enforced** — a synthetic `quiz-${id}` (or any non-existent 16-hex id) cannot be written here; see [KNOWN_ISSUES.md](./KNOWN_ISSUES.md) |
 | `quizzes` | `type`, `category`, `prompt`, `payload` (JSON, shape per `type`), `explanation` | No `deviceId` — quizzes are global, like articles |
@@ -205,7 +207,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 | Route | Query params | Returns |
 |---|---|---|
 | `GET /api/library` (`api/library.ts`, moved from Hono 2026-10-01) | `days` (optional, 1–365) | `{ articles, hasMore? }`: non-OMIT articles newest first, joined in JS with this device's feedback / saved / notionSynced / askMessageCount. The join reads `message_count` only, never the messages JSON. One Turso pipeline round trip. With `?days=N` it returns only the latest N brief dates plus `hasMore`, which the client uses for a fast first paint |
-| `GET /api/weekly` (`api/weekly.ts`, 2026-09-30) | — (`X-Device-Id`) | This week's review (Mon 00:00 Taipei → now): `{ weekLabel, daysElapsed, activeDays, read, answered, correct, lastWeek: {answered, correct}, weakCategories[≤3], missed[≤5], saved[≤5] }`. One Turso pipeline (three statements), `no-store` |
+| `GET /api/weekly` (`api/weekly.ts`, 2026-09-30) | — (`X-Device-Id`) | This week's review (Mon 00:00 Taipei → now): `{ weekLabel, daysElapsed, activeDays, read, answered, correct, lastWeek: {answered, correct}, weakCategories[≤3], missed[≤5], saved[≤5] }`. One Turso pipeline (three statements), `no-store`. Each missed item has optional `question: RawQuizItem` for read-only answer/explanation review; only the five returned misses include payloads. `read` counts distinct articles per Taipei day |
 | `GET /api/feed` (`api/feed.ts`) | `date` (YYYY-MM-DD, default today in Taipei; anything else → 400) | `{ date, articles: RawArticle[] }` (camelCase, numeric `score`, ISO `classifiedAt`). `Cache-Control` is `s-maxage=300, swr=300` when the day has articles and `s-maxage=30` when it is empty |
 
 | `GET /api/quiz` (`api/quiz.ts`, moved from Hono 2026-10-01) | `count` (default 5, max 20), `type` (comma list) | `{ quizzes: RawQuizItem[] }` (+ `review: boolean`); selection order in the Quiz section above. Rows with malformed payload JSON are skipped, not 500'd. `no-store` |
@@ -220,7 +222,7 @@ No account system. `device_id` (client-generated UUID, `X-Device-Id` header, spo
 | `POST /api/push-subscribe` | subscription object | Writes `push_subscriptions` |
 | `POST /api/save` | `{ articleId, userNote? }` | Notion dedupe (DB `notion_page_id` cache, else direct Article ID lookup via `findSavePageByArticleId`) + upsert `saves` |
 | `POST /api/unsave` | `{ articleId }` | Hard delete the `saves` row (`DELETE`) — never touches `articles` or the Notion page |
-| `POST /api/feedback` | `{ articleId, signal: 'up' \| 'down' \| 'clear' }` | `up` / `down`: delete-then-insert `feedback`. `clear` (2026-09-29, swipe undo): only delete this device's row |
+| `POST /api/feedback` | `{ articleId, signal: 'read' \| 'up' \| 'down' \| 'clear' }` | One conditional transaction: `read` inserts once per device/article/Taipei day; up/down also record a read and replace only votes; clear removes only votes. Legacy vote days are preserved as reads before replacement/deletion. Read rows count for activity/reminders/idle checks, but never for preference thresholds or the most recent 20 votes |
 | `POST /api/quiz-attempt` | `{ quizId, correct }` | Insert `quiz_attempts`. Since 2026-09-30 the web sends this when the question is answered, not on 「下一題」 |
 | `POST /api/quiz-report` | `{ quizId, reason }` | Create `quiz_reports` if missing, then upsert on `(quiz_id, device_id)` |
 

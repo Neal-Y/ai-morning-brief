@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client'
 import { drizzle } from 'drizzle-orm/libsql'
-import { and, count, desc, eq, gte } from 'drizzle-orm'
+import { and, count, desc, eq, gte, inArray } from 'drizzle-orm'
 import * as schema from './schema.js'
 import { articles, feedback, quizReports, quizzes } from './schema.js'
 
@@ -36,9 +36,13 @@ const FEEDBACK_MAX_ROWS = 20
 export async function getRecentFeedback(deviceId?: string): Promise<FeedbackRow[]> {
   const windowStart = new Date(Date.now() - FEEDBACK_WINDOW_DAYS * 24 * 60 * 60 * 1000)
 
-  const whereClause = deviceId
-    ? and(gte(feedback.createdAt, windowStart), eq(feedback.deviceId, deviceId))
-    : gte(feedback.createdAt, windowStart)
+  // Reading is activity, never a preference. Filter before LIMIT/threshold so
+  // neutral reads cannot crowd out votes or enable preference learning.
+  const whereClause = and(
+    gte(feedback.createdAt, windowStart),
+    inArray(feedback.signal, ['up', 'down']),
+    deviceId ? eq(feedback.deviceId, deviceId) : undefined,
+  )
 
   const rows = await db
     .select({
@@ -119,7 +123,7 @@ export async function getReportedQuizzes(): Promise<ReportedQuiz[]> {
 // The pipelines skip their LLM calls when nobody would read the output.
 
 /**
- * Most recent sign that anyone is using the app: a 👍/👎, a quiz answer, or an
+ * Most recent sign that anyone is using the app: a read/👍/👎, a quiz answer, or an
  * app open. Opening the Feed in the installed PWA re-posts the push
  * subscription (web/src/App.tsx → /api/push-subscribe), which rewrites
  * `push_subscriptions.updated_at` — so a bare open counts, not only a swipe.

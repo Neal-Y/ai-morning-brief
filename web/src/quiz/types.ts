@@ -67,7 +67,7 @@ function isFillBlankPayload(p: Record<string, unknown>): p is { template: string
     blanks.every(b => wordBank.includes(b as string))
 }
 
-function mapApiItem(item: RawQuizItem): Quiz | null {
+export function mapApiQuiz(item: RawQuizItem): Quiz | null {
   const base = {
     id: String(item.id),
     category: item.category,
@@ -79,6 +79,7 @@ function mapApiItem(item: RawQuizItem): Quiz | null {
     review: item.review === true,
   }
   const p = item.payload
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return null
   if (item.type === 'single_choice' && isSingleChoicePayload(p)) {
     return { ...base, type: 'single_choice', options: p.options, correctIndex: p.correctIndex }
   }
@@ -101,7 +102,7 @@ function mapApiItem(item: RawQuizItem): Quiz | null {
  */
 export async function loadQuizzes(count = 5): Promise<Quiz[]> {
   const raw = await fetchQuizzes(count)
-  return raw.map(mapApiItem).filter((q): q is Quiz => q !== null)
+  return raw.map(mapApiQuiz).filter((q): q is Quiz => q !== null)
 }
 
 /** Fisher-Yates; retries if the shuffle happens to equal the identity order. */

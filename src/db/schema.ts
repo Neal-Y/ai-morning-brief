@@ -22,7 +22,7 @@ export const articles = sqliteTable('articles', {
 export const feedback = sqliteTable('feedback', {
   id: integer('id', { mode: 'number' }).primaryKey({ autoIncrement: true }),
   articleId: text('article_id').notNull().references(() => articles.id),
-  signal: text('signal').notNull(),
+  signal: text('signal').notNull(), // 'read' = daily activity; 'up'/'down' = preference
   deviceId: text('device_id'),
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
 })
