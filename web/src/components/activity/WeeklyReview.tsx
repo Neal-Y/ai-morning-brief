@@ -2,6 +2,8 @@ import { THEME_DARK } from '../../theme.ts'
 import type { WeeklyData } from '../../api.ts'
 import { navigate } from '../../router.ts'
 import { Q } from '../quiz/tokens.ts'
+import { QuizReview } from '../quiz/QuizReview.tsx'
+import { mapApiQuiz } from '../../quiz/types.ts'
 
 const T = THEME_DARK
 
@@ -54,16 +56,16 @@ export function WeeklyReview({ data }: { data: WeeklyData }) {
       )}
 
       {data.missed.length > 0 && (
-        <Block title="這週答錯的題" note="會在複習時再出現">
+        <Block title="這週答錯的題" note="點開看解析">
           {data.missed.map(m => (
-            // Padding on the row, clamp on an inner block: line-clamp on an
-            // element with padding lets the third line bleed into the padding.
-            <div key={m.quizId} style={{ padding: '8px 0', borderTop: `1px solid ${T.ruleSoft}` }}>
-              <div style={{
-                fontFamily: T.sans, fontSize: 13, lineHeight: 1.5, color: T.inkMuted,
-                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              }}>{m.prompt}</div>
-            </div>
+            <details key={m.quizId} style={{ borderTop: `1px solid ${T.ruleSoft}` }}>
+              <summary style={{ cursor: 'pointer', padding: '12px 0', color: T.inkMuted }}>
+                <span style={{ fontFamily: T.sans, fontSize: 13, lineHeight: 1.5 }}>{m.prompt}</span>
+              </summary>
+              <div style={{ padding: '8px 0 16px' }}>
+                <QuizReview quiz={m.question ? mapApiQuiz(m.question) : null} />
+              </div>
+            </details>
           ))}
         </Block>
       )}

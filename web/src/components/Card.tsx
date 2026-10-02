@@ -2,7 +2,7 @@ import type { Article } from '../types.ts'
 import type { Theme } from '../theme.ts'
 import { TAG_COLORS } from '../theme.ts'
 import { useLayoutEffect, useRef, useState } from 'react'
-import { IconBolt, IconSparkle } from './icons.tsx'
+import { IconBolt } from './icons.tsx'
 
 interface CategoryTagProps {
   tag: string
@@ -40,21 +40,28 @@ interface ArticleCardProps {
 
 export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }: ArticleCardProps) {
   const tintOpacity = Math.min(Math.abs(swipeX) / 200, 0.35)
-  const tintColor = swipeX > 0 ? theme.positive : theme.negative
+  const tintColor = theme.accent
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const detailsRef = useRef<HTMLDetailsElement | null>(null)
+  useLayoutEffect(() => {
+    if (bodyRef.current) bodyRef.current.scrollTop = 0
+    if (detailsRef.current) detailsRef.current.open = false
+  }, [article.id])
   const [needsBottomInset, setNeedsBottomInset] = useState(false)
 
   useLayoutEffect(() => {
     const el = bodyRef.current
-    if (!el) return
+    const content = contentRef.current
+    if (!el || !content) return
     const inset = parseFloat(bottomInset) || 0
     const update = () => {
-      setNeedsBottomInset(el.scrollHeight > el.clientHeight - inset + 1)
+      setNeedsBottomInset(content.getBoundingClientRect().height > el.clientHeight - inset + 1)
     }
     update()
     const ro = new ResizeObserver(update)
     ro.observe(el)
-    if (el.firstElementChild) ro.observe(el.firstElementChild)
+    ro.observe(content)
     window.addEventListener('resize', update)
     return () => {
       ro.disconnect()
@@ -89,8 +96,8 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           fontSize: Math.abs(swipeX) > 90 ? 32 : 28,
           fontWeight: 900,
           letterSpacing: 1,
-          color: swipeX > 0 ? theme.positive : theme.negative,
-          border: `${Math.abs(swipeX) > 90 ? 4 : 3}px solid ${swipeX > 0 ? theme.positive : theme.negative}`,
+          color: theme.accent,
+          border: `${Math.abs(swipeX) > 90 ? 4 : 3}px solid ${theme.accent}`,
           padding: '6px 14px',
           borderRadius: 12,
           transform: `rotate(${swipeX > 0 ? -8 : 8}deg) scale(${Math.abs(swipeX) > 90 ? 1.08 : 1})`,
@@ -98,7 +105,7 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           background: theme.card,
           transition: 'font-size 0.12s, transform 0.12s, border-width 0.12s',
         }}>
-          {swipeX > 0 ? 'More' : 'Less'}
+          下一篇
         </div>
       )}
 
@@ -137,79 +144,52 @@ export function ArticleCard({ article, theme, swipeX = 0, bottomInset = '0px' }:
           paddingBottom: needsBottomInset ? bottomInset : 0,
         } as React.CSSProperties}
       >
+        <div ref={contentRef} style={{ display: 'flow-root' }}>
         <div style={{ padding: '2px 20px 10px' }}>
           <h1 style={{
             fontFamily: theme.serif,
-            fontSize: 28, lineHeight: 1.16, fontWeight: 700,
+            fontSize: 23, lineHeight: 1.25, fontWeight: 700,
             color: theme.ink,
             letterSpacing: -0.4,
             margin: 0,
           }}>{article.title}</h1>
         </div>
 
-        <div style={{ padding: '0 20px 16px' }}>
+        <div style={{ padding: '2px 20px 16px' }}>
+          <div style={{ fontFamily: theme.sans, fontSize: 11, color: theme.inkFaint, marginBottom: 6 }}>發生什麼事</div>
           <p style={{
-            fontFamily: theme.serif,
-            fontSize: 16.5, lineHeight: 1.5, fontWeight: 400,
-            color: theme.inkMuted,
-            margin: 0,
+            fontFamily: theme.sans, fontSize: 15, lineHeight: 1.6,
+            color: theme.ink, margin: 0,
           }}>{article.summary}</p>
         </div>
 
-        <div style={{ height: 1, background: theme.ruleSoft, margin: '0 20px' }} />
-
-        <div style={{ padding: '14px 20px 8px' }}>
+        {(article.engineeringImpact || article.reason) && (
           <div style={{
-            fontFamily: theme.mono, fontSize: 11, fontWeight: 600,
-            color: theme.inkFaint, letterSpacing: 1,
-            textTransform: 'uppercase', marginBottom: 6,
-          }}>Context</div>
-          <p style={{
-            fontFamily: theme.sans, fontSize: 16, lineHeight: 1.6,
-            color: theme.ink, margin: 0,
-          }}>{article.context}</p>
-        </div>
-
-        {article.reason && (
-          <div style={{ padding: '4px 20px 14px', display: 'flex', alignItems: 'center', gap: 7, color: theme.accent }}>
-            <span style={{ display: 'inline-flex', flexShrink: 0 }}><IconSparkle /></span>
-            <span style={{
-              fontFamily: theme.sans, fontSize: 14,
-              color: theme.accent, fontWeight: 500,
-            }}>{article.reason}</span>
+            margin: '0 12px 14px', background: theme.raised,
+            boxShadow: theme.highlight, borderRadius: 18, padding: '14px 16px',
+          }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 6, color: theme.accent,
+              fontFamily: theme.sans, fontSize: 12, fontWeight: 700,
+            }}><IconBolt />對誰有用、要做什麼</div>
+            <p style={{
+              fontFamily: theme.sans, fontSize: 15, lineHeight: 1.6,
+              color: theme.ink, margin: '8px 0 0', fontWeight: 500,
+            }}>{article.engineeringImpact || article.reason}</p>
           </div>
         )}
 
-        {article.skillTags.length > 0 && (
-          <div style={{ padding: '0 20px 12px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {article.skillTags.map(t => (
-              <span key={t} style={{
-                fontFamily: theme.mono, fontSize: 11,
-                color: theme.inkMuted,
-                letterSpacing: 0.3,
-              }}>{t}</span>
-            ))}
-          </div>
+        {(article.context || article.reason) && (
+          <details ref={detailsRef} style={{ margin: '0 20px 20px', color: theme.inkMuted }}>
+            <summary style={{
+              fontFamily: theme.sans, fontSize: 13, padding: '10px 0', cursor: 'pointer',
+              borderTop: `1px solid ${theme.ruleSoft}`,
+            }}>背景與推薦理由</summary>
+            {article.context && <p style={{ fontFamily: theme.sans, fontSize: 14, lineHeight: 1.65, margin: '6px 0 12px' }}>{article.context}</p>}
+            {article.reason && <p style={{ fontFamily: theme.sans, fontSize: 13, lineHeight: 1.6, color: theme.accent, margin: 0 }}>{article.reason}</p>}
+            {article.skillTags.length > 0 && <div style={{ fontFamily: theme.mono, fontSize: 11, marginTop: 12 }}>{article.skillTags.join(' · ')}</div>}
+          </details>
         )}
-
-        <div style={{
-          margin: '4px 12px 20px',
-          background: theme.raised,
-          boxShadow: theme.highlight,
-          borderRadius: 18,
-          padding: '14px 16px',
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            color: theme.accent,
-            fontFamily: theme.mono, fontSize: 11, fontWeight: 700,
-            letterSpacing: 1,
-            textTransform: 'uppercase',
-          }}><IconBolt />Engineering Impact</div>
-          <p style={{
-            fontFamily: theme.sans, fontSize: 16, lineHeight: 1.55,
-            color: theme.ink, margin: '8px 0 0', fontWeight: 500,
-          }}>{article.engineeringImpact}</p>
         </div>
       </div>
     </div>

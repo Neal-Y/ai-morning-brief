@@ -49,18 +49,23 @@ declare global {
   interface Window { __siftFeed?: { date: string; promise: Promise<FeedResponse> } }
 }
 
-/** Network copy of today's feed: the early request from index.html when it matches, else a fresh fetch. */
-export function fetchFeed(date: string): Promise<FeedResponse> {
+// Notifications announce a new publication: bypass both the early request and
+// the canonical URL's short-lived empty CDN response. Normal opens retain the
+// shared URL and the early-request optimization.
+export function fetchFeed(date: string, options: { fresh?: boolean } = {}): Promise<FeedResponse> {
   const early = window.__siftFeed
   window.__siftFeed = undefined // single use
+  if (options.fresh) return fetchFeedNow(date, true)
   if (early && early.date === date) {
     return early.promise.catch(() => fetchFeedNow(date))
   }
   return fetchFeedNow(date)
 }
 
-async function fetchFeedNow(date: string): Promise<FeedResponse> {
-  const r = await apiFetch(feedUrl(date))
+async function fetchFeedNow(date: string, fresh = false): Promise<FeedResponse> {
+  const r = fresh
+    ? await apiFetch(`${feedUrl(date)}&refresh=${Date.now()}`, { cache: 'no-store' })
+    : await apiFetch(feedUrl(date))
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   return r.json() as Promise<FeedResponse>
 }

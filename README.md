@@ -32,7 +32,7 @@ AI 新聞量很大，但大部分跟「我明天寫 code 的決定」無關，�
 |---|---|
 | 05:47 | 出題管線生成 5 題新題目，避開近期出過的、被使用者回報過的題型 |
 | 07:07 | 文章管線抓 RSS，LLM 分類 → 選文 → 寫簡報 → 存 DB → **推播到 iPhone 鎖定畫面** |
-| 早上 | 點通知直接進簡報（推播時 Service Worker 已預先抓好內容，打開不用等）→ 滑卡 👍👎 → 讀完一鍵去答題 |
+| 早上 | 點通知直接進簡報（推播時 Service Worker 已預先抓好內容，打開不用等）→ 下一篇／滑卡閱讀，需要時明確按 👍👎 → 讀完一鍵去答題 |
 | 15:53 | 今天還沒讀也沒答題的裝置，才會收到一則提醒，文案帶著連續天數 |
 
 ---
@@ -43,7 +43,7 @@ AI 新聞量很大，但大部分跟「我明天寫 code 的決定」無關，�
 
 <table>
   <tr>
-    <td align="center" width="33%"><img src="docs/images/feed.png" width="260"><br><b>簡報</b><br><sub>一次一張卡，LLM 寫的 Context 與 Engineering Impact；左右滑 = 👎 / 👍，回饋會影響明天的選文</sub></td>
+    <td align="center" width="33%"><img src="docs/images/feed.png" width="260"><br><b>簡報</b><br><sub>一次一張卡，先看摘要與工程影響，背景點開再讀；下一篇與滑動只記已讀，明確的 👍👎 才影響選文</sub></td>
     <td align="center" width="33%"><img src="docs/images/ask.png" width="260"><br><b>追問</b><br><sub>對任何一篇或任何一題直接問 Claude，串流回答，對話歷史會保存</sub></td>
     <td align="center" width="33%"><img src="docs/images/quiz.png" width="260"><br><b>判斷題</b><br><sub>答完立刻給解說與 XP；答題前追問不會被爆雷</sub></td>
   </tr>

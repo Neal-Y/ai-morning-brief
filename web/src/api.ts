@@ -119,7 +119,13 @@ export interface WeeklyData {
   correct: number
   lastWeek: { answered: number; correct: number }
   weakCategories: { category: string; wrong: number; total: number }[]
-  missed: { quizId: number; category: string; prompt: string }[]
+  missed: {
+    quizId: number
+    category: string
+    prompt: string
+    /** Absent in older cached weekly reviews, or when a stored payload is unreadable. */
+    question?: RawQuizItem
+  }[]
   saved: { id: string; title: string }[]
 }
 

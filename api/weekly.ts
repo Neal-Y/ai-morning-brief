@@ -65,6 +65,27 @@ function describe(a: Record<string, string | null>): string {
   } catch { /* fall back to the prompt */ }
   return prompt
 }
+
+// Only the five displayed misses get their answer material in the response.
+// Keep the existing prompt summary for old clients and the compact list row.
+function questionForReview(a: Record<string, string | null>) {
+  try {
+    const payload: unknown = JSON.parse(a['payload'] ?? '{}')
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return undefined
+    return {
+      id: Number(a['quiz_id']),
+      type: a['type'] ?? '',
+      category: a['category'] ?? '',
+      prompt: a['prompt'] ?? '',
+      payload,
+      explanation: a['explanation'] ?? '',
+      sourceName: null,
+      sourceUrl: null,
+    }
+  } catch {
+    return undefined
+  }
+}
 const int = (n: number) => ({ type: 'integer', value: String(n) })
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -94,14 +115,14 @@ export default async function handler(req: Request): Promise<Response> {
     const [attempts = [], reads = [], saved = []] = await query([
       {
         // Two weeks of attempts is small (≤ ~70 rows at 5/day); the cap is a guard.
-        sql: `SELECT qa.quiz_id, qa.correct, qa.answered_at, q.category, q.prompt, q.type, q.payload
+        sql: `SELECT qa.quiz_id, qa.correct, qa.answered_at, q.category, q.prompt, q.type, q.payload, q.explanation
               FROM quiz_attempts qa JOIN quizzes q ON q.id = qa.quiz_id
               WHERE qa.device_id = ? AND qa.answered_at >= ?
               ORDER BY qa.answered_at DESC LIMIT 500`,
         args: [text(deviceId), int(lastWeekStart)],
       },
       {
-        sql: `SELECT date(created_at, 'unixepoch', '+8 hours') AS day, count(*) AS n
+        sql: `SELECT date(created_at, 'unixepoch', '+8 hours') AS day, count(DISTINCT article_id) AS n
               FROM feedback WHERE device_id = ? AND created_at >= ? GROUP BY day`,
         args: [text(deviceId), int(weekStart)],
       },
@@ -135,12 +156,17 @@ export default async function handler(req: Request): Promise<Response> {
     // Distinct questions missed this week, newest first (they're also what the
     // spaced-review schedule will bring back).
     const seen = new Set<string>()
-    const missed: { quizId: number; category: string; prompt: string }[] = []
+    const missed: {
+      quizId: number; category: string; prompt: string; question: ReturnType<typeof questionForReview>
+    }[] = []
     for (const a of thisWeek) {
       const id = a['quiz_id'] ?? ''
       if (isCorrect(a) || seen.has(id)) continue
       seen.add(id)
-      missed.push({ quizId: Number(id), category: a['category'] ?? '', prompt: describe(a) })
+      missed.push({
+        quizId: Number(id), category: a['category'] ?? '', prompt: describe(a),
+        question: questionForReview(a),
+      })
       if (missed.length === 5) break
     }
 
