@@ -41,6 +41,8 @@ export default async function handler(req: Request): Promise<Response> {
   if ((!suggestMode && !Array.isArray(messages)) || typeof articleTitle !== 'string' || typeof articleSummary !== 'string') {
     return jsonError('invalid_input', 400)
   }
+  const conversation = suggestMode ? [] : sanitizeMessages(messages)
+  if (!suggestMode && conversation.length === 0) return jsonError('invalid_messages', 400)
   const quiz = parseQuiz(body.quiz)
 
   const apiKey = process.env.ANTHROPIC_API_KEY
@@ -50,8 +52,8 @@ export default async function handler(req: Request): Promise<Response> {
 
   const systemPrompt = `${quiz ? quizPreamble(quiz) : `你是一位後端工程師的技術顧問，正在協助用戶深入閱讀一篇技術文章。
 
-文章：「${articleTitle}」
-摘要：${articleSummary}${articleContext ? `\n脈絡：${articleContext}` : ''}`}
+文章：「${clip(articleTitle, 300)}」
+摘要：${clip(articleSummary)}${articleContext ? `\n脈絡：${clip(articleContext)}` : ''}`}
 
 請用繁體中文回答，聚焦工程實務視角，簡潔有力（150字以內）。
 輸出要適合手機 bottom sheet 閱讀：
@@ -71,7 +73,7 @@ export default async function handler(req: Request): Promise<Response> {
       max_tokens: 512,
       stream: true,
       system: systemPrompt,
-      messages,
+      messages: conversation,
     }),
   })
 
@@ -86,6 +88,11 @@ export default async function handler(req: Request): Promise<Response> {
   const encoder = new TextEncoder()
   const decoder = new TextDecoder()
   let buffer = ''
+  // Only a stream that reaches message_stop is a complete answer. An error
+  // event (overloaded, etc.) or a dropped connection ends with [ERROR], so the
+  // client never saves half an answer as if it were the whole one.
+  let stopped = false
+  let failed = false
 
   const transform = new TransformStream<Uint8Array, Uint8Array>({
     transform(chunk, controller) {
@@ -98,6 +105,11 @@ export default async function handler(req: Request): Promise<Response> {
         if (!raw || raw === '[DONE]') continue
         try {
           const event = JSON.parse(raw)
+          if (event.type === 'message_stop') stopped = true
+          if (event.type === 'error') {
+            failed = true
+            console.error('[ask] Upstream stream error:', JSON.stringify(event.error ?? event).slice(0, 300))
+          }
           if (
             event.type === 'content_block_delta' &&
             event.delta?.type === 'text_delta' &&
@@ -109,7 +121,7 @@ export default async function handler(req: Request): Promise<Response> {
       }
     },
     flush(controller) {
-      controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      controller.enqueue(encoder.encode(stopped && !failed ? 'data: [DONE]\n\n' : 'data: [ERROR]\n\n'))
     },
   })
 
@@ -138,6 +150,25 @@ function jsonError(error: string, status: number): Response {
   return new Response(JSON.stringify({ ok: false, error }), {
     status, headers: { 'Content-Type': 'application/json', ...CORS },
   })
+}
+
+// Bound the conversation sent upstream (input tokens are the cost driver): the
+// most recent turns only, each clipped, valid roles only, starting with a user
+// turn and ending on the question being asked.
+export const MAX_ASK_MESSAGES = 20
+const MAX_ASK_CONTENT = 4000
+
+export function sanitizeMessages(raw: unknown): AskMessage[] {
+  if (!Array.isArray(raw)) return []
+  const valid = raw.flatMap((m): AskMessage[] => {
+    if (!m || typeof m !== 'object') return []
+    const { role, content } = m as Record<string, unknown>
+    if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string' || !content.trim()) return []
+    return [{ role, content: content.slice(0, MAX_ASK_CONTENT) }]
+  })
+  const recent = valid.slice(-MAX_ASK_MESSAGES)
+  while (recent.length > 0 && recent[0]!.role !== 'user') recent.shift()
+  return recent.length > 0 && recent[recent.length - 1]!.role === 'user' ? recent : []
 }
 
 // Bound every client-supplied field: they all end up in the system prompt.

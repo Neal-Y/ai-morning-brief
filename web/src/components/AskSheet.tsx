@@ -43,6 +43,8 @@ interface AskSheetProps {
   onHistorySaved?: (articleId: string, messageCount: number) => void
 }
 
+const INTERRUPTED_NOTE = '（回答中斷了，這段沒有存進紀錄，可以再問一次。）'
+const HISTORY_UNAVAILABLE_NOTE = '先前的追問紀錄暫時載入失敗；這次的對話不會覆蓋它，下次打開會再試一次。'
 const INTRO_MESSAGE: Message = {
   role: 'assistant',
   text: '讀完這篇，有幾個後端工程師視角的追問想跟你聊：',
@@ -306,6 +308,14 @@ export function AskSheet({
   const flushFrameRef = useRef<number | null>(null)
   const activeRequestRef = useRef<AbortController | null>(null)
   const historyLoadedArticleRef = useRef<string | null>(null)
+  // Set when this article's saved thread could not be loaded: a new turn must
+  // not be saved over a history we never saw (it would erase it).
+  const historyUnavailableRef = useRef<string | null>(null)
+  const sentWhileUnavailableRef = useRef(false)
+  // Callers pass a fresh callback each render; keep it out of the load
+  // effect's deps so a re-render never re-fetches (or re-retries) history.
+  const onHistorySavedRef = useRef(onHistorySaved)
+  onHistorySavedRef.current = onHistorySaved
   const sheetRef = useRef<HTMLDivElement>(null)
   const [contextExpanded, setContextExpanded] = useState(false)
   const keyboardFrame = useKeyboardFrame(sheetRef, visible)
@@ -403,8 +413,9 @@ export function AskSheet({
   }, [visible])
 
   const persistHistory = async (articleId: string, history: ApiMessage[]) => {
+    if (historyUnavailableRef.current === articleId) return
     const count = await saveAskHistory(articleId, history)
-    if (count !== null) onHistorySaved?.(articleId, count)
+    if (count !== null) onHistorySavedRef.current?.(articleId, count)
   }
 
   // Reset state when article changes
@@ -417,6 +428,8 @@ export function AskSheet({
     setHistoryLoading(false)
     setContextExpanded(false)
     historyLoadedArticleRef.current = null
+    historyUnavailableRef.current = null
+    sentWhileUnavailableRef.current = false
     shouldStickToBottomRef.current = true
   }, [article.id])
 
@@ -431,21 +444,32 @@ export function AskSheet({
         if (cancelled || article.id !== articleId) return
         historyLoadedArticleRef.current = articleId
         setHistoryLoading(false)
+        if (historyUnavailableRef.current === articleId) {
+          // A retry after a failed load. If turns were sent meanwhile the local
+          // thread no longer extends the saved one; keep saving off.
+          if (sentWhileUnavailableRef.current) return
+          historyUnavailableRef.current = null
+          setMessages(prev => prev.filter(m => m.text !== HISTORY_UNAVAILABLE_NOTE))
+        }
         if (history.length === 0) return
         setApiHistory(prev => prev.length > 0 ? prev : history)
         setMessages(prev => prev.some(m => m.role === 'user') ? prev : historyToMessages(history))
-        onHistorySaved?.(articleId, messageCount)
+        onHistorySavedRef.current?.(articleId, messageCount)
       })
       .catch(() => {
-        if (!cancelled) historyLoadedArticleRef.current = articleId
-        if (!cancelled) setHistoryLoading(false)
+        if (cancelled) return
+        // historyLoadedArticleRef stays unset so reopening the sheet retries.
+        historyUnavailableRef.current = articleId
+        setHistoryLoading(false)
+        setMessages(prev => prev.some(m => m.text === HISTORY_UNAVAILABLE_NOTE)
+          ? prev : [...prev, { role: 'assistant', text: HISTORY_UNAVAILABLE_NOTE }])
       })
 
     return () => {
       cancelled = true
       setHistoryLoading(false)
     }
-  }, [article.id, visible, onHistorySaved])
+  }, [article.id, visible])
 
   useEffect(() => () => stopActiveRequest(), [])
 
@@ -466,6 +490,8 @@ export function AskSheet({
   const sendMessage = async (text: string) => {
     if (loading || historyLoading || !text.trim()) return
 
+    if (historyUnavailableRef.current === article.id) sentWhileUnavailableRef.current = true
+    const previousApiHistory = apiHistory
     const newApiHistory: ApiMessage[] = [...apiHistory, { role: 'user', content: text }]
     streamedAssistantTextRef.current = ''
     shouldStickToBottomRef.current = true
@@ -499,6 +525,8 @@ export function AskSheet({
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let finished = false
+      let failed = false
 
       while (true) {
         const { done, value } = await reader.read()
@@ -511,7 +539,8 @@ export function AskSheet({
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           const raw = line.slice(6)
-          if (raw === '[DONE]') continue
+          if (raw === '[DONE]') { finished = true; continue }
+          if (raw === '[ERROR]') { failed = true; continue }
           try {
             streamedAssistantTextRef.current += JSON.parse(raw) as string
             scheduleAssistantFlush()
@@ -526,6 +555,17 @@ export function AskSheet({
       if (activeRequestRef.current === controller) {
         activeRequestRef.current = null
       }
+      if (!finished || failed) {
+        // Keep what arrived on screen, say it stopped, and leave both the
+        // saved thread and the next request's context without this turn.
+        const partial = streamedAssistantTextRef.current.trim()
+        setApiHistory(previousApiHistory)
+        setMessages(prev => [
+          ...prev.slice(0, -1),
+          { role: 'assistant', text: partial ? `${partial}\n\n${INTERRUPTED_NOTE}` : '抱歉，發生錯誤，請再試一次。' },
+        ])
+        return
+      }
       const completedHistory: ApiMessage[] = [
         ...newApiHistory,
         { role: 'assistant', content: streamedAssistantTextRef.current },
@@ -535,6 +575,7 @@ export function AskSheet({
     } catch (error) {
       cancelScheduledFlush()
       if ((error as Error).name === 'AbortError') return
+      setApiHistory(previousApiHistory)
       setMessages(prev => [
         ...prev.slice(0, -1),
         { role: 'assistant', text: '抱歉，發生錯誤，請再試一次。' },

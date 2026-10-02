@@ -963,13 +963,23 @@ The heatmap is wider than the card and opens scrolled to the right end, so the l
 - **Notifications:** `sw.js` used to omit the navigation message when the target was `/`. An already-open Quiz or Library therefore stayed there after a morning notification. All targets now use the existing in-app navigation listener; reminder and cold-open behavior stay intact.
 - **Regression checks:** mounted-App tests mix rapid buttons, keys, and repeated swipe completion and assert one feedback plus one advance. VM tests execute the actual SW notification handler for warm and cold opens. These tests fail on the old behavior and pass with the fixes. Actual iPhone notification delivery still requires a device check.
 
-## Issue 30: Reading without voting, useful first screen, and return visits (2026-10-02)
+## Issue 31: Reading without voting, useful first screen, and return visits (2026-10-02)
+
+(Numbered 30 when it was written; renumbered because Issue 30 already existed.)
 
 - Next and horizontal swipes now record a neutral read; only explicit preference buttons send up/down. ArrowRight advances neutrally; ArrowLeft goes back and withdraws any explicit vote while preserving the read day. All advance paths retain the shared transition lock.
 - Cards show the summary and engineering impact first. Background/reason live in a native disclosure. Observe the full content wrapper so opening it recalculates space above the dock; reset disclosure and scrolling on article change.
 - `useFeed` refreshes on foreground/pageshow, notification and Taipei midnight. Foreground events coalesce; a publication notification supersedes any older request and can consume the newly prefetched SW copy. Notification fetches and SW push prefetch use a fresh query URL to avoid the CDN's earlier empty-day response; the SW still stores under the canonical date key. Same-day refresh preserves position/reactions; a new day restores only that day's session. Old responses and stale empty responses cannot erase a displayed brief.
 - Completion and weekly review can show missed questions and explanations through a shared read-only view. It does not mount answer controls or send attempts; old weekly caches without question details show a fallback.
 - Regression coverage includes midnight, late responses, notification during pending fetch, rapid neutral advance, read/vote SQL behavior, all four review answer types and unchanged attempts/XP/session. iPhone standalone notification delivery still needs a physical-device check.
+
+## Issue 32: Interrupted Ask answers were saved as complete; unsent quiz answers were invisible (2026-10-02)
+
+- **Ask stream:** `api/ask.ts` used to end every stream with `[DONE]`, even after Anthropic sent an `error` event mid-answer, so the sheet saved half an answer as the whole one. The stream now ends with `[DONE]` only after `message_stop`; otherwise it ends with `[ERROR]`. AskSheet keeps the partial text on screen, adds 「回答中斷了…」, leaves the turn out of the next request's context and does not save it. Old cached clients ignore `[ERROR]` and behave as before.
+- **History load failure:** when `/api/ask-history` failed, the sheet treated it as an empty thread and the first new turn overwrote the saved conversation. Now a note is shown, saving is off for that thread, and reopening the sheet retries the load. Saving resumes only if nothing was sent in the meantime.
+- **History size:** the server keeps at most 40 messages (4,000 characters each, 60,000 total). The client used to send the whole thread, so from the 21st exchange every save failed silently. `trimForStorage()` keeps the newest turns within those limits, starting on a question. `/api/ask` also sends only the last 20 turns upstream and clips article fields, which bounds input-token cost.
+- **Unsent quiz answers:** a failed `POST /api/quiz-attempt` used to only log a warning. It is now recorded in localStorage (`mb_failed_attempts`, newest 50) and the Activity page shows how many answers did not reach the server. Failed answers are not resent: without an attempt id a retry could count one answer twice. The count shows whether a sync queue is worth building.
+- **Regression checks:** jsdom tests drive AskSheet through a complete answer, an `[ERROR]` mid-answer and a history-load failure; the last two fail on the old code. API tests cover `[DONE]` / `[ERROR]` endings and the message bounds.
 
 ## What Was Intentionally Not Changed
 

@@ -41,7 +41,8 @@ export type Quiz = SingleChoiceQuiz | OrderingQuiz | MatchingQuiz | FillBlankQui
 function isSingleChoicePayload(p: Record<string, unknown>): p is { options: string[]; correctIndex: number } {
   const options = p['options']
   return Array.isArray(options) && options.length === 4 &&
-    options.every(o => typeof o === 'string') && typeof p['correctIndex'] === 'number'
+    options.every(o => typeof o === 'string') &&
+    Number.isInteger(p['correctIndex']) && (p['correctIndex'] as number) >= 0 && (p['correctIndex'] as number) < 4
 }
 
 function isOrderingPayload(p: Record<string, unknown>): p is { items: string[] } {
@@ -64,7 +65,9 @@ function isFillBlankPayload(p: Record<string, unknown>): p is { template: string
   return typeof template === 'string' &&
     Array.isArray(blanks) && blanks.length >= 1 && blanks.every(b => typeof b === 'string') &&
     Array.isArray(wordBank) && wordBank.every(w => typeof w === 'string') &&
-    blanks.every(b => wordBank.includes(b as string))
+    // Chips are used once each: the bank must hold an answer as often as the
+    // blanks need it, or the question cannot be answered correctly.
+    blanks.every((b, i) => blanks.slice(0, i + 1).filter(x => x === b).length <= wordBank.filter(w => w === b).length)
 }
 
 export function mapApiQuiz(item: RawQuizItem): Quiz | null {

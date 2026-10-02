@@ -58,8 +58,27 @@ export async function loadAskHistory(articleId: string): Promise<AskHistory> {
   return { messages, messageCount: data.messageCount ?? messages.length }
 }
 
+// Same limits as api/ask-history.ts (MAX_MESSAGES / MAX_CONTENT_CHARS /
+// MAX_TOTAL_CHARS). The server rejects anything larger, so from the 21st
+// exchange on every save used to fail silently; keep the newest turns instead.
+export const MAX_SAVED_MESSAGES = 40
+const MAX_SAVED_CONTENT = 4000
+const MAX_SAVED_TOTAL = 60000
+
+export function trimForStorage(messages: AskMessage[]): AskMessage[] {
+  const clipped = messages.map(m => ({ role: m.role, content: m.content.slice(0, MAX_SAVED_CONTENT) }))
+  let start = Math.max(0, clipped.length - MAX_SAVED_MESSAGES)
+  let total = clipped.slice(start).reduce((n, m) => n + m.content.length, 0)
+  while (start < clipped.length && (total > MAX_SAVED_TOTAL || clipped[start]!.role !== 'user')) {
+    total -= clipped[start]!.content.length
+    start++
+  }
+  return clipped.slice(start)
+}
+
 /** Returns the persisted message count, or null when nothing was persisted. */
-export async function saveAskHistory(articleId: string, messages: AskMessage[]): Promise<number | null> {
+export async function saveAskHistory(articleId: string, allMessages: AskMessage[]): Promise<number | null> {
+  const messages = trimForStorage(allMessages)
   if (messages.length === 0) return null
 
   if (isQuizThread(articleId)) {

@@ -40,12 +40,40 @@ export async function fetchQuizzes(count = 5): Promise<RawQuizItem[]> {
 }
 
 /** Fire-and-forget: a failed attempt log must never block the quiz flow. */
+// Attempts that never reached the server (2026-10-02). Not resent — a retry
+// without an attempt id could count one answer twice — only recorded, so the
+// Activity page can show whether a sync queue is worth building.
+const FAILED_ATTEMPTS_KEY = 'mb_failed_attempts'
+const MAX_FAILED_ATTEMPTS = 50
+
+export interface FailedAttempt { quizId: number; correct: boolean; at: string; reason: string }
+
+export function readFailedAttempts(): FailedAttempt[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(FAILED_ATTEMPTS_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed as FailedAttempt[] : []
+  } catch {
+    return []
+  }
+}
+
+function recordFailedAttempt(quizId: number, correct: boolean, reason: string): void {
+  try {
+    const next = [...readFailedAttempts(), { quizId, correct, at: new Date().toISOString(), reason }]
+    localStorage.setItem(FAILED_ATTEMPTS_KEY, JSON.stringify(next.slice(-MAX_FAILED_ATTEMPTS)))
+  } catch { /* storage unavailable: nothing more we can do */ }
+}
+
 export async function submitQuizAttempt(quizId: number, correct: boolean): Promise<void> {
   try {
     const res = await apiFetch('/api/quiz-attempt', jsonInit({ quizId, correct }))
-    if (!res.ok) console.warn(`[api] submitQuizAttempt non-ok: ${res.status}`)
+    if (!res.ok) {
+      console.warn(`[api] submitQuizAttempt non-ok: ${res.status}`)
+      recordFailedAttempt(quizId, correct, `HTTP ${res.status}`)
+    }
   } catch (err) {
     console.warn('[api] submitQuizAttempt failed:', err)
+    recordFailedAttempt(quizId, correct, err instanceof Error ? err.message : 'network')
   }
 }
 
