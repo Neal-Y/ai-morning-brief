@@ -67,6 +67,8 @@ const int = (n: number) => ({ type: 'integer', value: String(n) })
 const placeholders = (n: number) => Array(n).fill('?').join(', ')
 
 const MAX_QUIZ_COUNT = 20
+// Upper bound on due reviews considered per request (bounded SQL IN list).
+const MAX_REVIEW_CANDIDATES = 100
 const QUIZ_COLUMNS = 'id, type, category, prompt, payload, explanation, source_name, source_url'
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -133,7 +135,11 @@ export default async function handler(req: Request): Promise<Response> {
 
     // ── round 2: reviews, fresh, recycle pool ────────────────────────────────
     const reviewCap = Math.min(REVIEW_MAX_PER_SET, count)
-    const candidates = reviewIds.slice(0, reviewCap * 3) // headroom for the type filter
+    // Reported questions are known now, so drop them before capping; the type
+    // filter is applied in SQL. Capping first let six reported/filtered misses
+    // hide every other due review (2026-10-02).
+    const reported = new Set(reportedIds)
+    const candidates = reviewIds.filter((id) => !reported.has(id)).slice(0, MAX_REVIEW_CANDIDATES)
     const attemptedArgs = attemptedIds.map(int)
 
     const round2: Stmt[] = []

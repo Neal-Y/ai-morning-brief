@@ -1,5 +1,5 @@
 import type { AIProvider, ArticleSummary, ArticleClassification, Category, Bucket, Recommendation, RenderLevel } from './provider.js';
-import { extractJson } from './provider.js';
+import { parseLlmJson } from './json.js';
 import { withRetry } from './retry.js';
 import { RETRY_DELAY_MS, CLASSIFIER_CONCURRENCY } from '../config.js';
 import type { FeedbackRow } from '../db/client.js';
@@ -215,13 +215,8 @@ const VALID_RENDER_LEVELS = new Set<string>(['FULL', 'LIGHT', 'OMIT']);
 const VALID_RECOMMENDATIONS = new Set<string>(['READ_NOW', 'SKIM', 'SKIP']);
 
 function parseClassification(raw: string): ArticleClassification {
-  const cleaned = extractJson(raw);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error(`Classifier returned invalid JSON: ${cleaned.slice(0, 150)}`);
-  }
+  const { value: parsed, repaired } = parseLlmJson(raw, 'Classifier');
+  if (repaired) console.warn('[classifier] Repaired malformed JSON from the classifier');
 
   const obj = parsed as Record<string, unknown>;
   const category = String(obj['category'] ?? '');

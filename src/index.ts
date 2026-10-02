@@ -13,29 +13,10 @@ import { db, getRecentFeedback, getQuizPoolSize, getLastActivityAt } from './db/
 import type { FeedbackRow } from './db/client.js';
 import { articles, pushSubscriptions } from './db/schema.js';
 import { getTaipeiDateString } from './date.js';
+import { applyFeedbackBoost } from './feedback-boost.js';
 
 // Size of one quiz set on the client (web/src/api.ts fetchQuizzes default).
 const QUIZ_SET_SIZE = 5
-
-/** Adjust classification scores based on per-user feedback history. */
-function applyFeedbackBoost(
-  classified: ClassifiedArticle[],
-  feedbackRows: FeedbackRow[],
-): ClassifiedArticle[] {
-  if (feedbackRows.length === 0) return classified
-  const upCats = new Map<string, number>()
-  const downCats = new Map<string, number>()
-  for (const f of feedbackRows) {
-    if (f.signal === 'up') upCats.set(f.categoryTag, (upCats.get(f.categoryTag) ?? 0) + 1)
-    else if (f.signal === 'down') downCats.set(f.categoryTag, (downCats.get(f.categoryTag) ?? 0) + 1)
-  }
-  return classified.map((a) => {
-    const cat = a.classification.category
-    const boost = (upCats.get(cat) ?? 0) * 0.5 - (downCats.get(cat) ?? 0) * 0.5
-    if (boost === 0) return a
-    return { ...a, classification: { ...a.classification, score: a.classification.score + boost } }
-  })
-}
 
 /**
  * Select up to BRIEF_MAX articles from the classified pool for one user.

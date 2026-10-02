@@ -1,5 +1,5 @@
 import type { AIProvider } from '../ai/provider.js'
-import { extractJson } from '../ai/provider.js'
+import { parseLlmJson } from '../ai/json.js'
 import { withRetry } from '../ai/retry.js'
 import { RETRY_DELAY_MS } from '../config.js'
 import type { QuizType } from './types.js'
@@ -123,60 +123,79 @@ export interface GeneratedQuiz {
   explanation: string
 }
 
-function isValidPayload(type: QuizType, payload: Record<string, unknown>): boolean {
+const nonEmptyStrings = (v: unknown): v is string[] =>
+  Array.isArray(v) && v.every((x) => typeof x === 'string' && x.trim().length > 0)
+const distinct = (xs: string[]): boolean => new Set(xs.map((x) => x.trim())).size === xs.length
+
+/** Word-bank chips are used once each, so the bank must hold every blank's answer as often as it is needed. */
+function bankCovers(blanks: string[], wordBank: string[]): boolean {
+  const available = new Map<string, number>()
+  for (const w of wordBank) available.set(w, (available.get(w) ?? 0) + 1)
+  for (const b of blanks) {
+    const left = available.get(b) ?? 0
+    if (left === 0) return false
+    available.set(b, left - 1)
+  }
+  return true
+}
+
+/**
+ * Whether a question can actually be answered correctly in the app. Before
+ * 2026-10-02 this accepted e.g. `correctIndex: 1.5`, duplicate options (two
+ * "right" answers), and fill-blanks needing the same word twice from a bank
+ * that held it once.
+ */
+export function isValidPayload(type: QuizType, payload: Record<string, unknown>): boolean {
   switch (type) {
     case 'single_choice': {
       const options = payload['options']
       const correctIndex = payload['correctIndex']
       return (
-        Array.isArray(options) &&
+        nonEmptyStrings(options) &&
         options.length === 4 &&
-        options.every((o) => typeof o === 'string' && o.length > 0) &&
-        typeof correctIndex === 'number' &&
-        correctIndex >= 0 &&
-        correctIndex <= 3
+        distinct(options) &&
+        Number.isInteger(correctIndex) &&
+        (correctIndex as number) >= 0 &&
+        (correctIndex as number) <= 3
       )
     }
     case 'ordering': {
       const items = payload['items']
       // Capped at 5: the web ordering card drags within one screen (touch-action: none
       // on rows), so a longer list would push rows off-screen with no way to scroll.
-      return Array.isArray(items) && items.length >= 3 && items.length <= 5 && items.every((i) => typeof i === 'string' && i.length > 0)
+      // Distinct items: two identical rows would make more than one order "correct".
+      return nonEmptyStrings(items) && items.length >= 3 && items.length <= 5 && distinct(items)
     }
     case 'matching': {
       const left = payload['left']
       const right = payload['right']
       return (
-        Array.isArray(left) &&
-        Array.isArray(right) &&
+        nonEmptyStrings(left) &&
+        nonEmptyStrings(right) &&
         left.length >= 3 &&
         left.length === right.length &&
-        left.every((i) => typeof i === 'string' && i.length > 0) &&
-        right.every((i) => typeof i === 'string' && i.length > 0)
+        distinct(left) &&
+        distinct(right)
       )
     }
     case 'fill_blank': {
       const template = payload['template']
       const blanks = payload['blanks']
       const wordBank = payload['wordBank']
-      if (typeof template !== 'string' || !Array.isArray(blanks) || !Array.isArray(wordBank)) return false
-      if (!blanks.every((b) => typeof b === 'string' && b.length > 0)) return false
-      const placeholders = blanks.map((_, i) => `{{${i}}}`)
-      if (!placeholders.every((p) => template.includes(p))) return false
-      const bankSet = new Set(wordBank);
-      return blanks.every((b) => bankSet.has(b))
+      if (typeof template !== 'string' || !nonEmptyStrings(blanks) || !nonEmptyStrings(wordBank)) return false
+      if (blanks.length === 0) return false
+      // Each blank's placeholder appears exactly once, and there are no others.
+      const placeholders = [...template.matchAll(/\{\{(\d+)\}\}/g)].map((m) => Number(m[1]))
+      if (placeholders.length !== blanks.length) return false
+      if (!blanks.every((_, i) => placeholders.filter((p) => p === i).length === 1)) return false
+      return bankCovers(blanks, wordBank)
     }
   }
 }
 
 function parseQuizBatch(raw: string): GeneratedQuiz[] {
-  const cleaned = extractJson(raw)
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(cleaned)
-  } catch {
-    throw new Error(`Quiz generator returned invalid JSON: ${cleaned.slice(0, 150)}`)
-  }
+  const { value: parsed, repaired } = parseLlmJson(raw, 'Quiz generator')
+  if (repaired) console.warn('[quiz-gen] Repaired malformed JSON from the generator')
 
   if (!Array.isArray(parsed)) {
     throw new Error('Quiz generator did not return a JSON array')

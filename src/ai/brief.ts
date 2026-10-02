@@ -1,5 +1,6 @@
 import type { AIProvider, ClassifiedArticle, BriefResult, BriefItem, BriefSection, Recommendation, RenderLevel } from './provider.js';
-import { extractJson } from './provider.js';
+import { parseLlmJson, LlmJsonError } from './json.js';
+import { displayTag } from './categories.js';
 import { withRetry } from './retry.js';
 import { RETRY_DELAY_MS } from '../config.js';
 
@@ -127,7 +128,9 @@ Do NOT use: #通用, #一般, #科技, #重要AI信號, #infra-inference, #compa
 
 ## Output format
 
-Return JSON only (no markdown fence):
+Return JSON only (no markdown fence). Do NOT include each article's title — the system fills titles from the source. Copy each article's "url" exactly as given; it identifies the article.
+
+JSON safety: inside string values never use the ASCII double quote character ("). When you need quotation marks in Chinese text use 「」, and do not copy quotation marks from article titles.
 
 {
   "title": "AI Morning Brief YYYY-MM-DD",
@@ -138,7 +141,6 @@ Return JSON only (no markdown fence):
         {
           "index": 1,
           "renderLevel": "FULL",
-          "title": "article title",
           "summary": "一句具體描述事件本身，不含背景或詮釋",
           "context": "一到五句背景說明，說明變化脈絡或前因",
           "categoryTag": "#infra",
@@ -156,7 +158,6 @@ Return JSON only (no markdown fence):
         {
           "index": 2,
           "renderLevel": "LIGHT",
-          "title": "article title",
           "summary": "一句具體描述事件本身",
           "context": "一到五句背景說明",
           "categoryTag": "#policy",
@@ -208,13 +209,8 @@ const VALID_RECOMMENDATIONS = new Set<string>(['READ_NOW', 'SKIM', 'SKIP']);
 const VALID_RENDER_LEVELS = new Set<string>(['FULL', 'LIGHT', 'OMIT']);
 
 function parseBriefResult(raw: string): BriefResult {
-  const cleaned = extractJson(raw);
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error(`Brief generator returned invalid JSON: ${cleaned.slice(0, 200)}`);
-  }
+  const { value: parsed, repaired } = parseLlmJson(raw, 'Brief generator');
+  if (repaired) console.warn('[brief] Repaired malformed JSON from the generator');
 
   const obj = parsed as Record<string, unknown>;
 
@@ -252,6 +248,55 @@ function parseBriefResult(raw: string): BriefResult {
   };
 }
 
+/**
+ * Ties every generated item back to the article it describes and takes the
+ * facts from the source, not the LLM: url and title (the id is a hash of the
+ * url, so a retyped url would orphan the row), category tag, render level.
+ * Items that match no selected article are dropped; selected articles the LLM
+ * skipped get a degraded item, so one sloppy item never costs the whole day.
+ */
+export function alignBriefWithSources(brief: BriefResult, articles: ClassifiedArticle[], date: string): BriefResult {
+  const byUrl = new Map(articles.map((a) => [a.link, a]));
+  const used = new Set<ClassifiedArticle>();
+  const resolve = (item: BriefItem): ClassifiedArticle | undefined => {
+    const exact = byUrl.get(item.url.trim());
+    if (exact && !used.has(exact)) return exact;
+    const byIndex = articles[item.index - 1];
+    return byIndex && !used.has(byIndex) ? byIndex : undefined;
+  };
+
+  const sections = brief.sections.map((section) => ({
+    name: section.name,
+    items: section.items.flatMap((item): BriefItem[] => {
+      const source = resolve(item);
+      if (!source) {
+        console.warn(`[brief] Dropping item that matches no selected article: ${item.url || `index ${item.index}`}`);
+        return [];
+      }
+      used.add(source);
+      return [{
+        ...item,
+        url: source.link,
+        title: source.title,
+        categoryTag: displayTag(source.classification.category),
+        renderLevel: source.classification.renderLevel,
+      }];
+    }),
+  }));
+
+  const missing = articles.filter((a) => !used.has(a) && a.classification.renderLevel !== 'OMIT');
+  if (missing.length > 0) {
+    console.warn(`[brief] Generator skipped ${missing.length} article(s); using degraded items for them`);
+    const fallback = buildDegradedBrief(missing, date);
+    for (const fb of fallback.sections) {
+      const target = sections.find((s) => s.name === fb.name);
+      if (target) target.items.push(...fb.items);
+      else sections.push(fb);
+    }
+  }
+  return { title: brief.title, sections };
+}
+
 export async function generateBrief(
   provider: AIProvider,
   articles: ClassifiedArticle[],
@@ -260,7 +305,14 @@ export async function generateBrief(
   return withRetry(
     async () => {
       const raw = await provider.call(BRIEF_SYSTEM, buildBriefUserPrompt(articles, date));
-      return parseBriefResult(raw);
+      try {
+        return alignBriefWithSources(parseBriefResult(raw), articles, date);
+      } catch (err) {
+        // The Actions log is the only place to see what the model actually
+        // sent; a 200-character excerpt was not enough to diagnose 2026-10-02.
+        if (err instanceof LlmJsonError) console.error(`[brief] Unparseable generator output:\n${err.raw.slice(0, 8000)}`);
+        throw err;
+      }
     },
     { retries: 1, delayMs: RETRY_DELAY_MS, label: 'generateBrief' }
   );
@@ -277,7 +329,7 @@ export function buildDegradedBrief(articles: ClassifiedArticle[], date: string):
     title: a.title,
     summary: a.classification.summary || a.contentSnippet.slice(0, 50),
     context: '',
-    categoryTag: `#${a.classification.category}`,
+    categoryTag: displayTag(a.classification.category),
     engineeringImpact: a.classification.engineeringImpact,
     recommendation: a.classification.recommendation,
     reason: a.classification.reason,

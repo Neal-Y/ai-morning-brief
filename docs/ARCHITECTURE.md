@@ -113,7 +113,10 @@ Single LLM call for all selected articles.
 - **FULL**: summary / context / engineeringImpact / reason all filled. `shortJudgment = null`.
 - **LIGHT**: same 4 fields filled (not empty) **plus** `shortJudgment` (≤20 Chinese chars, `[訊號類型]：[具體事實]`) as an *additive* priority badge — not a replacement for the 4 fields.
 - **OMIT**: not in `sections`; at most one line in `skippedToday`.
-- Failure fallback: `buildDegradedBrief()` assembles `BriefResult` straight from classifier output, no second LLM call.
+- Failure fallback: `buildDegradedBrief()` assembles `BriefResult` straight from classifier output, no second LLM call. It has no `context`, and its `shortJudgment` is cut from the impact line.
+- **Parsing (2026-10-02):** `parseLlmJson()` (`ai/json.ts`, shared with the classifier and the quiz generator) strips code fences, tries strict `JSON.parse`, then one mechanical repair: stray ASCII quotes inside strings, raw newlines, trailing commas. On 10-02 the generator failed twice on invalid JSON and the day went out degraded; the log then held only the first 200 characters. Now a final failure logs the full output (up to 8,000 chars) and the parse error position. The prompt also forbids ASCII quotes inside values (use 「」) and no longer asks the model to echo titles.
+- **Source alignment (2026-10-02):** `alignBriefWithSources()` matches each generated item to a selected article by url, falling back to its index. From the source it takes `url` and `title`; the article id is a hash of the url, so a retyped url would orphan the row. It also takes `categoryTag` (via `displayTag()`) and `renderLevel` from the source. Items matching no article are dropped. Selected articles the LLM skipped get degraded items, so one sloppy item never costs the whole day.
+- **Category tags:** `ai/categories.ts` is the one classifier-category → display-tag map (`infra-inference` → `#infra`, …). It is used by the brief, the degraded fallback (which used to store `#infra-inference`) and the per-device feedback boost.
 
 ### Stage 5 — Persist (`notify/db-writer.ts`)
 
@@ -165,6 +168,11 @@ One LLM call, `QUIZ_COUNT = 5` questions per run, free mix of 4 types:
 - Dedup: `getRecentQuizPrompts()` pulls recent question prompts (window/row-count capped by `QUIZ_DEDUP_WINDOW_DAYS`/`QUIZ_DEDUP_MAX_ROWS` in `config.ts`), appended at the **end** of `QUIZ_SYSTEM` as an "AVOID REPEATING" block — same cache-prefix-preserving technique as the classifier's preference context. Do not move it to the start/middle.
 - Web client keeps today's set + progress in localStorage `mb_quiz_session` (keyed by Taipei date), so leaving the Quiz tab doesn't refetch — a refetch would reshuffle the set, since `/api/quiz` serves unattempted questions first.
 - Completion and weekly missed-question reviews show correct answers/explanations without logging attempts, changing XP or changing the saved daily session.
+- Since 2026-10-02 `isValidPayload` also requires that the question can actually be answered correctly in the app:
+  - `single_choice`: an integer `correctIndex` and four distinct options.
+  - `ordering` and `matching`: distinct items.
+  - `fill_blank`: each `{{i}}` placeholder appears exactly once, and the word bank holds every answer as many times as the blanks use it. Chips are used once each.
+  - The web's `mapApiQuiz` applies the same integer and word-bank checks to rows already in the DB.
 - Every generated item is validated (`isValidPayload`) before being accepted — malformed items are dropped with a `console.warn`, not silently coerced. If the whole batch validates to 0 items, the pipeline throws (retried once via `withRetry`, then fails the GitHub Actions run).
 - Output language: Traditional Chinese for question text, options, explanations. English retained only for established technical terms.
 
@@ -175,7 +183,7 @@ Plain insert into `quizzes` — no upsert/dedup at the DB layer; dedup happens e
 ### Consumption (client-side — web PWA `web/` is primary; RN app `app/` shelved, see [README.md](./README.md))
 
 - `GET /api/quiz` (`api/quiz.ts`, Edge since 2026-10-01; two Turso pipeline round trips) — today's question set. Reported questions (`quiz_reports`) are excluded first, then the set is filled in this order:
-  1. **Spaced review** (`src/quiz/review.ts`, 2026-09-30): questions this device missed come back on a 1 → 3 → 7 Taipei-day ladder. Each correct answer since the last miss moves a question one rung, and three in a row graduate it. A new miss restarts at 1 day. At most `REVIEW_MAX_PER_SET = 2` per set, most overdue first. State is derived from `quiz_attempts` alone, with no extra table. Items carry `review: true`, and the web shows a 「複習 · 之前答錯」 tag.
+  1. **Spaced review** (`src/quiz/review.ts`, 2026-09-30): questions this device missed come back on a 1 → 3 → 7 Taipei-day ladder. Each correct answer since the last miss moves a question one rung, and three in a row graduate it. A new miss restarts at 1 day. At most `REVIEW_MAX_PER_SET = 2` per set, most overdue first. State is derived from `quiz_attempts` alone, with no extra table. Items carry `review: true`, and the web shows a 「複習 · 之前答錯」 tag. Reported questions are removed from the due list *before* it is capped at 100 candidates; until 2026-10-02 the cap came first (6 ids), so six reported misses could hide every other due review.
   2. **Fresh**: questions never attempted, newest first.
   3. **Recycle**: already-attempted questions, newest first, used only when the pool runs short.
 - `POST /api/quiz-attempt` (`api/quiz-attempt.ts`, Edge) — records `{ quizId, deviceId, correct }` into `quiz_attempts`. `X-Device-Id` required, 400 without it.

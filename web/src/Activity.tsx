@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { THEME_DARK } from './theme.ts'
 import { useNavInset } from './nav.ts'
-import { fetchActivity, fetchWeekly, readCache, writeCache, type ActivityData, type WeeklyData } from './api.ts'
+import { fetchActivity, fetchWeekly, readCache, readFailedAttempts, writeCache, type ActivityData, type WeeklyData } from './api.ts'
 import { StatCard } from './components/activity/StatCard.tsx'
 import { Heatmap } from './components/activity/Heatmap.tsx'
 import { WeeklyReview } from './components/activity/WeeklyReview.tsx'
@@ -19,6 +19,7 @@ export default function Activity() {
   const [data, setData] = useState<ActivityData | null>(() => readCache<ActivityData>('activity'))
   const [weekly, setWeekly] = useState<WeeklyData | null>(() => readCache<WeeklyData>('weekly'))
   const [error, setError] = useState(false)
+  const [failedAttempts] = useState(readFailedAttempts)
 
   useEffect(() => {
     let cancelled = false
@@ -132,6 +133,15 @@ export default function Activity() {
                 padding: '40px 20px', textAlign: 'center',
                 fontFamily: T.mono, fontSize: 12, color: T.inkFaint, lineHeight: 1.7,
               }}>開始答題後，這裡會顯示你的學習軌跡</div>
+            )}
+
+            {failedAttempts.length > 0 && (
+              <div style={{
+                padding: '20px 20px 0', fontFamily: T.sans, fontSize: 12, lineHeight: 1.6, color: T.inkFaint,
+              }}>
+                這台裝置有 {failedAttempts.length} 筆作答沒有送出，沒有計入上面的紀錄
+                （最近一次：{new Date(failedAttempts.at(-1)!.at).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}）。
+              </div>
             )}
 
             <div style={{ height: 32 }} />

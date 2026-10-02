@@ -167,6 +167,9 @@ src/
   ai/classifier.ts    # 分類器 + buildPreferenceContext()
   ai/brief.ts         # brief generator + degraded fallback
   ai/retry.ts
+  ai/json.ts          # parseLlmJson()：LLM JSON 嚴格解析 → 機械修補 → 失敗印完整輸出（classifier / brief / quiz 共用）
+  ai/categories.ts    # displayTag()：classifier 分類 → 顯示標籤唯一對照
+  feedback-boost.ts   # applyFeedbackBoost()：個人化加權（兩邊都過 displayTag）
   ai/openai.ts · anthropic.ts
   quiz/generate.ts    # LLM 出題（4 題型 + AVOID REPEATING dedup context，同 classifier 手法附在 system prompt 尾端）
   quiz/types.ts        # QuizType + 各題型 payload interface
@@ -332,6 +335,8 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `classifyArticles` 透過 `string[]` 形式呼叫 provider — `[CLASSIFIER_SYSTEM, preferenceContext]`，AnthropicProvider 只在第一個 block 打 cache_control，穩定 prefix 跨天不會被變動的偏好 invalidate
 - Cold-start 門檻 10 筆，低於門檻一律不注入（防過擬合）
 - 👎 per-category 要 ≥ 2 次才算負訊號（單一 👎 可能只是當天心情，別當真）
+- **分類標籤只有一份對照（2026-10-02）**：`src/ai/categories.ts` 的 `displayTag()`（`infra-inference` → `#infra`）。brief、降級版 brief、個人化加權（`src/feedback-boost.ts`，每票 ±0.5、係數沒動）都走它。之前加權拿 `infra-inference` 比對存的 `#infra`，永遠對不上，等於沒作用；降級版還會存成 `#infra-inference`
+- **LLM JSON 一律走 `parseLlmJson()`（`src/ai/json.ts`）**：先嚴格解析，失敗才做一次機械修補（字串內的半形引號、換行、結尾逗號），最後失敗把完整輸出印進 Actions log。brief 的 url / title / 分類 / renderLevel 由 `alignBriefWithSources()` 從來源文章覆寫，不信任 LLM 回傳（url 是文章 id 的來源）
 
 **Edge Runtime endpoints（2026-10-01 起所有 API 都是 Edge，沒有 Node/Hono 後端）：**
 - `/api/ask` → `api/ask.ts`（SSE streaming；文章與 quiz 共用，quiz 用合成 `articleId=quiz-${id}`）
@@ -340,7 +345,8 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - `/api/save` → `api/save.ts`（查 article、Notion dedupe lookup、upsert saves，sync lock 防併發 double-create）
 - `/api/unsave` → `api/unsave.ts`（硬刪除 saves row；不動 articles、不動 Notion page）
 - `/api/feedback` → `api/feedback.ts`（交易批次：read 去重、up/down 替換、clear 只撤票）
-- `/api/quiz-attempt` → `api/quiz-attempt.ts`（寫 `quiz_attempts`；`X-Device-Id` header 必填，缺就 400）
+- `/api/quiz-attempt` → `api/quiz-attempt.ts`（寫 `quiz_attempts`；`X-Device-Id` header 必填，缺就 400）。送失敗的作答 web 端記在 localStorage `mb_failed_attempts`（不重送，避免重複計分），紀錄頁顯示筆數，用來判斷要不要做同步佇列
+- `/api/ask` 串流協定（2026-10-02）：只有收到 Anthropic `message_stop` 才以 `[DONE]` 結尾，其餘（中途 error、斷線）以 `[ERROR]` 結尾；AskSheet 收到 `[ERROR]` 不存紀錄。伺服器只送最近 20 則訊息上游、文章欄位截斷；client 存歷史前用 `trimForStorage()` 修到 40 則／60k 字內（跟 `api/ask-history.ts` 上限一致）
 - **背景**：Hono `c.req.json()` / `c.req.text()` 在 `hono/vercel` Node.js adapter 上會 hang 到 300s timeout（GET 沒事，body 大小不是 trigger）。Edge Runtime 原生 `Request.json()` 沒這問題。診斷過 DB / libSQL / drizzle / VAPID 都不是病灶 — 結論是 Hono adapter 自己。所有 POST 已遷完（含 feedback 2026-04-26 復發後）。
 - **GET 也全搬了**：`/api/feed`（2026-09-29）、`/api/library`、`/api/quiz`、`/api/activity`（2026-10-01）都改成 Edge + raw Turso SQL，因為 Node function 的冷啟動就是使用者感受到的「開 App 卡一下」。quiz / activity 搬遷時用同一顆 seeded SQLite 逐 byte 比對新舊輸出（60 組 case 全一致）。搬完後 `src/api/app.ts`、`api/index.ts`、`src/api/server.ts`、`hono` / `@hono/node-server` 依賴全部刪除。
 - **規則**：新 endpoint 一律寫 `api/<name>.ts`（`export const config = { runtime: 'edge' }`，Turso 用 `/v2/pipeline` raw fetch，照抄 `api/weekly.ts` 的 `query()` helper）+ `vercel.json` rewrite。**不要**把 Hono / Node function 加回來。Edge function 可以 import `src/` 底下**純邏輯、無 Node 依賴**的模組（`api/quiz.ts` 用 `src/quiz/review.ts`、`api/activity.ts` 用 `src/streak.ts`、`api/save.ts` 用 `src/notion/client.ts`）；不要 import `src/db/client.ts`（drizzle + libSQL Node client）。
