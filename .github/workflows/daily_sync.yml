@@ -16,6 +16,11 @@ on:
         type: boolean
         default: false
 
+# Manual runs on any branch and delayed scheduled runs share the same DB.
+concurrency:
+  group: sift-daily-brief
+  cancel-in-progress: false
+
 jobs:
   brief:
     runs-on: ubuntu-latest

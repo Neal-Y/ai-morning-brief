@@ -118,6 +118,14 @@ export default function App() {
   const flyRotRef = useRef(12)
   const feedbackBarRef = useRef<HTMLDivElement | null>(null)
   const saveInFlightRef = useRef<Set<string>>(new Set())
+  // React state updates are batched; a ref blocks another input immediately,
+  // before either a second feedback POST or a second advance timer is queued.
+  const transitionRef = useRef(false)
+  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => () => {
+    if (transitionTimerRef.current !== null) clearTimeout(transitionTimerRef.current)
+  }, [])
 
   useEffect(() => {
     if (isPushSupported() && isStandalone() && Notification.permission === 'granted') {
@@ -213,19 +221,21 @@ export default function App() {
 
   const advance = () => {
     setTransitioning(true)
-    setTimeout(() => {
+    transitionTimerRef.current = setTimeout(() => {
       setSwipeX(0)
       dragStart.current = null
       velocity.current = { vx: 0, lastX: 0, lastT: 0 }
       setIdx(i => i + 1)
       setTransitioning(false)
+      transitionRef.current = false
+      transitionTimerRef.current = null
     }, 260)
   }
 
   // Undo: step back one card and withdraw the 👍/👎 it received, so a
   // mis-swipe doesn't feed the classifier's preference signal.
   const undo = () => {
-    if (transitioning || idx === 0) return
+    if (transitionRef.current || idx === 0) return
     const prev = articles[idx - 1]
     if (!prev) return
     setSwipeX(0)
@@ -245,8 +255,10 @@ export default function App() {
   }
 
   const registerFeedback = (signal: 'up' | 'down') => {
-    if (!curArticle) return
+    if (!curArticle || transitionRef.current) return
+    transitionRef.current = true
     flyRotRef.current = Math.min(Math.abs(velocity.current.vx) * 30 + 12, 28)
+    dragStart.current = null
     setSwipeX(signal === 'up' ? 120 : -120)
     setFeedback(f => ({ ...f, [curArticle.id]: signal }))
     apiFetch('/api/feedback', {
@@ -281,14 +293,14 @@ export default function App() {
   }
 
   const onPointerDown = (e: React.MouseEvent | React.TouchEvent) => {
-    if (atCelebration || showAsk || !curArticle) return
+    if (transitionRef.current || atCelebration || showAsk || !curArticle) return
     const point = 'touches' in e ? e.touches[0] : e
     dragStart.current = { x: point.clientX, y: point.clientY, axis: null }
     velocity.current = { vx: 0, lastX: point.clientX, lastT: Date.now() }
   }
 
   const onPointerMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!dragStart.current) return
+    if (transitionRef.current || !dragStart.current) return
     const point = 'touches' in e ? e.touches[0] : e
     const dx = point.clientX - dragStart.current.x
     const dy = point.clientY - dragStart.current.y
@@ -311,25 +323,14 @@ export default function App() {
   }
 
   const onPointerUp = () => {
-    if (!dragStart.current) return
+    if (transitionRef.current || !dragStart.current) return
     const vx = velocity.current.vx           // px/ms
     const isFlick = Math.abs(vx) > 0.4       // ~400 px/s threshold
     const overThreshold = Math.abs(swipeX) > 90
 
     if (dragStart.current.axis === 'x' && curArticle && (overThreshold || isFlick)) {
-      flyRotRef.current = Math.min(Math.abs(vx) * 30 + 12, 28)
       const signal = (isFlick ? vx > 0 : swipeX > 0) ? 'up' : 'down'
-      if (!overThreshold) setSwipeX(vx > 0 ? 100 : -100)
-      setFeedback(f => ({ ...f, [curArticle.id]: signal }))
-      // apiFetch, not bare fetch: the swipe is the primary way feedback is
-      // given, and bare fetch omits the X-Device-Id header, so those rows were
-      // landing unattributed while the button path recorded them per-device.
-      apiFetch('/api/feedback', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ articleId: curArticle.id, signal }),
-      }).catch(() => {})
-      advance()
+      registerFeedback(signal)
       return
     }
     if (dragStart.current?.axis === 'x' && Math.abs(swipeX) > 10) {
@@ -356,6 +357,7 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (transitionRef.current) return
       if (showAsk) {
         if (e.key === 'Escape' || e.key === 'ArrowDown') setShowAsk(false)
         return

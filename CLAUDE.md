@@ -407,7 +407,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 
 ## Working Rules for Claude Code
 
-- 修改檔案後必須跑 `npm run build`，不准跳過
+- 修改檔案後必須跑 `npm test`、`npm run typecheck`、`npm run build`；有前端改動再跑 `npm run build --prefix web`，不准跳過。Vitest 測試會 mock 外部服務，不需要正式環境 secrets；PR 與 main push 的 CI 也會跑這些檢查。
 - 超過 10 輪對話後，編輯檔案前一律重新讀取該檔案
 - 大任務拆獨立模組，不要一個 agent 硬扛
 - `nvm use 20` 先跑，再跑任何 npm 指令
