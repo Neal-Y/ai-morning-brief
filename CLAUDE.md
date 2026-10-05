@@ -337,6 +337,7 @@ VITE_VAPID_PUBLIC_KEY # 同上 VAPID_PUBLIC_KEY 的值，但要用這個變數�
 - 👎 per-category 要 ≥ 2 次才算負訊號（單一 👎 可能只是當天心情，別當真）
 - **分類標籤只有一份對照（2026-10-02）**：`src/ai/categories.ts` 的 `displayTag()`（`infra-inference` → `#infra`）。brief、降級版 brief、個人化加權（`src/feedback-boost.ts`，每票 ±0.5、係數沒動）都走它。之前加權拿 `infra-inference` 比對存的 `#infra`，永遠對不上，等於沒作用；降級版還會存成 `#infra-inference`
 - **LLM JSON 一律走 `parseLlmJson()`（`src/ai/json.ts`）**：先嚴格解析，失敗才做一次機械修補（字串內的半形引號、換行、結尾逗號），最後失敗把完整輸出印進 Actions log。brief 的 url / title / 分類 / renderLevel 由 `alignBriefWithSources()` 從來源文章覆寫，不信任 LLM 回傳（url 是文章 id 的來源）
+- **LLM 輸出上限是每次呼叫各自設（2026-10-05）**：`provider.call(..., { maxTokens })`，預設 2048（classifier），brief 4096、出題 8192（只算實際生成的 token，上限設高不多花錢）。撞到上限會丟 `OutputTruncatedError`，不回傳半截 JSON。10-05 出題改成情境題後 5 題超過 2048 被截斷，log 只顯示「Unterminated string」
 
 **Edge Runtime endpoints（2026-10-01 起所有 API 都是 Edge，沒有 Node/Hono 後端）：**
 - `/api/ask` → `api/ask.ts`（SSE streaming；文章與 quiz 共用，quiz 用合成 `articleId=quiz-${id}`）

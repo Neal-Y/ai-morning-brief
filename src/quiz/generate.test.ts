@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { isValidPayload } from './generate.js'
+import { describe, expect, it, vi } from 'vitest'
+import { generateQuizzes, isValidPayload, QUIZ_MAX_OUTPUT_TOKENS } from './generate.js'
 
 describe('isValidPayload — only questions that can be answered correctly', () => {
   const choice = (extra: Record<string, unknown>) => ({ options: ['a', 'b', 'c', 'd'], correctIndex: 1, ...extra })
@@ -27,5 +27,15 @@ describe('isValidPayload — only questions that can be answered correctly', () 
     // Placeholders must match the blanks one-to-one.
     expect(isValidPayload('fill_blank', { ...base, template: '先寫 {{0}}，再刪 {{0}}' })).toBe(false)
     expect(isValidPayload('fill_blank', { ...base, template: '{{0}} {{1}} {{2}}' })).toBe(false)
+  })
+})
+
+describe('generateQuizzes', () => {
+  it('asks for enough output tokens for five scenario questions', async () => {
+    const quiz = { type: 'ordering', category: 'infra', prompt: 'p', payload: { items: ['x', 'y', 'z'] }, explanation: 'e' }
+    const call = vi.fn().mockResolvedValue(JSON.stringify([quiz]))
+    await generateQuizzes({ name: 'fake', call, logUsageSummary: () => {} }, [], 5)
+    expect(call.mock.calls[0]![2]).toEqual({ maxTokens: QUIZ_MAX_OUTPUT_TOKENS })
+    expect(QUIZ_MAX_OUTPUT_TOKENS).toBeGreaterThanOrEqual(8192)
   })
 })
