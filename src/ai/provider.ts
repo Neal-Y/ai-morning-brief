@@ -73,6 +73,25 @@ export interface BriefResult {
 
 // ── Provider interface ────────────────────────────────────────────────────────
 
+export interface CallOptions {
+  /** Output token cap for this call. Defaults to DEFAULT_MAX_OUTPUT_TOKENS. */
+  maxTokens?: number;
+}
+
+export const DEFAULT_MAX_OUTPUT_TOKENS = 2048;
+
+/**
+ * The model hit the output cap, so the text is cut off mid-JSON. Thrown instead
+ * of returning the partial text: repair can't fix truncation, and the old
+ * symptom ("Unterminated string … at position <length>") hid the real cause.
+ */
+export class OutputTruncatedError extends Error {
+  constructor(provider: string, maxTokens: number) {
+    super(`${provider} output hit max_tokens=${maxTokens} and was truncated; raise maxTokens for this call`);
+    this.name = 'OutputTruncatedError';
+  }
+}
+
 export interface AIProvider {
   name: string; // "GPT" or "Claude"
   /**
@@ -86,7 +105,7 @@ export interface AIProvider {
    *    while the bulk stays stable — it lets Anthropic keep the prefix cached
    *    across days even when the suffix varies.
    */
-  call(system: string | string[], userPrompt: string): Promise<string>;
+  call(system: string | string[], userPrompt: string, options?: CallOptions): Promise<string>;
   /** Print cumulative token + cache stats for all calls made on this instance. */
   logUsageSummary(): void;
 }

@@ -229,6 +229,11 @@ function parseQuizBatch(raw: string): GeneratedQuiz[] {
   return valid
 }
 
+// Scenario-style questions (2026-10-02) run ~600-800 output tokens each; at the
+// old shared 2048 cap a batch of 5 was cut off mid-JSON (2026-10-05). Billing is
+// per token actually generated, so a generous cap costs nothing extra.
+export const QUIZ_MAX_OUTPUT_TOKENS = 8192
+
 export async function generateQuizzes(
   provider: AIProvider,
   recentPrompts: string[],
@@ -240,7 +245,7 @@ export async function generateQuizzes(
 
   return withRetry(
     async () => {
-      const raw = await provider.call(systemParts, buildUserPrompt(count))
+      const raw = await provider.call(systemParts, buildUserPrompt(count), { maxTokens: QUIZ_MAX_OUTPUT_TOKENS })
       const quizzes = parseQuizBatch(raw)
       if (quizzes.length === 0) {
         throw new Error('Quiz generator produced 0 valid questions')

@@ -297,6 +297,10 @@ export function alignBriefWithSources(brief: BriefResult, articles: ClassifiedAr
   return { title: brief.title, sections };
 }
 
+// 3 items in Traditional Chinese came to ~1450 tokens on 2026-10-02, too close
+// to the shared 2048 cap; only generated tokens are billed.
+const BRIEF_MAX_OUTPUT_TOKENS = 4096;
+
 export async function generateBrief(
   provider: AIProvider,
   articles: ClassifiedArticle[],
@@ -304,7 +308,7 @@ export async function generateBrief(
 ): Promise<BriefResult> {
   return withRetry(
     async () => {
-      const raw = await provider.call(BRIEF_SYSTEM, buildBriefUserPrompt(articles, date));
+      const raw = await provider.call(BRIEF_SYSTEM, buildBriefUserPrompt(articles, date), { maxTokens: BRIEF_MAX_OUTPUT_TOKENS });
       try {
         return alignBriefWithSources(parseBriefResult(raw), articles, date);
       } catch (err) {

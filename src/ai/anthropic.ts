@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { AIProvider } from './provider.js';
+import { DEFAULT_MAX_OUTPUT_TOKENS, OutputTruncatedError, type AIProvider, type CallOptions } from './provider.js';
 import { MODEL_IDS } from '../config.js';
 
 interface AnthropicUsageTotals {
@@ -25,7 +25,8 @@ export class AnthropicProvider implements AIProvider {
     this.client = new Anthropic({ apiKey });
   }
 
-  async call(system: string | string[], userPrompt: string): Promise<string> {
+  async call(system: string | string[], userPrompt: string, options: CallOptions = {}): Promise<string> {
+    const maxTokens = options.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     // string → single cached block (legacy behavior).
     // string[] → first element cached, rest appended without cache_control so
     // a variable suffix (e.g. daily feedback context) doesn't bust the prefix cache.
@@ -39,7 +40,7 @@ export class AnthropicProvider implements AIProvider {
 
     const response = await this.client.messages.create({
       model: MODEL_IDS['anthropic']!,
-      max_tokens: 2048,
+      max_tokens: maxTokens,
       system: systemBlocks,
       messages: [
         { role: 'user', content: userPrompt },
@@ -57,6 +58,8 @@ export class AnthropicProvider implements AIProvider {
     console.log(
       `[ai:claude] call ${this.usage.calls}: in=${u.input_tokens} out=${u.output_tokens} cache_create=${cacheCreate} cache_read=${cacheRead}`,
     );
+
+    if (response.stop_reason === 'max_tokens') throw new OutputTruncatedError(this.name, maxTokens);
 
     const textBlocks = response.content
       .filter((b): b is Anthropic.TextBlock => b.type === 'text')

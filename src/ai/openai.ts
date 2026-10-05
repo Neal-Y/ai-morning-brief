@@ -1,5 +1,5 @@
 import OpenAI from 'openai';
-import type { AIProvider } from './provider.js';
+import { DEFAULT_MAX_OUTPUT_TOKENS, OutputTruncatedError, type AIProvider, type CallOptions } from './provider.js';
 import { MODEL_IDS } from '../config.js';
 
 interface OpenAIUsageTotals {
@@ -23,7 +23,8 @@ export class OpenAIProvider implements AIProvider {
     this.client = new OpenAI({ apiKey });
   }
 
-  async call(system: string | string[], userPrompt: string): Promise<string> {
+  async call(system: string | string[], userPrompt: string, options: CallOptions = {}): Promise<string> {
+    const maxTokens = options.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
     // OpenAI auto-caches prefixes — no explicit cache_control API. Concatenate
     // array form back into a single string; the stable prefix still benefits
     // from automatic prefix caching as long as callers keep it first.
@@ -31,6 +32,7 @@ export class OpenAIProvider implements AIProvider {
 
     const response = await this.client.chat.completions.create({
       model: MODEL_IDS['openai']!,
+      max_completion_tokens: maxTokens,
       response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: systemContent },
@@ -51,6 +53,8 @@ export class OpenAIProvider implements AIProvider {
     console.log(
       `[ai:gpt] call ${this.usage.calls}: prompt=${prompt} completion=${completion} cached=${cached}`,
     );
+
+    if (response.choices[0]?.finish_reason === 'length') throw new OutputTruncatedError(this.name, maxTokens);
 
     const text = response.choices[0]?.message.content;
     if (!text) throw new Error('OpenAI returned empty response');
